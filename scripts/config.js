@@ -1,0 +1,44 @@
+﻿(function () {
+  window.BRX = window.BRX || {};
+
+  window.BRX.config = Object.freeze({
+    RATE: 129.9,
+    SELL_RATE: 128.6,
+    USERS_KEY: "brx_users_v1",
+    SESSION_KEY: "brx_session_v1",
+    PENDING_KEY: "brx_pending_email_v1",
+    THEME_KEY: "brx_theme_v1",
+    API_BASES: ["http://localhost:3000/api", "http://127.0.0.1:3000/api"],
+    APP_ROUTES: ["dashboard", "market", "ads", "trades", "wallet", "kyc", "profile", "settings", "referrals", "admin"],
+    NETWORKS: Object.freeze([
+      Object.freeze({
+        id: "BEP20",
+        name: "BNB Smart Chain",
+        token: "USDT BEP20",
+        mark: "BNB",
+        confirmations: "15 block confirmations",
+        minDeposit: "Min. deposit > 1 USDT",
+        arrival: "Est. arrival ~1-3 min",
+        status: "available",
+      }),
+      Object.freeze({
+        id: "TRC20",
+        name: "TRON",
+        token: "USDT TRC20",
+        mark: "TRX",
+        confirmations: "Coming soon",
+        minDeposit: "Not enabled yet",
+        arrival: "Planned network",
+        status: "planned",
+      }),
+    ]),
+    DEPOSIT_NETWORK: Object.freeze({
+      name: "BNB Smart Chain",
+      token: "USDT BEP20",
+      confirmations: "15 block confirmations",
+      minDeposit: "Min. deposit > 1 USDT",
+      arrival: "Est. arrival ~1-3 min",
+    }),
+  });
+})();
+

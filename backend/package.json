@@ -1,0 +1,36 @@
+{
+  "name": "brx-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BRX NestJS backend for KES/USDT P2P exchange",
+  "scripts": {
+    "start": "nest start",
+    "start:dev": "nest start --watch",
+    "build": "nest build",
+    "check": "tsc --noEmit",
+    "migrate": "node scripts/run-schema.mjs",
+    "user:delete": "node scripts/delete-test-user.mjs",
+    "user:admin": "node scripts/make-admin.mjs",
+    "scan:deposits": "node dist/scripts/scan-deposits.js"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.1.27",
+    "@nestjs/config": "^4.0.4",
+    "@nestjs/core": "^11.1.27",
+    "@nestjs/platform-fastify": "^11.1.27",
+    "dotenv": "^16.4.7",
+    "ethers": "^6.13.5",
+    "ioredis": "^5.4.2",
+    "pg": "^8.13.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.23",
+    "@nestjs/schematics": "^11.1.0",
+    "@nestjs/testing": "^11.1.27",
+    "@types/node": "^22.10.7",
+    "@types/pg": "^8.11.10",
+    "typescript": "^5.7.3"
+  }
+}

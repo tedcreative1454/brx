@@ -1,0 +1,63 @@
+﻿(function () {
+  window.BRX = window.BRX || {};
+
+  const { refs } = window.BRX.ui;
+  const { renderHeader } = window.BRX.header;
+  const pages = window.BRX.pages;
+
+  function routePath() {
+    return location.hash.replace(/^#\/?/, "") || "home";
+  }
+
+  function routeName() {
+    return routePath().split("?")[0] || "home";
+  }
+
+  function routeParams() {
+    const query = routePath().split("?")[1] || "";
+    return new URLSearchParams(query);
+  }
+
+  async function render() {
+    const route = routeName();
+    const requiresAppSession = window.BRX.config.APP_ROUTES.includes(route);
+
+    if (requiresAppSession && window.BRX.state.accessToken()) {
+      const hydratedUser = await window.BRX.profileService.hydrateSession();
+      if (!hydratedUser) {
+        location.hash = "#/login";
+        return;
+      }
+    }
+
+    renderHeader();
+
+    if (route === "register") pages.renderRegister();
+    else if (route === "login") pages.renderLogin();
+    else if (route === "verify") pages.renderVerify();
+    else if (route === "dashboard") pages.renderDashboard();
+    else if (route === "market") pages.renderMarket();
+    else if (route === "ads") pages.renderAds();
+    else if (route === "trades") pages.renderTrades();
+    else if (route === "wallet") pages.renderWallet();
+    else if (route === "kyc") pages.renderKyc();
+    else if (route === "profile") pages.renderProfile();
+    else if (route === "settings") pages.renderSettings();
+    else if (route === "referrals") pages.renderReferrals();
+    else if (route === "admin") pages.renderAdmin();
+    else if (route === "features") pages.renderLanding("features");
+    else if (route === "how-it-works") pages.renderLanding("how-it-works");
+    else pages.renderLanding();
+
+    renderHeader();
+    refs.app.focus({ preventScroll: true });
+  }
+
+  function start() {
+    window.addEventListener("hashchange", render);
+    void render();
+  }
+
+  window.BRX.router = { routeName, routeParams, render, start };
+})();
+
