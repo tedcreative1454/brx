@@ -1,4 +1,4 @@
-﻿-- BRX PostgreSQL launch schema for KES/USDT P2P escrow.
+-- BRX PostgreSQL launch schema for ETB/USDT P2P escrow.
 -- Amounts use NUMERIC so ledger math stays exact.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
@@ -14,7 +14,8 @@ CREATE TYPE tx_status AS ENUM ('detected', 'confirming', 'credited', 'requested'
 CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
+  password_hash TEXT,
+  google_sub TEXT UNIQUE,
   username TEXT UNIQUE,
   email_verified_at TIMESTAMPTZ,
   kyc_status kyc_status NOT NULL DEFAULT 'unsubmitted',
@@ -23,6 +24,10 @@ CREATE TABLE users (
   password_changed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS google_sub TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL;
 
 CREATE TABLE email_verification_codes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -116,7 +121,7 @@ CREATE TABLE user_profiles (
 CREATE TABLE user_settings (
   user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   notification_preferences JSONB NOT NULL DEFAULT '{"emailVerification":true,"tradeUpdates":true,"depositAlerts":true,"withdrawalAlerts":true,"marketing":false}',
-  trade_preferences JSONB NOT NULL DEFAULT '{"market":"KES/USDT","preferredPaymentRails":["M-Pesa","Bank transfer","Airtel Money"]}',
+  trade_preferences JSONB NOT NULL DEFAULT '{"market":"ETB/USDT","preferredPaymentRails":["M-Pesa","Bank transfer","Airtel Money"]}',
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -173,7 +178,7 @@ CREATE TABLE offers (
   user_id UUID NOT NULL REFERENCES users(id),
   side offer_side NOT NULL,
   asset TEXT NOT NULL DEFAULT 'USDT',
-  fiat TEXT NOT NULL DEFAULT 'KES',
+  fiat TEXT NOT NULL DEFAULT 'ETB',
   price NUMERIC(20, 4) NOT NULL CHECK (price > 0),
   available_amount NUMERIC(28, 8) NOT NULL CHECK (available_amount >= 0),
   min_fiat NUMERIC(20, 2) NOT NULL CHECK (min_fiat > 0),
@@ -189,7 +194,7 @@ CREATE TABLE trades (
   buyer_id UUID NOT NULL REFERENCES users(id),
   seller_id UUID NOT NULL REFERENCES users(id),
   asset TEXT NOT NULL DEFAULT 'USDT',
-  fiat TEXT NOT NULL DEFAULT 'KES',
+  fiat TEXT NOT NULL DEFAULT 'ETB',
   asset_amount NUMERIC(28, 8) NOT NULL CHECK (asset_amount > 0),
   fiat_amount NUMERIC(20, 2) NOT NULL CHECK (fiat_amount > 0),
   status trade_status NOT NULL DEFAULT 'opened',

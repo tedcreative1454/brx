@@ -2,7 +2,7 @@
   "name": "brx-backend",
   "version": "0.1.0",
   "private": true,
-  "description": "BRX NestJS backend for KES/USDT P2P exchange",
+  "description": "BRX NestJS backend for ETB/USDT P2P exchange",
   "scripts": {
     "start": "nest start",
     "start:dev": "nest start --watch",
@@ -10,6 +10,7 @@
     "check": "tsc --noEmit",
     "migrate": "node scripts/run-schema.mjs",
     "user:delete": "node scripts/delete-test-user.mjs",
+    "user:fund": "node scripts/fund-test-user.mjs",
     "user:admin": "node scripts/make-admin.mjs",
     "scan:deposits": "node dist/scripts/scan-deposits.js"
   },

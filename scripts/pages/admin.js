@@ -236,7 +236,7 @@
     return `
       <div class="admin-queue-row admin-dispute-row">
         <span>
-          <strong>${format(Number(trade.assetAmount))} USDT - ${format(Number(trade.fiatAmount))} KES</strong>
+          <strong>${format(Number(trade.assetAmount))} USDT - ${format(Number(trade.fiatAmount))} ETB</strong>
           <small>Buyer: ${escapeHtml(trade.buyerEmail || "")}</small>
           <small>Seller: ${escapeHtml(trade.sellerEmail || "")}</small>
           <small>Reason: ${escapeHtml(trade.disputeReason || "No reason saved")}</small>

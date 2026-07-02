@@ -1,14 +1,14 @@
-﻿(function () {
+(function () {
   window.BRX = window.BRX || {};
 
   window.BRX.config = Object.freeze({
-    RATE: 129.9,
-    SELL_RATE: 128.6,
+    RATE: 185,
+    SELL_RATE: 184,
     USERS_KEY: "brx_users_v1",
     SESSION_KEY: "brx_session_v1",
     PENDING_KEY: "brx_pending_email_v1",
     THEME_KEY: "brx_theme_v1",
-    API_BASES: ["http://localhost:3000/api", "http://127.0.0.1:3000/api"],
+    API_BASES: ["http://127.0.0.1:3000/api", "http://localhost:3000/api"],
     APP_ROUTES: ["dashboard", "market", "ads", "trades", "wallet", "kyc", "profile", "settings", "referrals", "admin"],
     NETWORKS: Object.freeze([
       Object.freeze({

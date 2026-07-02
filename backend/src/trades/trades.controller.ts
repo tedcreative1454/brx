@@ -15,6 +15,12 @@ export class TradesController {
     return this.trades.myTrades(user.id);
   }
 
+  @Get(":id")
+  async getTrade(@Headers("authorization") authorization: string | undefined, @Param("id") tradeId: string) {
+    const user = await this.auth.authenticate(authorization);
+    return this.trades.getTrade(user.id, tradeId);
+  }
+
   @Post()
   async open(@Headers("authorization") authorization: string | undefined, @Body() body: { offerId?: string; assetAmount?: string | number }) {
     const user = await this.auth.authenticate(authorization);
@@ -28,9 +34,13 @@ export class TradesController {
   }
 
   @Post(":id/payment-sent")
-  async markPaymentSent(@Headers("authorization") authorization: string | undefined, @Param("id") tradeId: string) {
+  async markPaymentSent(
+    @Headers("authorization") authorization: string | undefined,
+    @Param("id") tradeId: string,
+    @Body() body: { reference?: string; file?: { fileName?: string; mimeType?: string; dataBase64?: string } },
+  ) {
     const user = await this.auth.authenticate(authorization);
-    return this.trades.markPaymentSent(user.id, tradeId);
+    return this.trades.markPaymentSent(user.id, tradeId, body);
   }
 
   @Post(":id/release")
@@ -53,6 +63,16 @@ export class TradesController {
   ) {
     const user = await this.auth.authenticate(authorization);
     return this.trades.dispute(user.id, tradeId, body);
+  }
+
+  @Post(":id/evidence")
+  async addEvidence(
+    @Headers("authorization") authorization: string | undefined,
+    @Param("id") tradeId: string,
+    @Body() body: { note?: string; file?: { fileName?: string; mimeType?: string; dataBase64?: string } },
+  ) {
+    const user = await this.auth.authenticate(authorization);
+    return this.trades.addEvidence(user.id, tradeId, body);
   }
 }
 

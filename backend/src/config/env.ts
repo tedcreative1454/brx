@@ -23,7 +23,10 @@ export const env = {
   databaseUrl: required("DATABASE_URL"),
   redisUrl: required("REDIS_URL"),
   resendApiKey: process.env.RESEND_API_KEY ?? "",
-  resendFromEmail: process.env.RESEND_FROM_EMAIL ?? "BRX <onboarding@resend.dev>",
+  resendFromEmail: process.env.RESEND_FROM_EMAIL ?? "BRX <noreply@brxp2p.com>",
+  googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+  googleCallbackUrl: process.env.GOOGLE_CALLBACK_URL ?? `${process.env.APP_URL ?? "http://localhost:3000"}/api/auth/google/callback`,
   alchemyBnbRpcUrl: required("ALCHEMY_BNB_RPC_URL"),
   bscUsdtContractAddress: process.env.BSC_USDT_CONTRACT_ADDRESS ?? "0x55d398326f99059fF775485246999027B3197955",
   bscConfirmationsRequired: optionalNumber("BSC_CONFIRMATIONS_REQUIRED", 15),
@@ -39,4 +42,3 @@ export const env = {
   jwtAccessSecret: required("JWT_ACCESS_SECRET"),
   encryptionKey: required("ENCRYPTION_KEY"),
 };
-

@@ -34,6 +34,7 @@
 
     if (route === "register") pages.renderRegister();
     else if (route === "login") pages.renderLogin();
+    else if (route === "oauth") pages.renderOAuthCallback();
     else if (route === "verify") pages.renderVerify();
     else if (route === "dashboard") pages.renderDashboard();
     else if (route === "market") pages.renderMarket();

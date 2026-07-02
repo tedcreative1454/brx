@@ -36,8 +36,15 @@
     return requestJson("/trades/my");
   }
 
-  function markPaymentSent(tradeId) {
-    return requestJson(`/trades/${tradeId}/payment-sent`, { method: "POST" });
+  function getTrade(tradeId) {
+    return requestJson(`/trades/${tradeId}`);
+  }
+
+  function markPaymentSent(tradeId, input = {}) {
+    return requestJson(`/trades/${tradeId}/payment-sent`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
   }
 
   function releaseTrade(tradeId) {
@@ -48,10 +55,18 @@
     return requestJson(`/trades/${tradeId}/cancel`, { method: "POST" });
   }
 
-  function disputeTrade(tradeId, reason) {
+  function disputeTrade(tradeId, input) {
+    const body = typeof input === "string" ? { reason: input } : input;
     return requestJson(`/trades/${tradeId}/dispute`, {
       method: "POST",
-      body: JSON.stringify({ reason }),
+      body: JSON.stringify(body),
+    });
+  }
+
+  function addTradeEvidence(tradeId, input) {
+    return requestJson(`/trades/${tradeId}/evidence`, {
+      method: "POST",
+      body: JSON.stringify(input),
     });
   }
 
@@ -62,9 +77,11 @@
     updateOfferStatus,
     openTrade,
     myTrades,
+    getTrade,
     markPaymentSent,
     releaseTrade,
     cancelTrade,
     disputeTrade,
+    addTradeEvidence,
   };
 })();

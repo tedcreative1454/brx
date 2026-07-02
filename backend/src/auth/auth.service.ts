@@ -18,11 +18,32 @@ import { env } from "../config/env";
 interface UserRow {
   id: string;
   email: string;
+  google_sub?: string | null;
   password_hash?: string;
   email_verified_at: Date | null;
   kyc_status?: string;
   role?: string;
   status?: string;
+}
+
+interface GoogleUserInfo {
+  sub: string;
+  email: string;
+  email_verified: boolean;
+  name?: string;
+  picture?: string;
+}
+
+interface GoogleState {
+  returnTo: string;
+  nonce: string;
+  iat: number;
+}
+
+interface GoogleTwoFactorChallenge {
+  sub: string;
+  email: string;
+  iat: number;
 }
 
 interface VerificationCodeRow {
@@ -163,7 +184,83 @@ export class AuthService {
       throw new UnauthorizedException("Verify your email before signing in.");
     }
 
-    await this.assertTwoFactorIfEnabled(user.id, twoFactorCode);
+    await this.assertTwoFactorIfEnabled(user.id, twoFactorCode, true);
+
+    const wallet = await this.wallets.ensureDepositAddress(user.id);
+    const balance = await this.ledger.getOrCreateBalance(user.id);
+    return {
+      accessToken: await this.createSessionToken(user.id, user.email, userAgent),
+      user: {
+        id: user.id,
+        email: user.email,
+        emailVerified: true,
+        kycStatus: user.kyc_status ?? "unsubmitted",
+        status: user.status ?? "active",
+        role: user.role ?? "user",
+        depositAddress: wallet.deposit_address,
+        network: wallet.network,
+        balance,
+      },
+    };
+  }
+
+  googleStartUrl(returnTo?: string) {
+    if (!env.googleClientId || !env.googleClientSecret) {
+      throw new BadRequestException("Google sign-in is not configured yet.");
+    }
+
+    const state = this.signGoogleState({
+      returnTo: this.safeFrontendReturnTo(returnTo),
+      nonce: randomUUID(),
+      iat: Date.now(),
+    });
+    const params = new URLSearchParams({
+      client_id: env.googleClientId,
+      redirect_uri: env.googleCallbackUrl,
+      response_type: "code",
+      scope: "openid email profile",
+      state,
+      prompt: "select_account",
+    });
+    return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+  }
+
+  async googleCallback(code: string, stateToken: string, userAgent?: string) {
+    if (!code) throw new BadRequestException("Missing Google authorization code.");
+    const state = this.verifyGoogleState(stateToken);
+    const googleUser = await this.fetchGoogleUser(code);
+    const email = this.normalizeEmail(googleUser.email);
+    this.assertEmail(email);
+    if (!googleUser.sub || !googleUser.email_verified) {
+      throw new UnauthorizedException("Google account email must be verified.");
+    }
+
+    const user = await this.upsertGoogleUser(email, googleUser.sub);
+    await this.wallets.ensureDepositAddress(user.id);
+    await this.ledger.getOrCreateBalance(user.id);
+    if (await this.userHasTwoFactor(user.id)) {
+      const redirect = new URL(state.returnTo);
+      redirect.hash = `/oauth?twoFactor=required&ticket=${encodeURIComponent(this.signGoogleTwoFactorChallenge(user.id, user.email))}`;
+      return redirect.toString();
+    }
+    const accessToken = await this.createSessionToken(user.id, user.email, userAgent);
+    const redirect = new URL(state.returnTo);
+    redirect.hash = `/oauth?token=${encodeURIComponent(accessToken)}`;
+    return redirect.toString();
+  }
+
+  async completeGoogleTwoFactor(ticket: string, twoFactorCode: string, userAgent?: string) {
+    const challenge = this.verifyGoogleTwoFactorChallenge(ticket);
+    await this.assertTwoFactorIfEnabled(challenge.sub, twoFactorCode);
+    const result = await this.db.query<UserRow>(
+      `SELECT id, email, email_verified_at, kyc_status, status, role
+       FROM users
+       WHERE id = $1 AND email = $2 AND status = 'active'
+       LIMIT 1`,
+      [challenge.sub, challenge.email],
+    );
+    const user = result.rows[0];
+    if (!user) throw new UnauthorizedException("Google sign-in session expired.");
 
     const wallet = await this.wallets.ensureDepositAddress(user.id);
     const balance = await this.ledger.getOrCreateBalance(user.id);
@@ -376,13 +473,21 @@ export class AuthService {
     }
     return { ok: true };
   }
-  private async assertTwoFactorIfEnabled(userId: string, code: string | undefined) {
+  private async assertTwoFactorIfEnabled(userId: string, code: string | undefined, allowChallenge = false) {
     const settings = await this.ensureSecuritySettings(userId);
     if (!settings.two_factor_enabled) return;
     if (!settings.two_factor_secret) throw new UnauthorizedException("2FA setup is incomplete. Contact support.");
+    if (allowChallenge && !String(code ?? "").trim()) {
+      throw new UnauthorizedException({ code: "two_factor_required", message: "Enter your authenticator code." });
+    }
     if (!this.verifyTotp(this.decryptSecret(settings.two_factor_secret), String(code ?? ""))) {
       throw new UnauthorizedException("Enter a valid 2FA code.");
     }
+  }
+
+  private async userHasTwoFactor(userId: string) {
+    const settings = await this.ensureSecuritySettings(userId);
+    return Boolean(settings.two_factor_enabled && settings.two_factor_secret);
   }
 
   private async ensureSecuritySettings(userId: string) {
@@ -448,6 +553,127 @@ export class AuthService {
       [email, this.hashPassword(password)],
     );
     return result.rows[0];
+  }
+
+  private async upsertGoogleUser(email: string, googleSub: string) {
+    const existing = await this.db.query<UserRow>(
+      `SELECT id, email, google_sub, email_verified_at, kyc_status, status, role
+       FROM users
+       WHERE google_sub = $1 OR email = $2
+       ORDER BY CASE WHEN google_sub = $1 THEN 0 ELSE 1 END
+       LIMIT 1`,
+      [googleSub, email],
+    );
+    const user = existing.rows[0];
+
+    if (user?.google_sub && user.google_sub !== googleSub) {
+      throw new BadRequestException("This email is already linked to another Google account.");
+    }
+
+    const result = user
+      ? await this.db.query<UserRow>(
+          `UPDATE users
+           SET google_sub = COALESCE(google_sub, $2),
+               email_verified_at = COALESCE(email_verified_at, now())
+           WHERE id = $1
+           RETURNING id, email, email_verified_at, kyc_status, status, role`,
+          [user.id, googleSub],
+        )
+      : await this.db.query<UserRow>(
+          `INSERT INTO users (email, google_sub, email_verified_at)
+           VALUES ($1, $2, now())
+           RETURNING id, email, email_verified_at, kyc_status, status, role`,
+          [email, googleSub],
+        );
+
+    const linkedUser = result.rows[0];
+    await this.db.transaction(async (client) => {
+      await client.query(
+        `INSERT INTO balances (user_id, asset)
+         VALUES ($1, 'USDT')
+         ON CONFLICT (user_id, asset) DO NOTHING`,
+        [linkedUser.id],
+      );
+      await client.query("INSERT INTO user_security_settings (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING", [
+        linkedUser.id,
+      ]);
+    });
+    return linkedUser;
+  }
+
+  private async fetchGoogleUser(code: string): Promise<GoogleUserInfo> {
+    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: env.googleClientId,
+        client_secret: env.googleClientSecret,
+        redirect_uri: env.googleCallbackUrl,
+        grant_type: "authorization_code",
+      }),
+    });
+    const tokenPayload = (await tokenResponse.json().catch(() => null)) as { access_token?: string; error_description?: string } | null;
+    if (!tokenResponse.ok || !tokenPayload?.access_token) {
+      throw new UnauthorizedException(tokenPayload?.error_description || "Google sign-in failed.");
+    }
+
+    const userResponse = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
+      headers: { authorization: `Bearer ${tokenPayload.access_token}` },
+    });
+    const userPayload = (await userResponse.json().catch(() => null)) as GoogleUserInfo | null;
+    if (!userResponse.ok || !userPayload?.email || !userPayload.sub) {
+      throw new UnauthorizedException("Could not read Google account profile.");
+    }
+    return userPayload;
+  }
+
+  private signGoogleState(state: GoogleState) {
+    const body = Buffer.from(JSON.stringify(state)).toString("base64url");
+    return `${body}.${this.signToken(`google:${body}`)}`;
+  }
+
+  private verifyGoogleState(token: string): GoogleState {
+    const [body, signature] = token.split(".");
+    if (!body || !signature || !this.safeCompare(signature, this.signToken(`google:${body}`))) {
+      throw new UnauthorizedException("Invalid Google sign-in state.");
+    }
+
+    const state = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as GoogleState;
+    if (!state.returnTo || !state.nonce || !state.iat || Date.now() - state.iat > 10 * 60 * 1000) {
+      throw new UnauthorizedException("Google sign-in session expired.");
+    }
+    return { ...state, returnTo: this.safeFrontendReturnTo(state.returnTo) };
+  }
+
+  private signGoogleTwoFactorChallenge(userId: string, email: string) {
+    const body = this.base64UrlJson({ sub: userId, email, iat: Date.now() });
+    return `${body}.${this.signToken(`google-2fa:${body}`)}`;
+  }
+
+  private verifyGoogleTwoFactorChallenge(token: string): GoogleTwoFactorChallenge {
+    const [body, signature] = token.split(".");
+    if (!body || !signature || !this.safeCompare(signature, this.signToken(`google-2fa:${body}`))) {
+      throw new UnauthorizedException("Google sign-in session expired.");
+    }
+    const challenge = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as GoogleTwoFactorChallenge;
+    if (!challenge.sub || !challenge.email || !challenge.iat || Date.now() - challenge.iat > 5 * 60 * 1000) {
+      throw new UnauthorizedException("Google sign-in session expired.");
+    }
+    return challenge;
+  }
+
+  private safeFrontendReturnTo(returnTo?: string) {
+    const fallback = env.frontendUrl;
+    const raw = String(returnTo || fallback).trim();
+    try {
+      const url = new URL(raw);
+      if (url.protocol === "file:") return raw;
+      if (["http:", "https:"].includes(url.protocol)) return `${url.origin}${url.pathname}`;
+    } catch {
+      return fallback;
+    }
+    return fallback;
   }
 
   private async latestActiveCode(userId: string) {

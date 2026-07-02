@@ -1,6 +1,6 @@
-﻿# BRX
+# BRX
 
-BRX is a launch-bound KES/USDT P2P exchange web app for `brxp2p.com`. The product uses custodial USDT wallets, database escrow, manual KYC, email verification, and a BNB Smart Chain BEP20 wallet rail.
+BRX is a launch-bound ETB/USDT P2P exchange web app for `brxp2p.com`. The product uses custodial USDT wallets, database escrow, manual KYC, email verification, and a BNB Smart Chain BEP20 wallet rail.
 
 This repository currently contains the BRX web interface, PostgreSQL schema, backend planning notes, and legal placeholders. Public customer access must wait until the NestJS backend, PostgreSQL ledger, Redis queues, Resend email delivery, Alchemy BSC monitoring, wallet security, and admin operations are connected.
 
@@ -30,7 +30,7 @@ Target local backend stack:
 
 ## Product Scope
 
-- KES/USDT P2P marketplace.
+- ETB/USDT P2P marketplace.
 - Custodial USDT wallet model.
 - First blockchain network: USDT BEP20 on BNB Smart Chain.
 - BSC monitoring through Alchemy RPC.
@@ -46,6 +46,7 @@ Target local backend stack:
 - Signup validates email, password, confirmation, and terms agreement.
 - Email verification sends Resend-backed codes through the NestJS backend.
 - Login is verified by the backend and returns a signed access token for session requests.
+- Google sign-in/sign-up is supported through the backend OAuth flow once `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are configured.
 - Signed-in pages hydrate profile, wallet address, and USDT balance from `/api/auth/me`.
 - Verified users enter the exchange app.
 - Identity banner opens a manual KYC upload form backed by the NestJS API.
@@ -103,6 +104,9 @@ Do not put secrets in frontend code. Use backend environment variables:
 - `BSC_LOG_BLOCK_RANGE`
 - `BSC_SCAN_LOOKBACK_BLOCKS`
 - `RESEND_API_KEY`
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `GOOGLE_CALLBACK_URL`
 - `DATABASE_URL`
 - `REDIS_URL`
 - `JWT_ACCESS_SECRET`

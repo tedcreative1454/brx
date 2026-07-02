@@ -1,12 +1,12 @@
-﻿# BRX Legal Placeholders
+# BRX Legal Placeholders
 
 These are placeholders for launch planning only. Replace them with reviewed legal documents before public customer access.
 
 ## Terms of Service Placeholder
 
-- BRX provides a KES/USDT P2P marketplace with database escrow.
+- BRX provides a ETB/USDT P2P marketplace with database escrow.
 - Users must provide accurate account, KYC, and payment information.
-- Users are responsible for sending KES payments only through agreed payment methods.
+- Users are responsible for sending ETB payments only through agreed payment methods.
 - BRX may pause trades, withdrawals, or accounts for risk, compliance, security, or dispute review.
 - BRX may refuse unsupported token/network deposits.
 
@@ -19,7 +19,7 @@ These are placeholders for launch planning only. Replace them with reviewed lega
 ## Escrow Rules Placeholder
 
 - Seller USDT is locked internally when a buyer opens a trade.
-- Buyer must mark payment sent only after sending KES outside BRX.
+- Buyer must mark payment sent only after sending ETB outside BRX.
 - Seller must release only after confirming payment receipt.
 - Admin may resolve disputes using uploaded proof, chat logs, payment proof, and account history.
 

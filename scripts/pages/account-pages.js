@@ -14,7 +14,9 @@
   const securityService = window.BRX.securityService;
 
   let activeWalletMode = "deposit";
+  const selectedWalletNetwork = { deposit: "", withdraw: "" };
   let showOfferForm = false;
+  let tradeCountdownTimer = null;
 
   function renderAds() {
     const user = requireUser();
@@ -37,13 +39,25 @@
   function renderTrades() {
     const user = requireUser();
     if (!user) return;
+    const tradeId = window.BRX.router.routeParams().get("id");
+    if (tradeCountdownTimer) {
+      clearInterval(tradeCountdownTimer);
+      tradeCountdownTimer = null;
+    }
     refs.app.innerHTML = `
       <section class="exchange-app app-page-narrow">
-        <div class="page-title"><h2>My Trades</h2><a class="app-button" href="#/market">Trade</a></div>
+        <div class="page-title">
+          <div>
+            <p class="app-label blue">${tradeId ? "Trade detail" : "P2P trades"}</p>
+            <h2>${tradeId ? "Escrow trade" : "My Trades"}</h2>
+          </div>
+          <a class="app-button" href="${tradeId ? "#/trades" : "#/market"}">${tradeId ? "Back to trades" : "Trade"}</a>
+        </div>
         <div id="tradesContent"><section class="empty-panel compact"><span class="mini-icon">...</span><h3>Loading trades</h3></section></div>
       </section>
     `;
-    void loadMyTrades();
+    if (tradeId) void loadTradeDetail(tradeId);
+    else void loadMyTrades();
   }
 
   function offerForm() {
@@ -52,9 +66,9 @@
         <div class="kyc-form-grid">
           <label class="form-field"><span>Ad type</span><select id="offerSide" required><option value="sell">Sell USDT</option><option value="buy">Buy USDT</option></select></label>
           <label class="form-field"><span>USDT amount</span><input id="offerAmount" inputmode="decimal" placeholder="100.00" required /></label>
-          <label class="form-field"><span>Price per USDT in KES</span><input id="offerPrice" inputmode="decimal" placeholder="129.90" required /></label>
-          <label class="form-field"><span>Minimum KES order</span><input id="offerMin" inputmode="decimal" placeholder="1000" required /></label>
-          <label class="form-field"><span>Maximum KES order</span><input id="offerMax" inputmode="decimal" placeholder="10000" required /></label>
+          <label class="form-field"><span>Price per USDT in ETB</span><input id="offerPrice" inputmode="decimal" placeholder="185.00" required /></label>
+          <label class="form-field"><span>Minimum ETB order</span><input id="offerMin" inputmode="decimal" placeholder="1000" required /></label>
+          <label class="form-field"><span>Maximum ETB order</span><input id="offerMax" inputmode="decimal" placeholder="10000" required /></label>
         </div>
         <div class="payment-methods">
           <label><input type="checkbox" value="M-Pesa" checked /> M-Pesa</label>
@@ -95,7 +109,7 @@
       <div class="table-row my-ad-row">
         <div><strong>${action} USDT</strong><small>${offer.status}</small></div>
         <strong class="table-price ${offer.side === "buy" ? "" : "sell-price"}">${format(Number(offer.price))}</strong>
-        <div><strong>${format(Number(offer.availableAmount))} USDT</strong><small>${format(Number(offer.minFiat))}-${format(Number(offer.maxFiat))} KES</small></div>
+        <div><strong>${format(Number(offer.availableAmount))} USDT</strong><small>${format(Number(offer.minFiat))}-${format(Number(offer.maxFiat))} ETB</small></div>
         <div class="chips">${offer.paymentMethods.map((method) => `<span>${escapeHtml(method)}</span>`).join("")}</div>
         <div class="row-actions">
           ${offer.status === "active" ? `<button class="app-ghost-button small" type="button" data-offer-id="${offer.id}" data-offer-status="paused">Pause</button>` : ""}
@@ -149,8 +163,26 @@
       document.querySelectorAll("[data-trade-action]").forEach((button) => {
         button.addEventListener("click", () => handleTradeAction(button.dataset.tradeId, button.dataset.tradeAction));
       });
+      document.querySelectorAll("[data-trade-open]").forEach((button) => {
+        button.addEventListener("click", () => {
+          location.hash = `#/trades?id=${encodeURIComponent(button.dataset.tradeOpen)}`;
+        });
+      });
     } catch (error) {
       content.innerHTML = `<section class="warning-card"><h3>Could not load trades</h3><p>${escapeHtml(error.message || "Start the BRX backend and reload.")}</p></section>`;
+    }
+  }
+
+  async function loadTradeDetail(tradeId) {
+    const content = document.querySelector("#tradesContent");
+    try {
+      const result = await marketplace.getTrade(tradeId);
+      const trade = result.trade;
+      content.innerHTML = tradeDetail(trade);
+      bindTradeDetail(trade);
+      startTradeCountdown(trade);
+    } catch (error) {
+      content.innerHTML = `<section class="warning-card"><h3>Could not load trade</h3><p>${escapeHtml(error.message || "Start the BRX backend and reload.")}</p></section>`;
     }
   }
 
@@ -162,17 +194,163 @@
     return `
       <div class="table-row trade-row">
         <div><strong>${roleText}</strong><small>Counterparty: ${escapeHtml(trade.counterpartyEmail || "BRX user")}</small>${deadline}${payment}</div>
-        <div><strong>${format(Number(trade.assetAmount))} USDT</strong><small>${format(Number(trade.fiatAmount))} KES</small></div>
+        <div><strong>${format(Number(trade.assetAmount))} USDT</strong><small>${format(Number(trade.fiatAmount))} ETB</small></div>
         <div><strong>${statusLabel(trade.status)}</strong><small>${dateTime(trade.createdAt)}</small>${reason ? `<small>${escapeHtml(reason)}</small>` : ""}</div>
-        <div class="row-actions">${tradeActions(trade)}</div>
+        <div class="row-actions"><button class="app-ghost-button small" type="button" data-trade-open="${escapeAttr(trade.id)}">View</button>${tradeActions(trade)}</div>
       </div>
     `;
   }
 
+  function tradeDetail(trade) {
+    const sellerMethods = trade.sellerPaymentMethods || [];
+    return `
+      <section class="trade-detail-grid">
+        <article class="app-card trade-detail-main">
+          <div class="trade-detail-head">
+            <div>
+              <p class="app-label blue">${trade.role === "buyer" ? "Buy USDT" : "Sell USDT"}</p>
+              <h3>${format(Number(trade.assetAmount))} USDT</h3>
+              <p class="app-muted">${format(Number(trade.fiatAmount))} ETB Â· ${format(Number(trade.offerPrice || Number(trade.fiatAmount) / Number(trade.assetAmount)))} ETB/USDT</p>
+            </div>
+            <span class="status-pill ${trade.status === "disputed" ? "warning" : ""}">${statusLabel(trade.status)}</span>
+          </div>
+
+          ${trade.status === "opened" ? countdownBlock(trade) : ""}
+          ${trade.role === "buyer" ? buyerPaymentBlock(trade, sellerMethods) : sellerPaymentBlock(trade)}
+
+          <div class="trade-actions-panel">${tradeActions(trade)}</div>
+        </article>
+
+        <aside class="app-card trade-side-panel">
+          <p class="app-label">Counterparty</p>
+          <strong>${escapeHtml(trade.counterpartyEmail || "BRX user")}</strong>
+          <div class="trade-timeline">${tradeTimeline(trade)}</div>
+        </aside>
+      </section>
+
+      ${disputeAccessPanel(trade)}
+    `;
+  }
+
+  function countdownBlock(trade) {
+    return `
+      <section class="trade-countdown-card">
+        <span>Payment window</span>
+        <strong id="tradeCountdown">${timeLeft(trade.expiresAt)}</strong>
+        <small>Buyer must mark payment sent before this timer ends.</small>
+      </section>
+    `;
+  }
+
+  function buyerPaymentBlock(trade, sellerMethods) {
+    if (["cancelled", "expired", "released"].includes(trade.status)) {
+      return `<p class="deposit-note">This trade is ${statusLabel(trade.status)}. No payment action is required.</p>`;
+    }
+
+    return `
+      <section class="payment-instructions">
+        <div>
+          <p class="app-label">Pay seller outside BRX</p>
+          <h4>${format(Number(trade.fiatAmount))} ETB</h4>
+          <p class="app-muted">Send ETB using one of the seller payment methods below. BRX never handles the ETB payment.</p>
+        </div>
+        <div class="payment-method-list">
+          ${sellerMethods.length ? sellerMethods.map(paymentMethodCard).join("") : `<div class="payment-method-card"><strong>Payment method pending</strong><small>Ask the seller to add a payment method before paying.</small></div>`}
+        </div>
+      </section>
+    `;
+  }
+
+  function sellerPaymentBlock(trade) {
+    if (trade.status === "opened") {
+      return `<p class="deposit-note">Your USDT is locked in escrow. Wait for the buyer to pay in ETB and mark payment sent.</p>`;
+    }
+    if (trade.status === "payment_sent") {
+      return `<p class="deposit-note">Check your ETB account carefully. Release USDT only after you confirm payment is received.</p>`;
+    }
+    if (trade.status === "disputed") {
+      return `<p class="deposit-note">This trade is under admin review. Add evidence below if needed.</p>`;
+    }
+    return `<p class="deposit-note">This trade is ${statusLabel(trade.status)}.</p>`;
+  }
+
+  function paymentMethodCard(method) {
+    const details = [
+      method.accountName,
+      method.phoneNumber,
+      method.bankName,
+      method.accountNumber,
+      method.instructions,
+    ].filter(Boolean);
+    return `
+      <div class="payment-method-card">
+        <strong>${escapeHtml(method.label || paymentTypeLabel(method.type))}</strong>
+        ${details.map((item) => `<small>${escapeHtml(item)}</small>`).join("")}
+      </div>
+    `;
+  }
+
+  function disputePanel(trade) {
+    const isOpen = trade.status === "disputed";
+    return `
+      <section class="app-card dispute-panel">
+        <div class="trade-detail-head">
+          <div>
+            <p class="app-label blue">${isOpen ? "Dispute evidence" : "Open dispute"}</p>
+            <h3>${isOpen ? "Add supporting evidence" : "Report a problem"}</h3>
+          </div>
+          ${isOpen ? `<span class="status-pill warning">Admin review</span>` : ""}
+        </div>
+        ${evidenceList(trade.evidence || [])}
+        <form class="evidence-form" id="evidenceForm">
+          <label class="form-field wide"><span>${isOpen ? "Evidence note" : "Dispute reason"}</span><textarea id="evidenceNote" rows="4" placeholder="Explain what happened, payment reference, time, and any useful details."></textarea></label>
+          <label class="form-field"><span>Payment reference</span><input id="evidenceReference" placeholder="M-Pesa code, bank ref, or note" /></label>
+          <label class="form-field"><span>Screenshot or document</span><input id="evidenceFile" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" /></label>
+          <div class="form-error" id="evidenceError"></div>
+          <button class="${isOpen ? "app-button" : "danger-button"}" type="submit">${isOpen ? "Add evidence" : "Open dispute"}</button>
+        </form>
+      </section>
+    `;
+  }
+
+  function evidenceList(evidence) {
+    if (!evidence.length) return `<div class="evidence-list empty">No evidence submitted yet.</div>`;
+    return `
+      <div class="evidence-list">
+        ${evidence.map((item) => `
+          <div class="evidence-item">
+            <strong>${escapeHtml(item.fileName || "Evidence note")}</strong>
+            ${item.note ? `<p>${escapeHtml(item.note)}</p>` : ""}
+            <small>${dateTime(item.createdAt)}</small>
+          </div>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  function tradeTimeline(trade) {
+    const steps = [
+      ["Opened", trade.createdAt, true],
+      ["Payment sent", trade.paymentSentAt, Boolean(trade.paymentSentAt)],
+      ["Released", trade.releasedAt, trade.status === "released"],
+      ["Disputed", trade.disputedAt, trade.status === "disputed"],
+      ["Closed", trade.cancelledAt || trade.resolvedAt, ["cancelled", "expired"].includes(trade.status) || Boolean(trade.resolvedAt)],
+    ];
+    return steps.map(([label, value, active]) => `
+      <div class="timeline-step ${active ? "active" : ""}">
+        <span></span>
+        <div><strong>${label}</strong><small>${value ? dateTime(value) : "Pending"}</small></div>
+      </div>
+    `).join("");
+  }
+
   function tradeActions(trade) {
-    const disputeButton = canDispute(trade) ? `<button class="danger-button small" type="button" data-trade-id="${trade.id}" data-trade-action="dispute">Dispute</button>` : "";
+    const disputeButton = canDispute(trade) && disputeUnlocked(trade)
+      ? `<button class="danger-button small" type="button" data-trade-id="${escapeAttr(trade.id)}" data-trade-action="dispute">Open dispute</button>`
+      : "";
+
     if (trade.status === "opened" && trade.role === "buyer") {
-      return `<button class="app-button small" type="button" data-trade-id="${trade.id}" data-trade-action="payment-sent">Payment Sent</button><button class="app-ghost-button small" type="button" data-trade-id="${trade.id}" data-trade-action="cancel">Cancel</button>${disputeButton}`;
+      return `<button class="app-button small" type="button" data-trade-id="${trade.id}" data-trade-action="payment-sent">Payment Sent</button><button class="app-ghost-button small" type="button" data-trade-id="${trade.id}" data-trade-action="cancel">Cancel</button>`;
     }
     if (trade.status === "payment_sent" && trade.role === "seller") {
       return `<button class="app-button small" type="button" data-trade-id="${trade.id}" data-trade-action="release">Release USDT</button>${disputeButton}`;
@@ -193,6 +371,65 @@
     return ["opened", "payment_sent"].includes(trade.status) && ["buyer", "seller"].includes(trade.role);
   }
 
+  function disputeUnlockAt(trade) {
+    const openedAt = trade.createdAt || trade.openedAt || trade.created_at;
+    const openedMs = new Date(openedAt).getTime();
+    const baseMs = Number.isFinite(openedMs) ? openedMs : Date.now();
+    return new Date(baseMs + 15 * 60 * 1000).toISOString();
+  }
+
+  function disputeUnlocked(trade) {
+    return Date.now() >= new Date(disputeUnlockAt(trade)).getTime();
+  }
+
+  function disputeAccessPanel(trade) {
+    if (trade.status === "disputed") return disputePanel(trade);
+    if (!canDispute(trade)) return "";
+
+    const wantsDispute = window.BRX.router.routeParams().get("dispute") === "1";
+    if (disputeUnlocked(trade) && wantsDispute) return disputePanel(trade);
+
+    if (disputeUnlocked(trade)) {
+      return `
+        <section class="appeal-card unlocked">
+          <div class="appeal-copy">
+            <span class="appeal-icon">!</span>
+            <div>
+              <strong>Need admin help?</strong>
+              <small>Open a dispute only if payment or release cannot be resolved with the other trader.</small>
+            </div>
+          </div>
+          <button class="danger-button small" type="button" data-trade-id="${escapeAttr(trade.id)}" data-trade-action="dispute">Open dispute</button>
+        </section>
+      `;
+    }
+
+    return `
+      <section class="appeal-card locked">
+        <div class="appeal-copy">
+          <span class="appeal-icon">ID</span>
+          <div>
+            <strong>Appeal unlocks in <span id="appealCountdown">${timeLeft(disputeUnlockAt(trade))}</span></strong>
+            <small>The dispute button appears after the payment window has had time to resolve normally.</small>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  function bindAppealCountdown(trade) {
+    const target = document.querySelector("#appealCountdown");
+    if (!target || !canDispute(trade) || disputeUnlocked(trade)) return;
+    const unlockAt = disputeUnlockAt(trade);
+    const timer = window.setInterval(async () => {
+      target.textContent = timeLeft(unlockAt);
+      if (disputeUnlocked(trade)) {
+        window.clearInterval(timer);
+        await loadTradeDetail(trade.id);
+      }
+    }, 1000);
+  }
+
   async function handleTradeAction(tradeId, action) {
     try {
       if (action === "payment-sent") await marketplace.markPaymentSent(tradeId);
@@ -202,16 +439,434 @@
         await marketplace.cancelTrade(tradeId);
       }
       if (action === "dispute") {
-        const reason = prompt("Explain the dispute for admin review. Include payment reference, time, and issue.");
-        if (!reason) return;
-        await marketplace.disputeTrade(tradeId, reason);
+        location.hash = `#/trades?id=${encodeURIComponent(tradeId)}&dispute=1`;
+        return;
       }
       await window.BRX.profileService.hydrateSession();
       showToast("Trade updated.");
-      await loadMyTrades();
+      if (window.BRX.router.routeParams().get("id")) await loadTradeDetail(tradeId);
+      else await loadMyTrades();
     } catch (error) {
       showToast(error.message || "Could not update trade.");
     }
+  }
+
+  function bindTradeDetail(trade) {
+    document.querySelectorAll("[data-trade-action]").forEach((button) => {
+      button.addEventListener("click", () => handleTradeAction(button.dataset.tradeId, button.dataset.tradeAction));
+    });
+    bindAppealCountdown(trade);
+    document.querySelector("#evidenceForm")?.addEventListener("submit", (event) => handleEvidenceSubmit(event, trade));
+  }
+
+  function tradeDetail(trade) {
+    const sellerMethods = trade.sellerPaymentMethods || [];
+    const isBuyer = trade.role === "buyer";
+    return `
+      <section class="escrow-workspace">
+        <div class="escrow-topline">
+          <button class="icon-link" type="button" data-back-to-trades>&larr; My Trades</button>
+          <span>Trade #${shortTradeId(trade.id)}</span>
+          <span class="status-pill ${trade.status === "disputed" ? "warning" : ""}">${statusLabel(trade.status)}</span>
+        </div>
+        <section class="escrow-grid">
+          <article class="escrow-main">
+            <div class="trade-detail-head">
+              <div>
+                <p class="app-label blue">${isBuyer ? "Buy USDT" : "Sell USDT"}</p>
+                <h3>${format(Number(trade.assetAmount))} USDT</h3>
+                <p class="app-muted">${format(Number(trade.fiatAmount))} ETB at ${format(Number(trade.offerPrice || Number(trade.fiatAmount) / Number(trade.assetAmount)))} ETB/USDT</p>
+              </div>
+            </div>
+            ${escrowStepper(trade)}
+            ${isBuyer ? buyerPaymentBlock(trade, sellerMethods) : sellerPaymentBlock(trade)}
+            ${countdownBlock(trade)}
+            ${tradeSafetyNote(trade)}
+            <div class="trade-actions-panel">${tradeActions(trade)}</div>
+          </article>
+
+          <aside class="escrow-side">
+            <div class="counterparty-card">
+              <div class="avatar small">${displayInitial(counterpartyName(trade))}</div>
+              <div>
+                <strong>${escapeHtml(counterpartyName(trade))}</strong>
+                <small>${escapeHtml(trade.counterpartyEmail || "BRX user")}</small>
+              </div>
+            </div>
+            ${isBuyer ? sellerPaymentSummary(trade, sellerMethods) : buyerPaymentSummary(trade)}
+            <div class="trade-chat-box">
+              <div class="mini-icon">MSG</div>
+              <strong>No messages yet</strong>
+              <small>Trade chat will appear here.</small>
+            </div>
+          </aside>
+        </section>
+      </section>
+
+      ${disputeAccessPanel(trade)}
+    `;
+  }
+
+  function escrowStepper(trade) {
+    const stage = tradeStage(trade);
+    const steps = [
+      ["Order placed", 1],
+      ["Funds locked", 2],
+      ["Payment sent", 3],
+      ["Completed", 4],
+    ];
+    return `
+      <section class="escrow-stepper">
+        ${steps.map(([label, number]) => `
+          <div class="escrow-step ${stage > number ? "done" : ""} ${stage === number ? "active" : ""}">
+            <span>${stage > number ? "OK" : number}</span>
+            <strong>${label}</strong>
+          </div>
+        `).join("")}
+      </section>
+    `;
+  }
+
+  function tradeStage(trade) {
+    if (trade.status === "released") return 4;
+    if (trade.status === "payment_sent" || trade.status === "disputed") return 3;
+    if (trade.status === "opened") return 2;
+    return 1;
+  }
+
+  function countdownBlock(trade) {
+    if (!["opened", "payment_sent"].includes(trade.status)) return "";
+    return `
+      <section class="trade-countdown-card">
+        <span>${trade.status === "payment_sent" ? "Seller review window" : "Payment window"}</span>
+        <strong id="tradeCountdown">${timeLeft(trade.expiresAt)}</strong>
+        <small>${trade.status === "payment_sent" ? "Seller should confirm payment or dispute before this timer ends." : "Buyer must pay and submit proof before this timer ends."}</small>
+      </section>
+    `;
+  }
+
+  function buyerPaymentBlock(trade, sellerMethods) {
+    if (["cancelled", "expired", "released"].includes(trade.status)) {
+      return `<p class="deposit-note">This trade is ${statusLabel(trade.status)}. No payment action is required.</p>`;
+    }
+
+    return `
+      <section class="payment-instructions">
+        <div>
+          <p class="app-label">Pay seller outside BRX</p>
+          <h4>${format(Number(trade.fiatAmount))} ETB</h4>
+          <p class="app-muted">Use only the payment details shown here. BRX holds the seller USDT in escrow, but does not handle the ETB payment.</p>
+        </div>
+        <ol class="instruction-list">
+          <li>Transfer exactly <strong>${format(Number(trade.fiatAmount))} ETB</strong> to the seller account below.</li>
+          <li>Save a screenshot or receipt from your bank or mobile money app.</li>
+          <li>Click <strong>Payment sent</strong> and upload the receipt or payment reference.</li>
+          <li>Wait for the seller to confirm and release your USDT.</li>
+        </ol>
+        <div class="payment-method-list compact">
+          ${sellerMethods.length ? sellerMethods.map(paymentMethodCard).join("") : `<div class="payment-method-card"><strong>Payment method pending</strong><small>Ask the seller to add a payment method before paying.</small></div>`}
+        </div>
+      </section>
+    `;
+  }
+
+  function sellerPaymentBlock(trade) {
+    if (trade.status === "opened") {
+      return `
+        <section class="payment-instructions">
+          <p class="app-label">Waiting for buyer</p>
+          <h4>${format(Number(trade.assetAmount))} USDT locked</h4>
+          <p class="app-muted">Your USDT is locked in escrow. Wait for the buyer to send ETB and submit payment proof.</p>
+        </section>
+      `;
+    }
+    if (trade.status === "payment_sent") {
+      return `
+        <section class="payment-instructions">
+          <p class="app-label">Buyer marked payment sent</p>
+          <h4>Confirm ${format(Number(trade.fiatAmount))} ETB</h4>
+          <p class="app-muted">Check your receiving account carefully. Release USDT only after the ETB payment is fully received.</p>
+          ${paymentProofBlock(trade)}
+        </section>
+      `;
+    }
+    if (trade.status === "disputed") {
+      return `<p class="deposit-note">This trade is under admin review. Add evidence below if needed.</p>`;
+    }
+    return `<p class="deposit-note">This trade is ${statusLabel(trade.status)}.</p>`;
+  }
+
+  function paymentMethodCard(method) {
+    const rows = [
+      ["Name", method.accountName],
+      ["Phone", method.phoneNumber],
+      ["Bank", method.bankName],
+      ["Account", method.accountNumber],
+      ["Note", method.instructions],
+    ].filter(([, value]) => Boolean(value));
+    return `
+      <div class="payment-method-card highlighted">
+        <div class="method-head"><strong>${escapeHtml(method.label || paymentTypeLabel(method.type))}</strong><span>${escapeHtml(paymentTypeLabel(method.type))}</span></div>
+        ${rows.map(([label, value]) => paymentDetailRow(label, value)).join("")}
+      </div>
+    `;
+  }
+
+  function paymentDetailRow(label, value) {
+    return `
+      <div class="payment-detail-row">
+        <small>${escapeHtml(label)}</small>
+        <strong>${escapeHtml(value)}</strong>
+        <button class="copy-chip" type="button" data-copy-value="${escapeAttr(value)}">Copy</button>
+      </div>
+    `;
+  }
+
+  function sellerPaymentSummary(trade, sellerMethods) {
+    return `
+      <section class="side-section">
+        <p class="app-label">Seller receiving account</p>
+        ${sellerMethods.length ? sellerMethods.slice(0, 1).map(paymentMethodCard).join("") : `<div class="payment-method-card"><strong>No payment method</strong><small>Ask seller to add a receiving account before paying.</small></div>`}
+      </section>
+    `;
+  }
+
+  function buyerPaymentSummary(trade) {
+    return `
+      <section class="side-section">
+        <p class="app-label">Buyer payment proof</p>
+        ${paymentProofBlock(trade)}
+      </section>
+    `;
+  }
+
+  function paymentProofBlock(trade) {
+    if (!trade.paymentReference && !trade.paymentProofName) {
+      return `<div class="proof-card empty"><strong>No payment proof yet</strong><small>Proof appears here after the buyer marks payment sent.</small></div>`;
+    }
+    return `
+      <div class="proof-card">
+        ${trade.paymentReference ? `<div><small>Reference</small><strong>${escapeHtml(trade.paymentReference)}</strong></div>` : ""}
+        ${trade.paymentProofName ? `<div><small>Receipt</small><strong>${escapeHtml(trade.paymentProofName)}</strong></div>` : ""}
+      </div>
+    `;
+  }
+
+  function tradeSafetyNote(trade) {
+    if (trade.status === "released") {
+      return `<div class="deposit-note success">Trade completed. USDT has been released to the buyer.</div>`;
+    }
+    if (trade.status === "disputed") {
+      return `<div class="deposit-note warning">This trade is under admin review. Do not continue payment outside the agreed details.</div>`;
+    }
+    return `<div class="deposit-note">Only use the payment details shown on this trade. If anything looks wrong, open a dispute before confirming.</div>`;
+  }
+
+  function tradeActions(trade) {
+    const disputeButton = canDispute(trade) && disputeUnlocked(trade)
+      ? `<button class="danger-button small" type="button" data-trade-id="${escapeAttr(trade.id)}" data-trade-action="dispute">Open dispute</button>`
+      : "";
+
+    if (trade.status === "opened" && trade.role === "buyer") {
+      return `<button class="app-button small" type="button" data-trade-id="${trade.id}" data-trade-action="payment-sent">Payment sent</button><button class="app-ghost-button small" type="button" data-trade-id="${trade.id}" data-trade-action="cancel">Cancel</button>`;
+    }
+    if (trade.status === "payment_sent" && trade.role === "seller") {
+      return `<button class="app-button small" type="button" data-trade-id="${trade.id}" data-trade-action="release">Release USDT</button>${disputeButton}`;
+    }
+    if (trade.status === "payment_sent" && trade.role === "buyer") {
+      return `<span class="app-muted">Waiting for seller to release</span>${disputeButton}`;
+    }
+    if (trade.status === "opened") {
+      return `<button class="app-ghost-button small" type="button" data-trade-id="${trade.id}" data-trade-action="cancel">Cancel</button>${disputeButton}`;
+    }
+    if (trade.status === "disputed") {
+      return `<span class="status-pill warning">Admin review</span>`;
+    }
+    return `<span class="app-muted">No action</span>`;
+  }
+
+  async function handleTradeAction(tradeId, action) {
+    try {
+      if (action === "payment-sent") {
+        const trade = await marketplace.tradeDetail(tradeId);
+        openPaymentSentModal(trade);
+        return;
+      }
+      if (action === "release") {
+        const trade = await marketplace.tradeDetail(tradeId);
+        openReleaseModal(trade);
+        return;
+      }
+      if (action === "cancel") {
+        if (!confirm("Cancel this trade and return locked USDT to the seller?")) return;
+        await marketplace.cancelTrade(tradeId);
+      }
+      if (action === "dispute") {
+        location.hash = `#/trades?id=${encodeURIComponent(tradeId)}&dispute=1`;
+        return;
+      }
+      await window.BRX.profileService.hydrateSession();
+      showToast("Trade updated.");
+      if (window.BRX.router.routeParams().get("id")) await loadTradeDetail(tradeId);
+      else await loadMyTrades();
+    } catch (error) {
+      showToast(error.message || "Could not update trade.");
+    }
+  }
+
+  function bindTradeDetail(trade) {
+    document.querySelector("[data-back-to-trades]")?.addEventListener("click", () => {
+      location.hash = "#/trades";
+    });
+    document.querySelectorAll("[data-trade-action]").forEach((button) => {
+      button.addEventListener("click", () => handleTradeAction(button.dataset.tradeId, button.dataset.tradeAction));
+    });
+    document.querySelectorAll("[data-copy-value]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        await navigator.clipboard?.writeText(button.dataset.copyValue || "");
+        showToast("Copied.");
+      });
+    });
+    bindAppealCountdown(trade);
+    document.querySelector("#evidenceForm")?.addEventListener("submit", (event) => handleEvidenceSubmit(event, trade));
+  }
+
+  function openPaymentSentModal(trade) {
+    const modal = document.createElement("div");
+    modal.className = "trade-modal-backdrop";
+    modal.innerHTML = `
+      <form class="trade-confirm-modal" id="paymentSentForm">
+        <button class="modal-x" type="button" data-close-modal aria-label="Close">x</button>
+        <p class="app-label blue">Confirm payment sent</p>
+        <h3>${format(Number(trade.fiatAmount))} ETB</h3>
+        <p class="app-muted">Submit your payment reference or receipt. False confirmations can lead to account suspension.</p>
+        <label class="form-field"><span>Payment reference</span><input id="paymentReference" placeholder="Bank ref, mobile money code, or note" /></label>
+        <label class="receipt-drop"><input id="paymentProofFile" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" /><strong>Upload receipt</strong><small>PNG, JPG, WEBP, or PDF up to 8 MB</small></label>
+        <div class="form-error" id="paymentSentError"></div>
+        <button class="app-button" type="submit">Yes, I paid the seller</button>
+      </form>
+    `;
+    document.body.appendChild(modal);
+    modal.querySelector("[data-close-modal]").addEventListener("click", closeTradeModal);
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) closeTradeModal();
+    });
+    modal.querySelector("#paymentSentForm").addEventListener("submit", (event) => handlePaymentSentSubmit(event, trade));
+  }
+
+  async function handlePaymentSentSubmit(event, trade) {
+    event.preventDefault();
+    const errorNode = document.querySelector("#paymentSentError");
+    errorNode.textContent = "";
+    try {
+      const reference = document.querySelector("#paymentReference").value.trim();
+      const file = await filePayload("paymentProofFile");
+      await marketplace.markPaymentSent(trade.id, { reference, file });
+      closeTradeModal();
+      showToast("Payment proof submitted.");
+      await loadTradeDetail(trade.id);
+    } catch (error) {
+      errorNode.textContent = error.message || "Could not submit payment proof.";
+    }
+  }
+
+  function openReleaseModal(trade) {
+    const modal = document.createElement("div");
+    modal.className = "trade-modal-backdrop";
+    modal.innerHTML = `
+      <form class="trade-confirm-modal" id="releaseTradeForm">
+        <button class="modal-x" type="button" data-close-modal aria-label="Close">x</button>
+        <p class="app-label blue">Release escrow</p>
+        <h3>${format(Number(trade.assetAmount))} USDT</h3>
+        <p class="app-muted">Only release after the ETB payment is fully received in your account.</p>
+        ${paymentProofBlock(trade)}
+        <div class="form-error" id="releaseError"></div>
+        <button class="app-button" type="submit">Release USDT to buyer</button>
+      </form>
+    `;
+    document.body.appendChild(modal);
+    modal.querySelector("[data-close-modal]").addEventListener("click", closeTradeModal);
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) closeTradeModal();
+    });
+    modal.querySelector("#releaseTradeForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const errorNode = document.querySelector("#releaseError");
+      errorNode.textContent = "";
+      try {
+        await marketplace.releaseTrade(trade.id);
+        closeTradeModal();
+        showToast("USDT released.");
+        await loadTradeDetail(trade.id);
+      } catch (error) {
+        errorNode.textContent = error.message || "Could not release trade.";
+      }
+    });
+  }
+
+  function closeTradeModal() {
+    document.querySelector(".trade-modal-backdrop")?.remove();
+  }
+
+  function shortTradeId(value) {
+    return String(value || "").slice(0, 8).toUpperCase();
+  }
+
+  function counterpartyName(trade) {
+    return trade.counterpartyName || trade.counterpartyEmail || "BRX user";
+  }
+
+  async function handleEvidenceSubmit(event, trade) {
+    event.preventDefault();
+    const errorBox = document.querySelector("#evidenceError");
+    if (errorBox) errorBox.textContent = "";
+    const note = document.querySelector("#evidenceNote").value.trim();
+    const reference = document.querySelector("#evidenceReference").value.trim();
+    const file = await filePayload("evidenceFile");
+    const combinedNote = [note, reference ? `Payment reference: ${reference}` : ""].filter(Boolean).join("\n\n");
+
+    if (!combinedNote && !file) {
+      if (errorBox) errorBox.textContent = "Add a note, payment reference, or screenshot.";
+      return;
+    }
+
+    try {
+      if (trade.status === "disputed") {
+        await marketplace.addTradeEvidence(trade.id, { note: combinedNote, file });
+        showToast("Evidence added.");
+      } else {
+        await marketplace.disputeTrade(trade.id, { reason: combinedNote || "Dispute evidence attached.", evidence: { note: combinedNote, file } });
+        showToast("Dispute opened for admin review.");
+      }
+      await loadTradeDetail(trade.id);
+    } catch (error) {
+      if (errorBox) errorBox.textContent = error.message || "Could not submit evidence.";
+      else showToast(error.message || "Could not submit evidence.");
+    }
+  }
+
+  function startTradeCountdown(trade) {
+    if (trade.status !== "opened" || !trade.expiresAt) return;
+    const target = document.querySelector("#tradeCountdown");
+    if (!target) return;
+    const tick = () => {
+      target.textContent = timeLeft(trade.expiresAt);
+      if (new Date(trade.expiresAt).getTime() <= Date.now()) {
+        clearInterval(tradeCountdownTimer);
+        tradeCountdownTimer = null;
+      }
+    };
+    tick();
+    tradeCountdownTimer = setInterval(tick, 1000);
+  }
+
+  function timeLeft(value) {
+    const ms = new Date(value).getTime() - Date.now();
+    if (!Number.isFinite(ms) || ms <= 0) return "Expired";
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   }
 
   function statusLabel(status) {
@@ -228,7 +883,6 @@
     }
 
     const depositAddress = user.depositAddress || "";
-    const addressLabel = depositAddress || "Address assigned by wallet service";
     const balance = user.balance || window.BRX.profileService.emptyBalance();
     const total = Number(balance.available) + Number(balance.locked) + Number(balance.pendingDeposit) + Number(balance.pendingWithdrawal);
 
@@ -251,7 +905,7 @@
           </div>
         </section>
 
-        ${walletModePanel(activeWalletMode, depositAddress, addressLabel, user)}
+        ${walletModePanel(activeWalletMode, depositAddress, user)}
 
         <section class="empty-panel compact"><span class="mini-icon">tx</span><h3>No transactions yet</h3></section>
       </section>
@@ -264,13 +918,22 @@
       });
     });
 
-    if (activeWalletMode === "deposit" && depositAddress) {
-      document.querySelector("#copyDepositAddress").addEventListener("click", () => copyDepositAddress(depositAddress));
+    document.querySelectorAll("[data-network-select]").forEach((button) => {
+      button.addEventListener("click", () => {
+        selectedWalletNetwork[activeWalletMode] = button.dataset.networkSelect;
+        renderWallet();
+      });
+    });
+
+    const selectedNetwork = selectedWalletNetwork[activeWalletMode];
+
+    if (activeWalletMode === "deposit" && selectedNetwork === "BEP20" && depositAddress) {
+      document.querySelector("#copyDepositAddress")?.addEventListener("click", () => copyDepositAddress(depositAddress));
       return;
     }
 
     if (activeWalletMode === "withdraw") {
-      document.querySelector("#withdrawForm").addEventListener("submit", handleWithdrawalSubmit);
+      document.querySelector("#withdrawForm")?.addEventListener("submit", handleWithdrawalSubmit);
       return;
     }
 
@@ -279,7 +942,7 @@
       return;
     }
 
-    if (!depositAddress) {
+    if (activeWalletMode === "deposit" && selectedNetwork === "BEP20" && !depositAddress) {
       void syncBackendWallet(user).then(() => renderWallet()).catch((error) => {
         console.error(error);
         showToast("Backend wallet request failed. Check Console for details.");
@@ -287,13 +950,16 @@
     }
   }
 
-  function walletModePanel(mode, depositAddress, addressLabel, user) {
+  function walletModePanel(mode, depositAddress, user) {
     if (mode === "withdraw") return withdrawPanel(user);
     if (mode === "transfer") return transferPanel();
-    return depositPanel(depositAddress, addressLabel);
+    return depositPanel(depositAddress);
   }
 
-  function depositPanel(depositAddress, addressLabel) {
+  function depositPanel(depositAddress) {
+    const selectedNetwork = selectedWalletNetwork.deposit;
+    const selected = NETWORKS.find((network) => network.id === selectedNetwork);
+    const addressLabel = depositAddress || "Address assigned by wallet service";
     return `
       <section class="wallet-panel deposit-network-sheet">
           <div class="sheet-head">
@@ -304,24 +970,34 @@
             <span class="sheet-badge">USDT</span>
           </div>
 
-          ${networkSelector("deposit")}
+          ${networkSelector("deposit", selectedNetwork)}
+          ${!selected ? `<p class="network-helper">Choose BNB Smart Chain for BEP20 deposits. TRON is shown only as a future network.</p>` : ""}
+          ${selected && selected.status !== "available" ? `<p class="deposit-note">${escapeHtml(selected.name)} deposits are not enabled yet. Choose BNB Smart Chain for live deposits.</p>` : ""}
+          ${selectedNetwork === "BEP20" ? `
+            <section class="deposit-address-card deposit-address-detail ${depositAddress ? "" : "pending"}">
+              <div class="deposit-qr-card" aria-label="BEP20 deposit address QR code">
+                ${depositAddress ? qrCodeSvg(depositAddress) : `<span class="qr-placeholder">QR</span>`}
+              </div>
+              <div class="deposit-address-main">
+                <span>BNB Smart Chain deposit address</span>
+                <strong>${escapeHtml(addressLabel)}</strong>
+                <small>Network: USDT BEP20. Do not send TRC20, ERC20, or any other network to this address.</small>
+              </div>
+              <button class="app-button small" id="copyDepositAddress" type="button" ${depositAddress ? "" : "disabled"}>${depositAddress ? "Copy" : "Pending"}</button>
+            </section>
 
-          <section class="deposit-address-card ${depositAddress ? "" : "pending"}">
-            <div>
-              <span>Deposit address</span>
-              <strong>${addressLabel}</strong>
-              <small>Each BRX account receives a unique BEP20 address from the wallet service.</small>
-            </div>
-            <button class="app-button small" id="copyDepositAddress" type="button" ${depositAddress ? "" : "disabled"}>${depositAddress ? "Copy" : "Pending"}</button>
-          </section>
-
-          <p class="deposit-note">Send USDT on BNB Smart Chain BEP20 to your assigned address. Deposits are credited to your internal BRX balance after confirmations.</p>
+            <p class="deposit-note">Send USDT on BNB Smart Chain BEP20 to your assigned address. Deposits are credited to your internal BRX balance after confirmations.</p>
+          ` : ""}
       </section>
     `;
   }
 
   function withdrawPanel(user) {
-    const addresses = (user.withdrawalAddresses || []).filter((address) => address.isActive !== false && address.network === "BEP20");
+    const selectedNetwork = selectedWalletNetwork.withdraw;
+    const selected = NETWORKS.find((network) => network.id === selectedNetwork);
+    const addresses = selectedNetwork
+      ? (user.withdrawalAddresses || []).filter((address) => address.isActive !== false && address.network === selectedNetwork)
+      : [];
     const defaultAddress = addresses.find((address) => address.isDefault) || addresses[0];
     return `
       <section class="wallet-panel wallet-form-panel">
@@ -332,20 +1008,24 @@
           </div>
           <span class="sheet-badge">USDT</span>
         </div>
-        ${networkSelector("withdraw")}
-        <form class="wallet-action-form" id="withdrawForm">
-          ${addresses.length ? `
-            <label class="form-field"><span>Saved BEP20 address</span><select id="withdrawAddressId" required>
-              ${addresses.map((address) => `<option value="${escapeAttr(address.id)}" ${defaultAddress?.id === address.id ? "selected" : ""}>${escapeHtml(address.label || "BEP20 wallet")} - ${escapeHtml(shortAddress(address.address))}</option>`).join("")}
-            </select></label>
-          ` : `
-            <section class="deposit-address-card pending"><div><span>No saved withdrawal address</span><strong>Add a BEP20 address first</strong><small>Open Settings > Addresses and save a wallet you control.</small></div><a class="app-button small" href="#/settings?tab=addresses">Add address</a></section>
-          `}
-          <label class="form-field"><span>Amount</span><input id="withdrawAmount" inputmode="decimal" placeholder="0.00" required /></label>
-          <label class="form-field"><span>Authenticator code</span><input id="withdrawTwoFactor" inputmode="numeric" maxlength="6" placeholder="123456" required /></label>
-          <p class="deposit-note">Only available balance can be withdrawn. Escrow-locked funds stay locked. Withdrawals require 2FA and are paused for 24 hours after a password change.</p>
-          <button class="app-button" type="submit" ${addresses.length ? "" : "disabled"}>Request withdrawal</button>
-        </form>
+        ${networkSelector("withdraw", selectedNetwork)}
+        ${!selected ? `<p class="network-helper">Choose BNB Smart Chain for BEP20 withdrawals. TRON withdrawals will be added later.</p>` : ""}
+        ${selected && selected.status !== "available" ? `<p class="deposit-note">${escapeHtml(selected.name)} withdrawals are not enabled yet. Choose BNB Smart Chain for live withdrawals.</p>` : ""}
+        ${selectedNetwork === "BEP20" ? `
+          <form class="wallet-action-form" id="withdrawForm">
+            ${addresses.length ? `
+              <label class="form-field"><span>Saved BEP20 address</span><select id="withdrawAddressId" required>
+                ${addresses.map((address) => `<option value="${escapeAttr(address.id)}" ${defaultAddress?.id === address.id ? "selected" : ""}>${escapeHtml(address.label || "BEP20 wallet")} - ${escapeHtml(shortAddress(address.address))}</option>`).join("")}
+              </select></label>
+            ` : `
+              <section class="deposit-address-card pending"><div><span>No saved withdrawal address</span><strong>Add a BEP20 address first</strong><small>Open Settings > Addresses and save a wallet you control.</small></div><a class="app-button small" href="#/settings?tab=addresses">Add address</a></section>
+            `}
+            <label class="form-field"><span>Amount</span><input id="withdrawAmount" inputmode="decimal" placeholder="0.00" required /></label>
+            <label class="form-field"><span>Authenticator code</span><input id="withdrawTwoFactor" inputmode="numeric" maxlength="6" placeholder="123456" required /></label>
+            <p class="deposit-note">Only available balance can be withdrawn. Escrow-locked funds stay locked. Withdrawals require 2FA and are paused for 24 hours after a password change.</p>
+            <button class="app-button" type="submit" ${addresses.length ? "" : "disabled"}>Request withdrawal</button>
+          </form>
+        ` : ""}
       </section>
     `;
   }
@@ -370,25 +1050,38 @@
     `;
   }
 
-  function networkSelector(mode) {
+  function networkSelector(mode, selectedNetwork) {
     return `
-      <div class="network-choice-list">
+      <div class="network-choice-list wallet-network-grid">
         ${NETWORKS.map((network) => `
-          <button class="deposit-network-card ${network.status === "available" ? "active" : "muted"}" type="button" ${network.status === "available" ? "" : "disabled"} data-network="${network.id}">
+          <button class="deposit-network-card wallet-network-card ${selectedNetwork === network.id ? "active" : ""} ${network.status === "available" ? "" : "muted"}" type="button" data-network-select="${network.id}">
             <span class="network-mark ${network.id === "BEP20" ? "bsc" : "tron"}">${network.mark}</span>
             <div>
               <strong>${network.name}</strong>
+              <small>${network.id === "BEP20" ? "Live network for BRX deposits and withdrawals" : "Future network - not active yet"}</small>
               <small>${network.token}</small>
               <small>${network.confirmations}</small>
               <small>${network.minDeposit}</small>
               <small>${network.arrival}</small>
             </div>
-            <span class="network-status">${network.status === "available" ? "Selected" : "Soon"}</span>
+            <span class="network-status ${network.status === "available" ? "live" : "soon"}">${selectedNetwork === network.id ? "Selected" : network.status === "available" ? "Choose BNB" : "Coming soon"}</span>
           </button>
         `).join("")}
       </div>
-      <p class="network-helper">${mode === "deposit" ? "Select a supported deposit network before sending funds." : "Withdrawals will use the selected supported network."}</p>
     `;
+  }
+
+  function qrCodeSvg(value) {
+    if (!value || typeof qrcode !== "function") return `<span class="qr-placeholder">QR</span>`;
+    try {
+      const qr = qrcode(0, "M");
+      qr.addData(value);
+      qr.make();
+      return qr.createSvgTag({ cellSize: 3, margin: 2, alt: "BEP20 deposit address QR code", title: "BEP20 deposit address" });
+    } catch (error) {
+      console.error(error);
+      return `<span class="qr-placeholder">QR</span>`;
+    }
   }
 
   async function handleWithdrawalSubmit(event) {
@@ -608,7 +1301,7 @@
     return `
       <section class="settings-card settings-form-card">
         <div class="settings-card-head">
-          <div><h3>${icon("card")} Add Payment Method</h3><p>Add KES receiving details for P2P trades. Sellers will show these after a buyer opens a trade.</p></div>
+          <div><h3>${icon("card")} Add Payment Method</h3><p>Add ETB receiving details for P2P trades. Sellers will show these after a buyer opens a trade.</p></div>
         </div>
         <form id="paymentMethodForm" class="settings-payment-form">
           <div class="settings-form-grid payment-grid">
@@ -626,7 +1319,7 @@
 
       <section class="settings-card settings-card-flat">
         <div class="settings-card-head">
-          <div><h3>${icon("card")} Payment Methods</h3><p>Your active KES receiving accounts.</p></div>
+          <div><h3>${icon("card")} Payment Methods</h3><p>Your active ETB receiving accounts.</p></div>
           ${statusBadge(`${methods.length} saved`, "neutral")}
         </div>
         ${methods.length ? methods.map(paymentMethodRow).join("") : settingsEmpty("card", "No payment methods yet", "Add M-Pesa, bank, or mobile money details before posting sell ads.")}
@@ -721,7 +1414,7 @@
         <div class="settings-card-head"><div><h3>${icon("trades")} Trade Preferences</h3><p>Default settings used when browsing and posting P2P ads.</p></div></div>
         <form id="tradePreferencesForm">
           <div class="settings-form-grid">
-            <label class="form-field"><span>Market</span><input value="KES / USDT" disabled /></label>
+            <label class="form-field"><span>Market</span><input value="ETB / USDT" disabled /></label>
             <label class="form-field"><span>Preferred payment rails</span><input id="preferredPaymentRails" value="${escapeAttr(rails.join(", "))}" placeholder="M-Pesa, Bank transfer" /></label>
           </div>
           <div class="settings-form-actions"><button class="app-button" type="submit">Save trade preferences</button></div>
@@ -926,7 +1619,7 @@
     return `
       <div class="settings-row session-row">
         <span class="settings-row-icon">${icon("activity")}</span>
-        <span class="settings-row-main"><strong>${escapeHtml(title)}</strong><small>Last seen ${dateTime(session.lastSeenAt)} · Created ${dateTime(session.createdAt)}</small></span>
+        <span class="settings-row-main"><strong>${escapeHtml(title)}</strong><small>Last seen ${dateTime(session.lastSeenAt)} Â· Created ${dateTime(session.createdAt)}</small></span>
         <span class="settings-row-aside session-actions">
           ${statusBadge(state, session.active ? "success" : "neutral")}
           ${!session.current && session.active ? `<button class="settings-action danger" type="button" data-session-revoke="${escapeAttr(session.id)}">Revoke</button>` : ""}
@@ -939,7 +1632,7 @@
     return `
       <div class="settings-row withdrawal-address-row">
         <span class="settings-row-icon">${icon("wallet")}</span>
-        <span class="settings-row-main"><strong>${escapeHtml(address.label)}</strong><small>${escapeHtml(address.network)} · ${escapeHtml(shortAddress(address.address))}</small></span>
+        <span class="settings-row-main"><strong>${escapeHtml(address.label)}</strong><small>${escapeHtml(address.network)} Â· ${escapeHtml(shortAddress(address.address))}</small></span>
         <span class="settings-row-aside payment-actions">
           ${address.isDefault ? statusBadge("Default", "success") : `<button class="settings-action" type="button" data-withdrawal-default="${escapeAttr(address.id)}">Make default</button>`}
           <button class="settings-action danger" type="button" data-withdrawal-delete="${escapeAttr(address.id)}">Remove</button>

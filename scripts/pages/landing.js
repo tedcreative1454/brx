@@ -13,7 +13,7 @@
       <div class="landing">
         <section class="hero">
           <div class="hero-copy">
-            <div class="badge">P2P USDT / KES Exchange</div>
+            <div class="badge">P2P USDT / ETB Exchange</div>
             <h1>Buy & Sell USDT with <span class="accent">Kenyan Shillings.</span></h1>
             <p class="hero-text">Trade directly with verified users, protected by BRX escrow and settled through a clean internal ledger. Deposits and withdrawals start with USDT BEP20 on BNB Smart Chain.</p>
             <div class="hero-actions">
@@ -24,7 +24,7 @@
             <section class="calculator-card" aria-label="Live rate P2P calculator">
               <div class="card-top">
                 <p class="eyebrow">Live rate calculator</p>
-                <span class="rate-note">1 USDT = <strong id="rateText">${format(RATE)} KES</strong></span>
+                <span class="rate-note">1 USDT = <strong id="rateText">${format(RATE)} ETB</strong></span>
               </div>
               <div class="segmented">
                 <button class="active" type="button" data-side="buy">Buy USDT</button>
@@ -34,7 +34,7 @@
                 <label class="input-box">
                   <span id="payLabel">Pay</span>
                   <input id="kesInput" value="10000" inputmode="decimal" />
-                  <b>KES</b>
+                  <b>ETB</b>
                 </label>
                 <label class="input-box">
                   <span id="receiveLabel">Receive</span>
@@ -58,7 +58,7 @@
               </article>
               <article class="phone-card">
                 <small>Live index rate</small>
-                <strong>129.90 <span class="muted">KES</span></strong>
+                <strong>185.00 <span class="muted">ETB</span></strong>
                 <p class="muted">Per USDT marketplace index</p>
               </article>
               <div class="bottom-tabs"><span>M</span><span>A</span><span>W</span></div>
@@ -79,8 +79,8 @@
           <div class="section-head"><div><p class="eyebrow">How it works</p><h2>Start trading in minutes</h2></div><a class="primary-button" href="#/register">Get started</a></div>
           <div class="steps-grid">
             <article class="step-card"><span>01</span><h3>Create account</h3><p>Sign up with email and verify your account.</p></article>
-            <article class="step-card"><span>02</span><h3>Browse market</h3><p>Compare KES rates from BRX traders.</p></article>
-            <article class="step-card"><span>03</span><h3>Pay seller</h3><p>Send KES outside BRX using M-Pesa or bank.</p></article>
+            <article class="step-card"><span>02</span><h3>Browse market</h3><p>Compare ETB rates from BRX traders.</p></article>
+            <article class="step-card"><span>03</span><h3>Pay seller</h3><p>Send ETB outside BRX using M-Pesa or bank.</p></article>
             <article class="step-card"><span>04</span><h3>Receive USDT</h3><p>Seller confirms and escrow releases internally.</p></article>
           </div>
         </section>
@@ -117,7 +117,7 @@
       sideButtons.forEach((button) => button.classList.toggle("active", button.dataset.side === side));
       payLabel.textContent = side === "buy" ? "Pay" : "Receive";
       receiveLabel.textContent = side === "buy" ? "Receive" : "Sell";
-      rateText.textContent = `${format(currentRate(activeSide))} KES`;
+      rateText.textContent = `${format(currentRate(activeSide))} ETB`;
       updateFromKes();
     }
 

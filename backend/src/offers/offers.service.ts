@@ -77,9 +77,9 @@ export class OffersService {
   async create(userId: string, input: CreateOfferInput) {
     const side = this.normalizeSide(input.side);
     const amount = this.positiveNumber(input.amount, "Enter the USDT amount.");
-    const price = this.positiveNumber(input.price, "Enter the KES price per USDT.");
-    const minFiat = this.positiveNumber(input.minFiat, "Enter the minimum KES limit.");
-    const maxFiat = this.positiveNumber(input.maxFiat, "Enter the maximum KES limit.");
+    const price = this.positiveNumber(input.price, "Enter the ETB price per USDT.");
+    const minFiat = this.positiveNumber(input.minFiat, "Enter the minimum ETB limit.");
+    const maxFiat = this.positiveNumber(input.maxFiat, "Enter the maximum ETB limit.");
     const paymentMethods = this.paymentMethods(input.paymentMethods);
 
     if (maxFiat < minFiat) throw new BadRequestException("Maximum limit must be higher than minimum limit.");
@@ -96,7 +96,7 @@ export class OffersService {
 
     const result = await this.db.query<OfferRow>(
       `INSERT INTO offers (user_id, side, asset, fiat, price, available_amount, min_fiat, max_fiat, payment_methods)
-       VALUES ($1, $2::offer_side, 'USDT', 'KES', $3, $4, $5, $6, $7)
+       VALUES ($1, $2::offer_side, 'USDT', 'ETB', $3, $4, $5, $6, $7)
        RETURNING *`,
       [userId, side, price.toFixed(4), amount.toFixed(8), minFiat.toFixed(2), maxFiat.toFixed(2), paymentMethods],
     );

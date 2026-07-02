@@ -1,4 +1,4 @@
-﻿import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
 
 interface ProfileRow {
@@ -92,7 +92,7 @@ const DEFAULT_NOTIFICATIONS = {
 };
 
 const DEFAULT_TRADE_PREFERENCES = {
-  market: "KES/USDT",
+  market: "ETB/USDT",
   preferredPaymentRails: ["M-Pesa", "Bank transfer", "Airtel Money"],
 };
 

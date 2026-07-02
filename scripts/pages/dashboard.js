@@ -57,10 +57,10 @@
   function rateCard() {
     return `
       <section class="app-card rate-card">
-        <div class="rate-head"><p class="app-label blue">Live Rate</p><a class="app-button small" href="#/market">Trade ${icon("trades")}</a></div>
-        <h2>${format(RATE)} <span>KES</span></h2>
+        <div class="rate-head"><p class="app-label blue">Live Rate</p><a class="app-button small" href="#/market">Trade ${icon("market")}</a></div>
+        <h2>${format(RATE)} <span>ETB</span></h2>
         <p class="app-muted">Per USDT</p>
-        <div class="best-rates"><div><strong>128.60</strong><span>Best buy</span></div><div><strong>131.20</strong><span>Best sell</span></div></div>
+        <div class="best-rates"><div><strong>184.00</strong><span>Best buy</span></div><div><strong>186.00</strong><span>Best sell</span></div></div>
       </section>
     `;
   }

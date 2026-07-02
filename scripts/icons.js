@@ -10,7 +10,7 @@
     grid: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg>',
     market: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10h16l-1 11H5L4 10Z"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>',
     ads: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 18-6-6 18-4-8-8-4Z"/></svg>',
-    trades: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h5v5M21 3l-7 7M8 21H3v-5M3 21l7-7"/></svg>',
+    trades: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h14l-4-4M21 7l-4 4M17 17H3l4-4M3 17l4 4"/></svg>',
     wallet: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18v14H3z"/><path d="M16 12h5v4h-5a2 2 0 0 1 0-4ZM3 7l3-4h12l3 4"/></svg>',
     copy: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8h12v12H8z"/><path d="M4 16V4h12"/></svg>',
     download: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>',

@@ -19,8 +19,20 @@
 
         const payload = await response.json().catch(() => null);
         if (!response.ok) {
-          const message = Array.isArray(payload?.message) ? payload.message.join(" ") : payload?.message;
-          throw new Error(message || `BRX API request failed: ${response.status}`);
+          const responseMessage = payload?.message;
+          const message = Array.isArray(responseMessage)
+            ? responseMessage.join(" ")
+            : typeof responseMessage === "object"
+              ? responseMessage.message
+              : responseMessage;
+          const fallbackMessage =
+            response.status >= 500
+              ? "BRX backend is running, but the database service is not responding. Start Docker Desktop, then run docker compose up -d from the BRX folder."
+              : `BRX API request failed: ${response.status}`;
+          const error = new Error(message === "Internal server error" ? fallbackMessage : message || fallbackMessage);
+          error.code = typeof responseMessage === "object" ? responseMessage.code : payload?.code;
+          error.status = response.status;
+          throw error;
         }
         return payload;
       } catch (error) {

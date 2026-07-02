@@ -126,7 +126,7 @@
 
   function defaultTradePreferences() {
     return {
-      market: "KES/USDT",
+      market: "ETB/USDT",
       preferredPaymentRails: ["M-Pesa", "Bank transfer", "Airtel Money"],
     };
   }

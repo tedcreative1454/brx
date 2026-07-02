@@ -1,4 +1,4 @@
-﻿CREATE TABLE IF NOT EXISTS user_profiles (
+CREATE TABLE IF NOT EXISTS user_profiles (
   user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   full_name TEXT,
   phone TEXT,
@@ -9,7 +9,7 @@
 CREATE TABLE IF NOT EXISTS user_settings (
   user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   notification_preferences JSONB NOT NULL DEFAULT '{"emailVerification":true,"tradeUpdates":true,"depositAlerts":true,"withdrawalAlerts":true,"marketing":false}',
-  trade_preferences JSONB NOT NULL DEFAULT '{"market":"KES/USDT","preferredPaymentRails":["M-Pesa","Bank transfer","Airtel Money"]}',
+  trade_preferences JSONB NOT NULL DEFAULT '{"market":"ETB/USDT","preferredPaymentRails":["M-Pesa","Bank transfer","Airtel Money"]}',
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

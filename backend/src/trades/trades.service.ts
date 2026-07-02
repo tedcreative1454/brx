@@ -1,4 +1,4 @@
-﻿import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
@@ -30,6 +30,10 @@ interface TradeRow {
   fiat_amount: string;
   status: string;
   payment_sent_at: Date | null;
+  payment_reference: string | null;
+  payment_proof_url: string | null;
+  payment_proof_name: string | null;
+  payment_proof_mime_type: string | null;
   released_at: Date | null;
   expires_at: Date;
   cancelled_at: Date | null;
@@ -45,10 +49,20 @@ interface TradeRow {
   dispute_status?: string | null;
   dispute_id?: string | null;
   evidence?: unknown;
+  seller_payment_methods?: unknown;
 }
 
 interface DisputeEvidenceInput {
   note?: string;
+  file?: {
+    fileName?: string;
+    mimeType?: string;
+    dataBase64?: string;
+  };
+}
+
+interface PaymentProofInput {
+  reference?: string;
   file?: {
     fileName?: string;
     mimeType?: string;
@@ -88,6 +102,57 @@ export class TradesService {
     return { trades: result.rows.map((row) => this.toTrade(row, userId)) };
   }
 
+  async getTrade(userId: string, tradeId: string) {
+    await this.expireOpenTrades();
+    const result = await this.db.query<TradeRow>(
+      `SELECT t.*, o.side AS offer_side, o.price AS offer_price,
+              buyer.email AS buyer_email, seller.email AS seller_email,
+              d.id AS dispute_id, d.status AS dispute_status,
+              COALESCE((
+                SELECT json_agg(json_build_object(
+                  'id', pm.id,
+                  'type', pm.type,
+                  'label', pm.label,
+                  'accountName', pm.account_name,
+                  'phoneNumber', pm.phone_number,
+                  'bankName', pm.bank_name,
+                  'accountNumber', pm.account_number,
+                  'instructions', pm.instructions,
+                  'isDefault', pm.is_default
+                ) ORDER BY pm.is_default DESC, pm.created_at DESC)
+                FROM payment_methods pm
+                WHERE pm.user_id = t.seller_id AND pm.status = 'active'
+              ), '[]'::json) AS seller_payment_methods,
+              COALESCE((
+                SELECT json_agg(json_build_object(
+                  'id', e.id,
+                  'submittedBy', e.submitted_by,
+                  'note', e.note,
+                  'fileUrl', e.file_url,
+                  'fileName', e.file_name,
+                  'mimeType', e.mime_type,
+                  'createdAt', e.created_at
+                ) ORDER BY e.created_at DESC)
+                FROM dispute_evidence e
+                WHERE e.trade_id = t.id
+              ), '[]'::json) AS evidence
+       FROM trades t
+       JOIN offers o ON o.id = t.offer_id
+       JOIN users buyer ON buyer.id = t.buyer_id
+       JOIN users seller ON seller.id = t.seller_id
+       LEFT JOIN LATERAL (
+         SELECT id, status FROM disputes WHERE trade_id = t.id ORDER BY created_at DESC LIMIT 1
+       ) d ON true
+       WHERE t.id = $1`,
+      [tradeId],
+    );
+
+    const trade = result.rows[0];
+    if (!trade) throw new NotFoundException("Trade was not found.");
+    if (trade.buyer_id !== userId && trade.seller_id !== userId) throw new ForbiddenException("Trade access denied.");
+    return { trade: this.toTrade(trade, userId) };
+  }
+
   async open(userId: string, input: { offerId?: string; assetAmount?: string | number }) {
     const offerId = String(input.offerId ?? "").trim();
     const assetAmount = this.positiveNumber(input.assetAmount, "Enter the USDT amount.");
@@ -111,7 +176,7 @@ export class TradesService {
 
       const tradeResult = await client.query<TradeRow>(
         `INSERT INTO trades (offer_id, buyer_id, seller_id, asset, fiat, asset_amount, fiat_amount, expires_at)
-         VALUES ($1, $2, $3, 'USDT', 'KES', $4, $5, now() + ($6::text || ' minutes')::interval)
+         VALUES ($1, $2, $3, 'USDT', 'ETB', $4, $5, now() + ($6::text || ' minutes')::interval)
          RETURNING *`,
         [offer.id, buyerId, sellerId, assetAmount.toFixed(8), fiatAmount.toFixed(2), this.paymentWindowMinutes],
       );
@@ -147,7 +212,12 @@ export class TradesService {
     return response;
   }
 
-  async markPaymentSent(userId: string, tradeId: string) {
+  async markPaymentSent(userId: string, tradeId: string, input: PaymentProofInput = {}) {
+    const reference = String(input.reference ?? "").trim().slice(0, 160);
+    if (!reference && !input.file?.dataBase64) {
+      throw new BadRequestException("Add a payment reference or receipt before marking payment sent.");
+    }
+
     const response = await this.db.transaction(async (client) => {
       const trade = await this.lockTrade(client, tradeId);
       if (!trade) throw new NotFoundException("Trade was not found.");
@@ -158,18 +228,24 @@ export class TradesService {
         throw new BadRequestException("This trade expired before payment was marked sent.");
       }
 
+      const proof = await this.savePaymentProof(trade.id, input.file);
       const updated = await client.query<TradeRow>(
         `UPDATE trades
-         SET status = 'payment_sent', payment_sent_at = now()
+         SET status = 'payment_sent',
+             payment_sent_at = now(),
+             payment_reference = $2,
+             payment_proof_url = $3,
+             payment_proof_name = $4,
+             payment_proof_mime_type = $5
          WHERE id = $1
          RETURNING *`,
-        [trade.id],
+        [trade.id, reference || null, proof.fileUrl, proof.fileName, proof.mimeType],
       );
-      await this.audit(client, userId, "trade.payment_sent", "trade", trade.id);
+      await this.audit(client, userId, "trade.payment_sent", "trade", trade.id, { reference: reference || null, proof: proof.fileName });
       return { trade: this.toTrade(updated.rows[0], userId) };
     });
 
-    void this.notifyTradeParticipants(response.trade.id, "BRX payment marked sent", "The buyer marked the KES payment as sent. Seller should verify payment before releasing escrow.");
+    void this.notifyTradeParticipants(response.trade.id, "BRX payment marked sent", "The buyer marked the ETB payment as sent. Seller should verify payment before releasing escrow.");
     return response;
   }
 
@@ -245,6 +321,27 @@ export class TradesService {
 
     void this.notifyDisputeOpened(response.trade.id, reason);
     return response;
+  }
+
+  async addEvidence(userId: string, tradeId: string, input: DisputeEvidenceInput & { note?: string }) {
+    const note = String(input.note ?? "").trim();
+    if (!note && !input.file?.dataBase64) throw new BadRequestException("Add a note or upload a file.");
+
+    await this.db.transaction(async (client) => {
+      const trade = await this.lockTrade(client, tradeId);
+      if (!trade) throw new NotFoundException("Trade was not found.");
+      if (trade.buyer_id !== userId && trade.seller_id !== userId) throw new ForbiddenException("Trade access denied.");
+      if (trade.status !== "disputed") throw new BadRequestException("Evidence can be added after a dispute is open.");
+
+      const dispute = await client.query<{ id: string }>("SELECT id FROM disputes WHERE trade_id = $1 AND status = 'open' LIMIT 1", [trade.id]);
+      const disputeId = dispute.rows[0]?.id;
+      if (!disputeId) throw new BadRequestException("No open dispute was found for this trade.");
+
+      await this.saveDisputeEvidence(client, disputeId, trade.id, userId, input);
+      await this.audit(client, userId, "trade.dispute_evidence_added", "trade", trade.id);
+    });
+
+    return this.getTrade(userId, tradeId);
   }
 
   async expireOpenTrades() {
@@ -357,6 +454,30 @@ export class TradesService {
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [disputeId, tradeId, submittedBy, note || null, fileUrl, fileName, mimeType],
     );
+  }
+
+  private async savePaymentProof(tradeId: string, file?: PaymentProofInput["file"]) {
+    let fileUrl: string | null = null;
+    let fileName: string | null = null;
+    let mimeType: string | null = null;
+
+    if (file?.dataBase64) {
+      mimeType = String(file.mimeType ?? "").trim().toLowerCase();
+      if (!["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(mimeType)) {
+        throw new BadRequestException("Payment receipt must be a JPG, PNG, WEBP, or PDF file.");
+      }
+      const data = Buffer.from(file.dataBase64, "base64");
+      if (data.length > 8 * 1024 * 1024) throw new BadRequestException("Payment receipt file must be under 8 MB.");
+      const original = String(file.fileName ?? "receipt").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
+      const extension = extname(original) || (mimeType === "application/pdf" ? ".pdf" : ".png");
+      fileName = `${randomUUID()}${extension}`;
+      const directory = join(process.cwd(), "uploads", "trades", tradeId);
+      await mkdir(directory, { recursive: true });
+      await writeFile(join(directory, fileName), data);
+      fileUrl = `backend/uploads/trades/${tradeId}/${fileName}`;
+    }
+
+    return { fileUrl, fileName, mimeType };
   }
 
   private async notifyTradeParticipants(tradeId: string, subject: string, message: string) {
@@ -490,12 +611,17 @@ export class TradesService {
       fiat: row.fiat,
       assetAmount: row.asset_amount,
       fiatAmount: row.fiat_amount,
+      offerPrice: row.offer_price,
       status: row.status,
       role,
       counterpartyEmail: role === "buyer" ? row.seller_email : row.buyer_email,
       buyerEmail: row.buyer_email,
       sellerEmail: row.seller_email,
       paymentSentAt: row.payment_sent_at,
+      paymentReference: row.payment_reference,
+      paymentProofUrl: row.payment_proof_url,
+      paymentProofName: row.payment_proof_name,
+      paymentProofMimeType: row.payment_proof_mime_type,
       releasedAt: row.released_at,
       expiresAt: row.expires_at,
       cancelledAt: row.cancelled_at,
@@ -504,7 +630,8 @@ export class TradesService {
       disputeReason: row.dispute_reason,
       disputeStatus: row.dispute_status,
       disputeId: row.dispute_id,
-      evidence: row.evidence,
+      evidence: row.evidence || [],
+      sellerPaymentMethods: row.seller_payment_methods || [],
       resolvedAt: row.resolved_at,
       createdAt: row.created_at,
     };

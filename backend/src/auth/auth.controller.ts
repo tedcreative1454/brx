@@ -1,4 +1,5 @@
-﻿import { Body, Controller, Get, Headers, Post } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Post, Query, Res } from "@nestjs/common";
+import type { FastifyReply } from "fastify";
 import { AuthService } from "./auth.service";
 
 interface RegisterBody {
@@ -14,6 +15,11 @@ interface VerifyEmailBody {
 interface LoginBody {
   email?: string;
   password?: string;
+  twoFactorCode?: string;
+}
+
+interface GoogleTwoFactorBody {
+  ticket?: string;
   twoFactorCode?: string;
 }
 
@@ -34,6 +40,27 @@ export class AuthController {
   @Post("login")
   login(@Body() body: LoginBody, @Headers("user-agent") userAgent?: string) {
     return this.auth.login(body.email ?? "", body.password ?? "", userAgent, body.twoFactorCode);
+  }
+
+  @Get("google/start")
+  googleStart(@Query("returnTo") returnTo?: string) {
+    return { url: this.auth.googleStartUrl(returnTo) };
+  }
+
+  @Get("google/callback")
+  async googleCallback(
+    @Query("code") code: string | undefined,
+    @Query("state") state: string | undefined,
+    @Headers("user-agent") userAgent: string | undefined,
+    @Res() reply: FastifyReply,
+  ) {
+    const redirectUrl = await this.auth.googleCallback(code ?? "", state ?? "", userAgent);
+    return reply.redirect(redirectUrl);
+  }
+
+  @Post("google/2fa")
+  googleTwoFactor(@Body() body: GoogleTwoFactorBody, @Headers("user-agent") userAgent?: string) {
+    return this.auth.completeGoogleTwoFactor(body.ticket ?? "", body.twoFactorCode ?? "", userAgent);
   }
 
   @Get("me")

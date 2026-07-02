@@ -1,4 +1,4 @@
-﻿# BRX Backend
+# BRX Backend
 
 Backend target stack: NestJS + Fastify + PostgreSQL + Redis.
 
@@ -52,6 +52,7 @@ Useful commands:
 - After `BSC_CONFIRMATIONS_REQUIRED` confirmations, the ledger moves funds from `pending_deposit` to `available_balance`.
 - On Alchemy Free, keep `BSC_LOG_BLOCK_RANGE=10`.
 - `npm run user:admin -- user@example.com` promotes a local verified user to admin for KYC review testing.
+- `npm run user:fund -- user@example.com 100` credits fake local USDT through the ledger for escrow testing. This command refuses to run when `NODE_ENV=production`.
 
 ## First Backend Modules
 
