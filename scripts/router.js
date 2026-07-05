@@ -22,6 +22,7 @@
     const titles = {
       dashboard: "Dashboard",
       market: "P2P Market",
+      "p2p-chat": "P2P Chat",
       ads: "My Ads",
       trades: "Trades",
       wallet: "Wallet",
@@ -61,6 +62,7 @@
     else if (route === "verify") pages.renderVerify();
     else if (route === "dashboard") pages.renderDashboard();
     else if (route === "market") pages.renderMarket();
+    else if (route === "p2p-chat") pages.renderP2pChat();
     else if (route === "ads") pages.renderAds();
     else if (route === "trades") pages.renderTrades();
     else if (route === "wallet") pages.renderWallet();

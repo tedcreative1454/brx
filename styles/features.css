@@ -1784,3 +1784,40 @@
     grid-column: 2;
   }
 }
+
+/* Trade chat gets priority after removing duplicate buyer receiving-account card. */
+.trade-detail-page .escrow-side {
+  display: grid;
+  align-content: start;
+}
+
+.trade-detail-page .trade-chat-panel {
+  border-top: 1px solid var(--line);
+}
+
+.trade-detail-page .trade-chat-messages {
+  height: 420px;
+}
+
+.trade-detail-page .trade-chat-form textarea,
+.trade-detail-page .trade-chat-form textarea:focus,
+.trade-detail-page .trade-chat-form textarea:focus-visible {
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+
+.trade-detail-page .trade-chat-form textarea:focus {
+  border-color: rgba(0, 184, 255, .42);
+}
+
+@media (max-width: 1100px) {
+  .trade-detail-page .trade-chat-messages {
+    height: 320px;
+  }
+}
+
+@media (max-width: 640px) {
+  .trade-detail-page .trade-chat-messages {
+    height: 280px;
+  }
+}

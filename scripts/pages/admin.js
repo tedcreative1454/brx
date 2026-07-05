@@ -228,7 +228,7 @@
       </div>
       ${users.length ? `
         <div class="admin-user-table" role="table" aria-label="BRX users">
-          <div class="admin-user-row admin-user-head" role="row"><span>User</span><span>KYC</span><span>Status</span><span>Role</span><span>Joined</span><span></span></div>
+          <div class="admin-user-row admin-user-head" role="row"><span>User</span><span>Label</span><span>KYC</span><span>Status</span><span>Role</span><span>Joined</span><span></span></div>
           ${users.map(adminUserRow).join("")}
         </div>
       ` : emptyBlock("No users found", "Adjust search or filters to see more accounts.")}
@@ -245,6 +245,7 @@
       });
     });
     bindUserStatusButtons();
+    bindUserLabelButtons();
   }
 
   function filteredAdminUsers() {
@@ -271,11 +272,12 @@
     return `
       <div class="admin-user-row" role="row">
         <span class="admin-user-main"><strong>${escapeHtml(user.email)}</strong><small>${escapeHtml(user.id || "")}</small></span>
+        <span><em class="admin-pill trader-label ${user.traderLabel ? "active" : "neutral"}">${escapeHtml(user.traderLabel || "None")}</em></span>
         <span><em class="admin-pill ${escapeAttr(kyc)}">${escapeHtml(kycLabel(kyc))}</em></span>
         <span><em class="admin-pill ${escapeAttr(status)}">${escapeHtml(statusLabel(status))}</em></span>
         <span>${escapeHtml(user.role || "user")}</span>
         <span>${adminDate(user.createdAt)}</span>
-        <span class="admin-user-actions"><button class="outline-button tiny" type="button" data-user-id="${escapeAttr(user.id)}" data-user-status="${frozen ? "active" : "suspended"}">${frozen ? "Unfreeze" : "Freeze"}</button></span>
+        <span class="admin-user-actions"><button class="outline-button tiny" type="button" data-user-id="${escapeAttr(user.id)}" data-user-label="${escapeAttr(user.traderLabel || "")}">Label</button><button class="outline-button tiny" type="button" data-user-id="${escapeAttr(user.id)}" data-user-status="${frozen ? "active" : "suspended"}">${frozen ? "Unfreeze" : "Freeze"}</button></span>
       </div>
     `;
   }
@@ -284,6 +286,29 @@
     document.querySelectorAll("[data-user-status]").forEach((button) => {
       button.addEventListener("click", () => changeUserStatus(button.dataset.userId, button.dataset.userStatus));
     });
+  }
+
+  function bindUserLabelButtons() {
+    document.querySelectorAll("[data-user-label]").forEach((button) => {
+      button.addEventListener("click", () => changeUserLabel(button.dataset.userId, button.dataset.userLabel || ""));
+    });
+  }
+
+  async function changeUserLabel(userId, currentLabel) {
+    const traderLabel = prompt("Trader label shown on P2P offers. Leave blank to remove.", currentLabel || "");
+    if (traderLabel === null) return;
+    const reason = prompt("Reason for label change?") || "Admin trader label update";
+    try {
+      await adminService.updateUserLabel(userId, traderLabel, reason);
+      showToast(traderLabel.trim() ? "Trader label updated." : "Trader label removed.");
+      const [users, auditLogs] = await Promise.all([adminService.listUsers(), adminService.listAuditLogs()]);
+      adminState.users = users.users || [];
+      adminState.auditLogs = auditLogs.auditLogs || [];
+      renderAdminUsers();
+      renderOperations();
+    } catch (error) {
+      showToast(error.message || "Could not update trader label.");
+    }
   }
   function renderKycQueue() {
     const queue = document.querySelector("#kycQueue");
@@ -427,6 +452,7 @@
     `;
 
     bindUserStatusButtons();
+    bindUserLabelButtons();
     const processButton = document.querySelector("#processWithdrawals");
     if (processButton) processButton.onclick = processWithdrawals;
   }

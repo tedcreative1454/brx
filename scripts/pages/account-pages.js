@@ -32,16 +32,13 @@
     const user = requireUser();
     if (!user) return;
     refs.app.innerHTML = `
-      <section class="exchange-app app-page-narrow ads-page ${showOfferForm ? "ad-composer-page" : ""}">
-        <div class="page-title ad-page-title">
-          <div>
-            <p class="app-label blue">P2P marketplace</p>
-            <h2>${showOfferForm ? "Create new ad" : "Your Ads"}</h2>
-            <p class="app-muted">${showOfferForm ? "Set your price, order limits, and how traders will pay you." : "Manage active, paused, and completed marketplace listings."}</p>
-          </div>
+      <section class="exchange-app app-page-wide ads-page professional-ads-page ${showOfferForm ? "ad-composer-page" : ""}">
+        <div class="ads-page-tools">
+          <div class="ads-page-product"><strong>${showOfferForm ? "Create ad" : "Ad Center"}</strong><small>USDT / ETB marketplace</small></div>
           <button class="${showOfferForm ? "app-ghost-button" : "app-button"}" id="toggleOfferForm" type="button">${showOfferForm ? "Back to ads" : "+ New Ad"}</button>
         </div>
-        ${showOfferForm ? offerForm(user) : `<div id="adsContent"><section class="empty-panel compact"><span class="mini-icon">...</span><h3>Loading ads</h3></section></div>`}
+
+        ${showOfferForm ? offerForm(user) : `<div id="adsContent"><section class="professional-loading-card"><span></span><div><strong>Loading ads</strong><small>Syncing marketplace inventory...</small></div></section></div>`}
       </section>
     `;
     document.querySelector("#toggleOfferForm").addEventListener("click", () => {
@@ -86,12 +83,6 @@
     }
     refs.app.innerHTML = `
       <section class="exchange-app app-page-narrow professional-trades-page ${tradeId ? "trade-detail-page" : "trade-list-page"}">
-        ${tradeId ? "" : `
-          <header class="professional-page-head">
-            <div><p class="app-label blue">P2P workspace</p><h1>My trades</h1><p>Track every order, payment, escrow release, and dispute in one place.</p></div>
-            <a class="professional-primary-link" href="#/market">${icon("trades")} Start a trade</a>
-          </header>
-        `}
         <div id="tradesContent"><section class="professional-loading-card"><span></span><div><strong>Loading ${tradeId ? "trade room" : "your trades"}</strong><small>Syncing with BRX escrow...</small></div></section></div>
       </section>
     `;
@@ -269,8 +260,23 @@
 
   function renderAdsManager(content = document.querySelector("#adsContent")) {
     if (!content) return;
+    const counts = adStatusCounts(lastMyOffers);
+    const tabs = [
+      ["all", "All ads", "Full history"],
+      ["active", "Active", "Visible on P2P"],
+      ["paused", "Paused", "Hidden ads"],
+      ["cancelled", "Cancelled", "Closed ads"],
+    ];
+    const filtered = adStatusFilter === "all" ? lastMyOffers : lastMyOffers.filter((offer) => offer.status === adStatusFilter);
+
     if (!lastMyOffers.length) {
-      content.innerHTML = `<section class="empty-panel"><span class="mini-icon">Ad</span><h3>No ads yet</h3><p>Post your first P2P trade offer.</p><button class="app-button" id="emptyPostAd" type="button">+ Post an Ad</button></section>`;
+      content.innerHTML = `
+        <section class="ads-empty-desk">
+          <span>${icon("send")}</span>
+          <div><p class="app-label blue">BRX ad engine</p><h2>No ads yet</h2><p>Publish a sell or buy ad to appear on the P2P marketplace with your price, order limits, and payment methods.</p></div>
+          <button class="app-button" id="emptyPostAd" type="button">+ New Ad</button>
+        </section>
+      `;
       document.querySelector("#emptyPostAd")?.addEventListener("click", () => {
         showOfferForm = true;
         renderAds();
@@ -278,17 +284,16 @@
       return;
     }
 
-    const tabs = ["all", "active", "paused", "cancelled"];
-    const filtered = adStatusFilter === "all" ? lastMyOffers : lastMyOffers.filter((offer) => offer.status === adStatusFilter);
     content.innerHTML = `
-      <div class="tabs-bar ad-status-tabs" role="tablist" aria-label="Filter ads by status">
-        ${tabs.map((status) => {
-          const count = status === "all" ? lastMyOffers.length : lastMyOffers.filter((offer) => offer.status === status).length;
-          return `<button class="${adStatusFilter === status ? "active" : ""}" type="button" role="tab" aria-selected="${adStatusFilter === status}" data-ad-filter="${status}">${statusLabel(status)} <span>${count}</span></button>`;
-        }).join("")}
-      </div>
+      <section class="ads-control-panel">
+        <div class="ad-status-switch" role="tablist" aria-label="Filter ads by status">
+          ${tabs.map(([status, label, copy]) => `<button class="${adStatusFilter === status ? "active" : ""}" type="button" role="tab" aria-selected="${adStatusFilter === status}" data-ad-filter="${status}"><strong>${label}</strong><small>${copy}</small><b>${counts[status]}</b></button>`).join("")}
+        </div>
+        <div class="ads-control-note"><strong>${filtered.length}</strong><span>${adStatusFilter === "all" ? "ads shown" : `${statusLabel(adStatusFilter)} ads shown`}</span></div>
+      </section>
+
       ${filtered.length
-        ? `<div class="app-table ad-management-table">${filtered.map(myOfferRow).join("")}</div>`
+        ? `<div class="ad-management-table ads-exchange-table"><div class="my-ad-row my-ad-header"><span>Ad</span><span>Price</span><span>Inventory / Limits</span><span>Payment</span><span>Actions</span></div>${filtered.map(myOfferRow).join("")}</div>`
         : `<section class="empty-panel compact"><span class="mini-icon">${adStatusFilter.slice(0, 2)}</span><h3>No ${escapeHtml(adStatusFilter)} ads</h3><p>Ads with this status will appear here.</p></section>`}
     `;
 
@@ -309,15 +314,31 @@
     });
   }
 
+  function adStatusCounts(offers) {
+    return offers.reduce((counts, offer) => {
+      counts.all += 1;
+      counts[offer.status] = (counts[offer.status] || 0) + 1;
+      return counts;
+    }, { all: 0, active: 0, paused: 0, cancelled: 0 });
+  }
+
+  function titleCaseStatus(status) {
+    return statusLabel(status).replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
   function myOfferRow(offer) {
     const action = offer.side === "sell" ? "Sell" : "Buy";
     const statusClass = offer.status === "active" ? "success" : offer.status === "paused" ? "warning" : "neutral";
+    const priceClass = offer.side === "buy" ? "buy" : "sell";
+    const maxFiat = Math.min(Number(offer.maxFiat || 0), Number(offer.availableAmount || 0) * Number(offer.price || 0));
     return `
-      <div class="table-row my-ad-row">
-        <div><strong>${action} USDT</strong><span class="status-pill ${statusClass}">${statusLabel(offer.status)}</span></div>
-        <strong class="table-price ${offer.side === "buy" ? "" : "sell-price"}">${format(Number(offer.price))}</strong>
-        <div><strong>${format(Number(offer.availableAmount))} USDT</strong><small>${format(Number(offer.minFiat))}-${format(Number(offer.maxFiat))} ETB</small></div>
-        <div class="chips">${offer.paymentMethods.map((method) => `<span>${escapeHtml(method)}</span>`).join("")}</div>
+      <div class="my-ad-row ads-exchange-row ${offer.status}">
+        <div class="ad-cell-main">
+          <span class="ad-side-mark ${offer.side}">${offer.side === "sell" ? "S" : "B"}</span>
+          <div><strong>${action} USDT</strong><small>${offer.side === "sell" ? "Receive ETB from buyers" : "Pay ETB to sellers"}</small><span class="status-pill ${statusClass}">${titleCaseStatus(offer.status)}</span></div>
+        </div>
+        <div class="ad-price-cell"><strong class="${priceClass}">${format(Number(offer.price))}</strong><small>ETB / USDT</small></div>
+        <div class="ad-inventory-cell"><strong>${format(Number(offer.availableAmount))} USDT</strong><small>${format(Number(offer.minFiat))} ETB - ${format(maxFiat || Number(offer.maxFiat))} ETB</small></div>
+        <div class="chips ad-payment-cell">${(offer.paymentMethods || []).length ? offer.paymentMethods.map((method) => `<span>${escapeHtml(method)}</span>`).join("") : `<small>No method</small>`}</div>
         <div class="row-actions ad-row-actions">
           ${offer.status !== "cancelled" ? `<button class="app-ghost-button small" type="button" data-offer-edit="${escapeAttr(offer.id)}">Edit</button>` : ""}
           ${offer.status === "active" ? `<button class="app-ghost-button small" type="button" data-offer-id="${escapeAttr(offer.id)}" data-offer-status="paused">Pause</button>` : ""}
@@ -327,7 +348,6 @@
       </div>
     `;
   }
-
   async function handleCreateOffer(event) {
     event.preventDefault();
     showError("");
@@ -480,13 +500,7 @@
     };
     const filtered = tradeStatusFilter === "all" ? lastMyTrades : groups[tradeStatusFilter] || [];
 
-    content.innerHTML = `
-      <section class="trade-overview-grid">
-        <div><span>Total trades</span><strong>${lastMyTrades.length}</strong><small>All P2P orders</small></div>
-        <div class="active"><span>Active</span><strong>${groups.active.length}</strong><small>Need attention</small></div>
-        <div class="completed"><span>Completed</span><strong>${groups.completed.length}</strong><small>USDT released</small></div>
-      </section>
-      <section class="professional-trade-list-card">
+    content.innerHTML = `<section class="professional-trade-list-card">
         <nav class="trade-list-filters" aria-label="Filter trades">
           ${tradeFilterButton("all", "All", lastMyTrades.length)}
           ${tradeFilterButton("active", "Active", groups.active.length)}
@@ -548,7 +562,7 @@
       <article class="professional-trade-row ${tone}">
         <button class="trade-row-main" type="button" data-trade-open="${escapeAttr(trade.id)}">
           <span class="trade-direction ${isBuyer ? "buy" : "sell"}">${icon(isBuyer ? "buyArrow" : "sellArrow")}</span>
-          <span class="trade-counterparty"><small>${roleText} � #${shortTradeId(trade.id)}</small><strong>${counterparty}</strong><em>${dateTime(trade.createdAt)}</em></span>
+          <span class="trade-counterparty"><small>${roleText} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· #${shortTradeId(trade.id)}</small><strong>${counterparty}</strong><em>${dateTime(trade.createdAt)}</em></span>
           <span class="trade-row-amount"><strong>${format(Number(trade.assetAmount))} USDT</strong><small>${format(Number(trade.fiatAmount))} ETB</small></span>
           <span class="trade-row-state"><b class="${tone}">${escapeHtml(nextStep)}</b><small>${format(Number(trade.offerPrice || Number(trade.fiatAmount) / Number(trade.assetAmount)))} ETB/USDT</small></span>
           <span class="trade-row-open">${icon("external")}</span>
@@ -574,7 +588,7 @@
             <div>
               <p class="app-label blue">${trade.role === "buyer" ? "Buy USDT" : "Sell USDT"}</p>
               <h3>${format(Number(trade.assetAmount))} USDT</h3>
-              <p class="app-muted">${format(Number(trade.fiatAmount))} ETB � ${format(Number(trade.offerPrice || Number(trade.fiatAmount) / Number(trade.assetAmount)))} ETB/USDT</p>
+              <p class="app-muted">${format(Number(trade.fiatAmount))} ETB ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ${format(Number(trade.offerPrice || Number(trade.fiatAmount) / Number(trade.assetAmount)))} ETB/USDT</p>
             </div>
             <span class="status-pill ${trade.status === "disputed" ? "warning" : ""}">${statusLabel(trade.status)}</span>
           </div>
@@ -586,9 +600,7 @@
         </article>
 
         <aside class="app-card trade-side-panel">
-          <p class="app-label">Counterparty</p>
-          <strong>${escapeHtml(trade.counterpartyEmail || "BRX user")}</strong>
-          <div class="trade-timeline">${tradeTimeline(trade)}</div>
+          ${tradeLifecyclePanel(trade)}
         </aside>
       </section>
 
@@ -692,20 +704,135 @@
     `;
   }
 
+  function tradeLifecyclePanel(trade) {
+    const meta = tradeLifecycleMeta(trade);
+    const counterparty = trade.counterpartyEmail || (trade.role === "buyer" ? trade.sellerEmail : trade.buyerEmail) || "BRX user";
+    return `
+      <section class="trade-counterparty-card">
+        <p class="app-label">Counterparty</p>
+        <strong>${escapeHtml(counterparty)}</strong>
+        <small>${escapeHtml(statusLabel(trade.status))} trade #${shortTradeId(trade.id)}</small>
+      </section>
+      <section class="trade-lifecycle-card">
+        <div class="trade-lifecycle-head">
+          <div>
+            <p class="app-label blue">Trade lifecycle</p>
+            <h3>${escapeHtml(meta.title)}</h3>
+            <small>${escapeHtml(meta.copy)}</small>
+          </div>
+          <span>${meta.percent}%</span>
+        </div>
+        <div class="trade-progress-track" aria-hidden="true"><i style="width:${meta.percent}%"></i></div>
+        <div class="trade-timeline">${tradeTimeline(trade)}</div>
+      </section>
+      <section class="trade-audit-card">
+        <div class="trade-audit-head">
+          <div>
+            <p class="app-label">Audit trail</p>
+            <h3>Trade record</h3>
+          </div>
+          <span>${tradeAuditEvents(trade).length} events</span>
+        </div>
+        <div class="trade-audit-list">${tradeAuditEvents(trade).map(tradeAuditItem).join("")}</div>
+      </section>
+    `;
+  }
+
+  function tradeLifecycleMeta(trade) {
+    const status = trade.status;
+    if (status === "released") return { title: "Trade completed", copy: "USDT has been released and this order is closed.", percent: 100 };
+    if (status === "disputed") return { title: "Admin review in progress", copy: "Both sides can add evidence while BRX reviews the dispute.", percent: 78 };
+    if (status === "payment_sent") return { title: "Seller reviewing payment", copy: "The buyer marked ETB as sent. Seller should verify before release.", percent: 66 };
+    if (status === "cancelled") return { title: "Trade cancelled", copy: "Escrow was returned according to the trade close reason.", percent: 100 };
+    if (status === "expired") return { title: "Trade expired", copy: "The payment window ended before the trade progressed.", percent: 100 };
+    return trade.role === "buyer"
+      ? { title: "Waiting for payment", copy: "Send ETB to the seller, then mark payment sent before the timer ends.", percent: 38 }
+      : { title: "Waiting for buyer", copy: "Your USDT is locked while the buyer completes ETB payment.", percent: 38 };
+  }
+
   function tradeTimeline(trade) {
-    const steps = [
-      ["Opened", trade.createdAt, true],
-      ["Payment sent", trade.paymentSentAt, Boolean(trade.paymentSentAt)],
-      ["Released", trade.releasedAt, trade.status === "released"],
-      ["Disputed", trade.disputedAt, trade.status === "disputed"],
-      ["Closed", trade.cancelledAt || trade.resolvedAt, ["cancelled", "expired"].includes(trade.status) || Boolean(trade.resolvedAt)],
-    ];
-    return steps.map(([label, value, active]) => `
-      <div class="timeline-step ${active ? "active" : ""}">
+    const steps = tradeLifecycleSteps(trade);
+    return steps.map((step) => `
+      <div class="timeline-step ${step.state}">
         <span></span>
-        <div><strong>${label}</strong><small>${value ? dateTime(value) : "Pending"}</small></div>
+        <div><strong>${escapeHtml(step.label)}</strong><small>${escapeHtml(step.time)}</small><em>${escapeHtml(step.detail)}</em></div>
       </div>
     `).join("");
+  }
+
+  function tradeLifecycleSteps(trade) {
+    const paymentDone = Boolean(trade.paymentSentAt) || ["payment_sent", "released", "disputed"].includes(trade.status);
+    const released = trade.status === "released" || Boolean(trade.releasedAt);
+    const disputed = trade.status === "disputed" || Boolean(trade.disputedAt);
+    const closed = ["cancelled", "expired"].includes(trade.status) || Boolean(trade.resolvedAt);
+    const finalLabel = disputed ? "Admin review" : closed ? "Trade closed" : "Release USDT";
+    const finalAt = disputed ? trade.disputedAt : trade.releasedAt || trade.cancelledAt || trade.resolvedAt || (trade.status === "expired" ? trade.expiresAt : "");
+    const finalState = released ? "complete" : disputed ? "warning" : closed ? "closed" : paymentDone ? "current" : "pending";
+    const finalDetail = disputed
+      ? "Dispute evidence is available for BRX review."
+      : closed
+        ? closeReason(trade)
+        : "Seller confirms ETB received and releases escrow.";
+
+    return [
+      { label: "Order opened", detail: "Trade room created", time: tradeTimeLabel(trade.createdAt), state: "complete" },
+      { label: "USDT locked", detail: "Seller funds secured in BRX escrow", time: tradeTimeLabel(trade.createdAt), state: "complete" },
+      { label: "Payment sent", detail: "Buyer marks ETB payment complete", time: tradeTimeLabel(trade.paymentSentAt), state: paymentDone ? "complete" : "current" },
+      { label: finalLabel, detail: finalDetail, time: tradeTimeLabel(finalAt), state: finalState },
+    ];
+  }
+
+  function tradeAuditEvents(trade) {
+    const events = [
+      { label: "Order opened", actor: "BRX", time: trade.createdAt, detail: `${format(Number(trade.assetAmount))} USDT order opened at ${format(Number(trade.offerPrice || Number(trade.fiatAmount) / Number(trade.assetAmount)))} ETB/USDT.` },
+      { label: "Escrow locked", actor: "Ledger", time: trade.createdAt, detail: "Seller USDT was reserved for this trade." },
+    ];
+    if (trade.paymentSentAt) {
+      events.push({ label: "Payment marked sent", actor: "Buyer", time: trade.paymentSentAt, detail: trade.paymentReference ? `Reference: ${trade.paymentReference}` : "Buyer confirmed the ETB payment was sent." });
+    }
+    if (trade.paymentProofName) {
+      events.push({ label: "Receipt attached", actor: "Buyer", time: trade.paymentSentAt || trade.createdAt, detail: trade.paymentProofName });
+    }
+    if (trade.disputedAt) {
+      events.push({ label: "Dispute opened", actor: "Trader", time: trade.disputedAt, detail: trade.disputeReason || "Trade moved to admin review." });
+    }
+    if (trade.releasedAt) {
+      events.push({ label: "USDT released", actor: "Seller", time: trade.releasedAt, detail: "Escrow released to the buyer." });
+    }
+    if (["cancelled", "expired"].includes(trade.status)) {
+      events.push({ label: trade.status === "expired" ? "Trade expired" : "Trade cancelled", actor: "System", time: trade.cancelledAt || trade.resolvedAt || trade.expiresAt, detail: closeReason(trade) });
+    }
+    if (trade.resolvedAt && !["cancelled", "expired"].includes(trade.status)) {
+      events.push({ label: "Review resolved", actor: "Admin", time: trade.resolvedAt, detail: "Admin review was resolved." });
+    }
+    return events.filter((event) => event.time || event.label);
+  }
+
+  function tradeAuditItem(event) {
+    return `
+      <div class="trade-audit-item">
+        <span>${escapeHtml(event.actor || "BRX")}</span>
+        <div>
+          <strong>${escapeHtml(event.label)}</strong>
+          <small>${escapeHtml(tradeTimeLabel(event.time))}</small>
+          <p>${escapeHtml(event.detail || "Recorded on the BRX trade ledger.")}</p>
+        </div>
+      </div>
+    `;
+  }
+
+  function tradeTimeLabel(value) {
+    if (!value) return "Pending";
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return "Pending";
+    return date.toLocaleString([], { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+  }
+
+  function closeReason(trade) {
+    if (trade.cancelledReason) return trade.cancelledReason;
+    if (trade.status === "expired") return "Payment window expired.";
+    if (trade.status === "cancelled") return "Trade was cancelled and escrow returned.";
+    return "Trade closed.";
   }
 
   function tradeActions(trade) {
@@ -865,7 +992,7 @@
               <div class="avatar small">${displayInitial(counterparty)}</div>
               <div><small>${isBuyer ? "Seller" : "Buyer"}</small><strong>${escapeHtml(counterparty)}</strong>${showCounterpartyEmail ? `<span>${escapeHtml(counterpartyEmail)}</span>` : ""}</div>
             </div>
-            ${isBuyer ? sellerPaymentSummary(trade, sellerMethods) : buyerPaymentSummary(trade)}
+            ${isBuyer ? "" : buyerPaymentSummary(trade)}
             ${tradeChatPanel(trade)}
           </aside>
         </section>
@@ -988,7 +1115,7 @@
       <section class="trade-chat-panel">
         <div class="trade-chat-head">
           <div><strong>Trade chat</strong><small>Buyer and seller only</small></div>
-          <span class="trade-chat-live"><i></i> Live</span>
+          <span class="trade-chat-live"><i></i> Online</span>
         </div>
         <div class="trade-chat-messages" id="tradeChatMessages" aria-live="polite">
           <div class="trade-chat-empty"><span>${icon("mail")}</span><strong>No messages yet</strong><small>Use this chat to coordinate payment safely.</small></div>
@@ -1051,7 +1178,7 @@
     return `
       <div class="trade-chat-message ${message.isMine ? "mine" : "theirs"}">
         <div class="trade-chat-bubble"><p>${body}</p></div>
-        <small>${chatTime(message.createdAt)}${message.isMine && message.isRead ? " � Read" : ""}</small>
+        <small>${chatTime(message.createdAt)}${message.isMine && message.isRead ? " ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· Read" : ""}</small>
       </div>
     `;
   }
@@ -1425,10 +1552,6 @@
 
     refs.app.innerHTML = `
       <section class="exchange-app app-page-narrow professional-wallet-page">
-        <header class="professional-page-head wallet-page-head">
-          <div><p class="app-label blue">BRX wallet</p><h1>USDT wallet</h1><p>Manage deposits, withdrawals, internal transfers, and escrow balances.</p></div>
-          <span class="wallet-network-status"><i></i>BNB Smart Chain</span>
-        </header>
 
         <section class="professional-wallet-summary">
           <div class="wallet-total-block">
@@ -1516,7 +1639,6 @@
           </div>
 
           ${networkSelector("deposit", selectedNetwork)}
-          ${!selected ? `<p class="network-helper">Choose BNB Smart Chain for BEP20 deposits. TRON is shown only as a future network.</p>` : ""}
           ${selected && selected.status !== "available" ? `<p class="deposit-note">${escapeHtml(selected.name)} deposits are not enabled yet. Choose BNB Smart Chain for live deposits.</p>` : ""}
           ${selectedNetwork === "BEP20" ? `
             <section class="deposit-address-card deposit-address-detail ${depositAddress ? "" : "pending"}">
@@ -1824,7 +1946,7 @@
         <header class="professional-settings-head">
           <div class="professional-settings-person">
             ${profileAvatarMarkup(user, "settings-head-avatar", user.email)}
-            <div><p class="app-label blue">Account center</p><h1>Settings</h1><small>${escapeHtml(accountDisplayName(user))} � ${escapeHtml(user.email)}</small></div>
+            <div><p class="app-label blue">Account center</p><h1>Settings</h1><small>${escapeHtml(accountDisplayName(user))} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ${escapeHtml(user.email)}</small></div>
           </div>
           <div class="professional-settings-state">${icon("shield")}<span><strong>${kycTier(user)}</strong><small>${kycLabel(user.kycStatus)}</small></span></div>
         </header>
@@ -2049,7 +2171,7 @@
         ${settingsRow("card", "Payment methods", `${methodCount} saved`, `<a class="settings-action" href="#/settings?tab=payments">Manage</a>`)}
         ${settingsRow("mapPin", "Withdrawal addresses", `${(user.withdrawalAddresses || []).length} saved`, `<a class="settings-action" href="#/settings?tab=addresses">Manage</a>`)}
         ${settingsRow("info", "Current trade limit", user.kycStatus === "approved" ? "5,000 USDT" : "1,000 USDT", "")}
-        ${settingsRow("trades", "Escrow network", "BRX internal ledger � BEP20 wallet settlement", "")}
+        ${settingsRow("trades", "Escrow network", "BRX internal ledger ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· BEP20 wallet settlement", "")}
       </section>
 
       <section class="settings-card settings-card-flat account-session-card">
@@ -2409,7 +2531,7 @@
     return `
       <div class="settings-row session-row">
         <span class="settings-row-icon">${icon("activity")}</span>
-        <span class="settings-row-main"><strong>${escapeHtml(title)}</strong><small>Last seen ${dateTime(session.lastSeenAt)} � Created ${dateTime(session.createdAt)}</small></span>
+        <span class="settings-row-main"><strong>${escapeHtml(title)}</strong><small>Last seen ${dateTime(session.lastSeenAt)} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· Created ${dateTime(session.createdAt)}</small></span>
         <span class="settings-row-aside session-actions">
           ${statusBadge(state, session.active ? "success" : "neutral")}
           ${!session.current && session.active ? `<button class="settings-action danger" type="button" data-session-revoke="${escapeAttr(session.id)}">Revoke</button>` : ""}
@@ -2422,7 +2544,7 @@
     return `
       <div class="settings-row withdrawal-address-row">
         <span class="settings-row-icon">${icon("wallet")}</span>
-        <span class="settings-row-main"><strong>${escapeHtml(address.label)}</strong><small>${escapeHtml(address.network)} � ${escapeHtml(shortAddress(address.address))}</small></span>
+        <span class="settings-row-main"><strong>${escapeHtml(address.label)}</strong><small>${escapeHtml(address.network)} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ${escapeHtml(shortAddress(address.address))}</small></span>
         <span class="settings-row-aside payment-actions">
           ${address.isDefault ? statusBadge("Default", "success") : `<button class="settings-action" type="button" data-withdrawal-default="${escapeAttr(address.id)}">Make default</button>`}
           <button class="settings-action danger" type="button" data-withdrawal-delete="${escapeAttr(address.id)}">Remove</button>
@@ -2765,6 +2887,8 @@
   window.BRX.pages.renderSettings = renderSettings;
   window.BRX.pages.renderReferrals = renderReferrals;
 })();
+
+
 
 
 

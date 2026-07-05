@@ -6,6 +6,7 @@
   const { requireUser } = window.BRX.state;
   const { refs, showError, showToast } = window.BRX.ui;
   const { format } = window.BRX.utils;
+  const { icon } = window.BRX.icons;
   const marketplace = window.BRX.marketplaceService;
 
   let marketMode = "buy";
@@ -25,24 +26,31 @@
     if (!user) return;
 
     refs.app.innerHTML = `
-      <section class="exchange-app market-app app-page-wide professional-market">
+      <section class="exchange-app market-app app-page-wide professional-market brx-p2p-market">
+        <div class="p2p-market-topline" aria-label="P2P quick actions">
+          <div class="p2p-market-title"><span class="p2p-market-icon">${icon("p2p")}</span><strong>P2P</strong><small>USDT / ETB marketplace</small></div>
+          <nav>
+            <a href="#/trades">Orders</a>
+            <a href="#/p2p-chat">Chat</a>
+            <a class="market-post-ad" href="#/ads"><span aria-hidden="true">+</span> Post ad</a>
+          </nav>
+        </div>
 
-        <div class="market-mode-bar">
+        <div class="market-mode-bar p2p-trade-toolbar">
           <div class="market-intent-tabs ${marketMode}" role="tablist" aria-label="Trade direction">
-            <button class="${marketMode === "buy" ? "active" : ""}" type="button" data-market-mode="buy"><span>Buy USDT</span><small>Pay with ETB</small></button>
-            <button class="${marketMode === "sell" ? "active" : ""}" type="button" data-market-mode="sell"><span>Sell USDT</span><small>Receive ETB</small></button>
+            <button class="${marketMode === "buy" ? "active" : ""}" type="button" data-market-mode="buy"><span>Buy</span><small>Buy USDT with ETB</small></button>
+            <button class="${marketMode === "sell" ? "active" : ""}" type="button" data-market-mode="sell"><span>Sell</span><small>Sell USDT for ETB</small></button>
           </div>
-          <div class="market-mobile-index" aria-label="ETB per USDT market index">
+          <div class="market-mobile-index p2p-rate-pill" aria-label="ETB per USDT market index">
             <div><strong>${format(RATE)}</strong><button type="button" id="mobileRefreshMarket" aria-label="Refresh market">&#8635;</button></div>
-            <span>ETB / USDT</span>
+            <span>ETB / USDT reference</span>
           </div>
-          <a class="market-post-ad" href="#/ads"><span aria-hidden="true">+</span> Post an ad</a>
         </div>
 
         <div id="marketContent">
           <section class="market-loading-state">
             <div></div><div></div><div></div>
-            <p>Loading live offers...</p>
+            <p>Loading live P2P offers...</p>
           </section>
         </div>
       </section>
@@ -100,12 +108,10 @@
       : `No active offers are available right now. Refresh to check again.`;
 
     content.innerHTML = `
-      <form class="market-filter-panel" id="marketFilterForm">
-        <label class="market-filter-field asset"><span>Asset</span><strong>USDT</strong></label>
-        <label class="market-filter-field amount"><span>Amount</span><input id="marketAmountFilter" inputmode="decimal" autocomplete="off" placeholder="Any amount" value="${escapeHtml(amountFilter)}" /></label>
-        <label class="market-filter-field payment"><span>Payment</span><select id="marketPaymentFilter"><option value="">All methods</option>${methods.map((method) => `<option value="${escapeHtml(method)}" ${paymentFilter === method ? "selected" : ""}>${escapeHtml(method)}</option>`).join("")}</select></label>
-        <label class="market-filter-field sort"><span>Sort offers</span><select id="marketSort"><option value="best" ${marketSort === "best" ? "selected" : ""}>Best for me</option><option value="price_low" ${marketSort === "price_low" ? "selected" : ""}>Lowest price</option><option value="price_high" ${marketSort === "price_high" ? "selected" : ""}>Highest price</option><option value="available_high" ${marketSort === "available_high" ? "selected" : ""}>Most available</option><option value="trades_high" ${marketSort === "trades_high" ? "selected" : ""}>Most trades</option></select></label>
-        <button class="market-filter-submit" type="submit">Apply</button>
+      <form class="market-filter-panel p2p-filter-panel" id="marketFilterForm">
+        <label class="market-filter-field amount"><span>Transaction amount</span><div class="market-field-combo"><input id="marketAmountFilter" inputmode="decimal" autocomplete="off" placeholder="Enter amount" value="${escapeHtml(amountFilter)}" /><b>ETB</b></div></label>
+        <label class="market-filter-field payment"><span>Payment method</span><select id="marketPaymentFilter"><option value="">All payment methods</option>${methods.map((method) => `<option value="${escapeHtml(method)}" ${paymentFilter === method ? "selected" : ""}>${escapeHtml(method)}</option>`).join("")}</select></label>
+        <label class="market-filter-field sort"><span>Sort By</span><select id="marketSort"><option value="best" ${marketSort === "best" ? "selected" : ""}>Best price</option><option value="price_low" ${marketSort === "price_low" ? "selected" : ""}>Lowest price</option><option value="price_high" ${marketSort === "price_high" ? "selected" : ""}>Highest price</option><option value="available_high" ${marketSort === "available_high" ? "selected" : ""}>Most available</option><option value="trades_high" ${marketSort === "trades_high" ? "selected" : ""}>Most orders</option></select></label>
         ${hasFilters ? `<button class="market-filter-clear" type="button" data-clear-market-filters>Clear</button>` : ""}
       </form>
       <div class="market-mobile-filters" aria-label="Market filters">
@@ -116,13 +122,10 @@
       ${mobileMarketFilterSheet(methods)}
 
       <section class="market-results-panel">
-        <div class="market-results-head">
-          <div><h3>${marketMode === "buy" ? "Available sellers" : "Available buyers"}</h3><p>${filteredOffers.length} ${filteredOffers.length === 1 ? "offer" : "offers"}${hasFilters ? " matching your filters" : ""}</p></div>
-          <button class="market-refresh-button" type="button" id="refreshMarket"><span aria-hidden="true">&#8635;</span> Refresh</button>
-        </div>
+
         ${filteredOffers.length ? `
           <div class="market-offer-table">
-            <div class="market-offer-row market-offer-header"><span>Advertiser</span><span>Price</span><span>Available / Limits</span><span>Payment</span><span></span></div>
+            <div class="market-offer-row market-offer-header"><span>Advertisers</span><span>Price</span><span>Available/Order Limit</span><span>Payment</span><span>Trade</span></div>
             ${filteredOffers.map((offer) => marketRow(offer, action)).join("")}
           </div>
         ` : `
@@ -287,20 +290,61 @@
     const price = Number(offer.price);
     const minFiat = Number(offer.minFiat);
     const maxFiat = Math.min(Number(offer.maxFiat), available * price);
-    const maxUsdt = price > 0 ? Math.min(available, maxFiat / price) : 0;
     const methods = offer.paymentMethods || [];
+    const completion = Number(offer.completionRate || offer.completion || 98.4);
+    const orders = Math.max(0, Math.trunc(Number(offer.completedTrades || 0)));
+    const releaseMinutes = 15;
+    const presence = presenceMeta(offer.advertiserLastSeenAt || offer.lastSeenAt);
+    const sideClass = action.toLowerCase();
+    const avatar = traderAvatarMarkup(offer.advertiser, offerAvatarUrl(offer), presence.tone);
     return `
-      <div class="market-offer-row">
-        <div class="market-trader-cell">
-          <span class="market-trader-avatar">${initials(offer.advertiser)}</span>
-          <div><strong>${escapeHtml(offer.advertiser)}</strong><small><i></i> BRX trader &middot; ${offer.completedTrades || 0} completed</small></div>
+      <div class="market-offer-row p2p-offer-row">
+        <div class="market-trader-cell p2p-advertiser-cell">
+          ${avatar}
+          <div>
+            <strong>${escapeHtml(offer.advertiser)}${offer.traderLabel ? ` <em>${escapeHtml(offer.traderLabel)}</em>` : ""}</strong>
+            <small>${orders.toLocaleString()} orders <b></b> ${format(completion)}% completion</small>
+            <small class="p2p-trust-row"><span>${releaseMinutes} min</span></small>
+          </div>
         </div>
-        <div class="market-price-cell"><strong class="${action === "Sell" ? "sell-price" : ""}">${format(price)}</strong><small>ETB / USDT</small></div>
-        <div class="market-liquidity-cell"><strong>${format(available)} USDT</strong><small>Limit ${format(minFiat)} - ${format(maxFiat)} ETB</small><small>Up to ${format(maxUsdt)} USDT per order</small></div>
-        <div class="market-payment-cell">${methods.length ? methods.map((method) => `<span>${escapeHtml(method)}</span>`).join("") : `<small>No method</small>`}</div>
-        <div class="market-action-cell"><button class="app-button market-trade-button ${action.toLowerCase()}-button" type="button" data-select-offer="${escapeHtml(offer.id)}">${action} USDT</button><small>Escrow protected</small></div>
+        <div class="market-price-cell"><strong class="${action === "Sell" ? "sell-price" : ""}">${format(price)}</strong></div>
+        <div class="market-liquidity-cell"><strong>${format(available)} USDT</strong><small>${format(minFiat)} ETB - ${format(maxFiat)} ETB</small></div>
+        <div class="market-payment-cell p2p-payment-list">${methods.length ? methods.slice(0, 3).map((method, index) => `<span><i style="--dot:${paymentColor(index)}"></i>${escapeHtml(method)}</span>`).join("") : `<small>No payment method</small>`}</div>
+        <div class="market-action-cell"><button class="app-button market-trade-button ${sideClass}-button" type="button" data-select-offer="${escapeHtml(offer.id)}">${action} USDT</button></div>
       </div>
     `;
+  }
+
+
+
+  function offerAvatarUrl(offer) {
+    const url = String(offer.avatarUrl || "").trim();
+    if (url) return url;
+    const user = window.BRX.state.currentUser?.();
+    if (!user) return "";
+    const sameBackendUser = offer.userId && user.backendUserId && String(offer.userId) === String(user.backendUserId);
+    const sameLocalUser = offer.userId && user.id && String(offer.userId) === String(user.id);
+    const sameUsername = user.username && offer.advertiser && String(user.username).toLowerCase() === String(offer.advertiser).toLowerCase();
+    const sameEmailName = user.email && offer.advertiser && String(user.email).split("@")[0].toLowerCase() === String(offer.advertiser).toLowerCase();
+    return sameBackendUser || sameLocalUser || sameUsername || sameEmailName ? String(user.avatarUrl || "").trim() : "";
+  }
+  function traderAvatarMarkup(name, avatarUrl, presenceTone = "offline") {
+    const url = String(avatarUrl || "").trim();
+    if (url) {
+      return `<span class="market-trader-avatar presence-avatar has-image ${presenceTone}"><img src="${escapeAttr(url)}" alt="" /><i></i></span>`;
+    }
+    return `<span class="market-trader-avatar presence-avatar ${presenceTone}">${initials(name)}<i></i></span>`;
+  }
+  function presenceMeta(value) {
+    const date = new Date(value || "");
+    if (!Number.isFinite(date.getTime())) return { tone: "offline", label: "Offline" };
+    const hours = (Date.now() - date.getTime()) / 36e5;
+    if (hours <= 1) return { tone: "online", label: "Online" };
+    if (hours <= 3) return { tone: "away", label: "Recently active" };
+    return { tone: "offline", label: "Offline" };
+  }
+  function paymentColor(index) {
+    return ["#f0b90b", "#f6465d", "#1e9bff", "#00c087"][index % 4];
   }
   function orderModal(offer, action) {
     const price = Number(offer.price);
@@ -368,10 +412,6 @@
                 <div><span>${action === "Buy" ? "You pay" : "Buyer pays"}</span><strong id="orderFiatPreview">-- ETB</strong></div>
 
                 <div><span>${action === "Buy" ? "You get" : "You sell"}</span><strong id="orderUsdtPreview">-- USDT</strong></div>
-              </div>
-              <div class="order-escrow-note">
-                <strong>Escrow protected</strong>
-                <span>BRX locks seller USDT before the trade opens. ETB is paid directly to the seller, then USDT releases after confirmation.</span>
               </div>
               <div class="form-error" id="orderError"></div>
             </form>
@@ -486,6 +526,146 @@
     else showError(message);
   }
 
+
+  async function renderP2pChat() {
+    const user = requireUser();
+    if (!user) return;
+    const selectedId = window.BRX.router.routeParams().get("id") || "";
+    refs.app.innerHTML = `
+      <section class="exchange-app app-page-wide p2p-chat-page">
+        <div class="p2p-chat-shell">
+          <aside class="p2p-chat-sidebar">
+            ${p2pChatProfile(user)}
+          </aside>
+          <section class="p2p-chat-list-panel">
+            <header><div><h2>Chats</h2><p>P2P trade conversations</p></div><a href="#/market">P2P</a></header>
+            <label class="p2p-chat-search"><span>${icon("search")}</span><input id="p2pChatSearch" placeholder="Search" autocomplete="off" /></label>
+            <div class="p2p-chat-tabs"><button class="active" type="button">All</button></div>
+            <div class="p2p-chat-contacts" id="p2pChatContacts"><div class="p2p-chat-loading">Loading chats...</div></div>
+          </section>
+          <section class="p2p-chat-room" id="p2pChatRoom">
+            <div class="p2p-chat-welcome">${icon("mail")}<strong>Welcome to BRX Chat</strong><span>Select a contact to start chatting.</span></div>
+          </section>
+        </div>
+      </section>
+    `;
+    try {
+      const result = await marketplace.myTrades();
+      const trades = result.trades || [];
+      renderP2pChatContacts(trades, selectedId);
+      const selected = trades.find((trade) => trade.id === selectedId);
+      if (selected) await renderP2pChatRoom(selected);
+      bindP2pChatSearch(trades, selectedId);
+    } catch (error) {
+      document.querySelector("#p2pChatContacts").innerHTML = `<div class="p2p-chat-loading error">${escapeHtml(error.message || "Could not load chats.")}</div>`;
+    }
+  }
+
+  function renderP2pChatContacts(trades, selectedId, query = "") {
+    const list = document.querySelector("#p2pChatContacts");
+    if (!list) return;
+    const normalized = query.trim().toLowerCase();
+    const filtered = trades.filter((trade) => !normalized || p2pCounterparty(trade).toLowerCase().includes(normalized) || shortId(trade.id).toLowerCase().includes(normalized));
+    list.innerHTML = filtered.length ? filtered.map((trade) => {
+      const name = p2pCounterparty(trade);
+      const active = trade.id === selectedId;
+      const presence = presenceMeta(trade.counterpartyLastSeenAt);
+      return `<a class="p2p-chat-contact ${active ? "active" : ""}" href="#/p2p-chat?id=${encodeURIComponent(trade.id)}"><span class="presence-avatar ${presence.tone}">${displayInitial(name)}<i></i></span><div><strong>${escapeHtml(name)}</strong><small><span class="presence-inline ${presence.tone}"><i></i>${presence.label}</span> · ${escapeHtml(chatPreview(trade))}</small></div><em>${chatDate(trade.updatedAt || trade.createdAt)}</em></a>`;
+    }).join("") : `<div class="p2p-chat-loading">No chats yet.</div>`;
+  }
+
+  async function renderP2pChatRoom(trade) {
+    const room = document.querySelector("#p2pChatRoom");
+    if (!room) return;
+    room.innerHTML = `<div class="p2p-chat-room-loading">Loading conversation...</div>`;
+    const canSend = ["opened", "payment_sent", "disputed"].includes(trade.status);
+    let messages = [];
+    try {
+      const result = await marketplace.tradeMessages(trade.id);
+      messages = result.messages || [];
+    } catch (error) {
+      room.innerHTML = `<div class="p2p-chat-welcome"><strong>Chat unavailable</strong><span>${escapeHtml(error.message || "Could not load messages.")}</span></div>`;
+      return;
+    }
+    const presence = presenceMeta(trade.counterpartyLastSeenAt);
+    room.innerHTML = `
+      <header class="p2p-chat-room-head"><div><span class="presence-avatar ${presence.tone}">${displayInitial(p2pCounterparty(trade))}<i></i></span><div><strong>${escapeHtml(p2pCounterparty(trade))}</strong><small>#${shortId(trade.id)} · ${escapeHtml(statusText(trade.status))} · ${presence.label}</small></div></div><a href="#/trades?id=${encodeURIComponent(trade.id)}">Open order</a></header>
+      <div class="p2p-chat-room-messages" id="p2pChatRoomMessages">${messages.length ? messages.map(p2pChatMessage).join("") : `<div class="p2p-chat-welcome compact">${icon("mail")}<strong>No messages yet</strong><span>Use this chat to coordinate payment safely.</span></div>`}</div>
+      ${canSend ? `<form class="p2p-chat-compose" id="p2pChatCompose"><textarea id="p2pChatInput" rows="2" maxlength="1000" placeholder="Message ${escapeHtml(p2pCounterparty(trade))}..." required></textarea><button class="app-button" type="submit">Send</button><div id="p2pChatError"></div></form>` : `<p class="p2p-chat-closed">This order is closed. Chat history remains available.</p>`}
+    `;
+    const messagesNode = document.querySelector("#p2pChatRoomMessages");
+    if (messagesNode) messagesNode.scrollTop = messagesNode.scrollHeight;
+    document.querySelector("#p2pChatCompose")?.addEventListener("submit", (event) => handleP2pChatSubmit(event, trade));
+  }
+
+  async function handleP2pChatSubmit(event, trade) {
+    event.preventDefault();
+    const input = document.querySelector("#p2pChatInput");
+    const error = document.querySelector("#p2pChatError");
+    const button = event.currentTarget.querySelector("button");
+    const body = input?.value.trim() || "";
+    if (!body) return;
+    if (error) error.textContent = "";
+    if (button) button.disabled = true;
+    try {
+      await marketplace.sendTradeMessage(trade.id, body);
+      input.value = "";
+      await renderP2pChatRoom(trade);
+    } catch (err) {
+      if (error) error.textContent = err.message || "Could not send message.";
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  function bindP2pChatSearch(trades, selectedId) {
+    document.querySelector("#p2pChatSearch")?.addEventListener("input", (event) => renderP2pChatContacts(trades, selectedId, event.currentTarget.value));
+  }
+
+  function p2pChatMessage(message) {
+    const body = escapeHtml(message.body).replace(/\n/g, "<br>");
+    return `<div class="p2p-chat-message ${message.isMine ? "mine" : "theirs"}"><p>${body}</p><small>${chatDate(message.createdAt, true)}${message.isMine && message.isRead ? " · Read" : ""}</small></div>`;
+  }
+
+
+  function p2pChatProfile(user) {
+    const name = user.username || user.email || "BRX";
+    const avatarUrl = String(user.avatarUrl || "").trim();
+    const avatar = avatarUrl
+      ? `<span class="has-image"><img src="${escapeAttr(avatarUrl)}" alt="" /></span>`
+      : `<span>${displayInitial(name)}</span>`;
+    return `<div class="p2p-chat-account">${avatar}<strong>${escapeHtml(name)}</strong><small>BRX account</small></div>`;
+  }
+  function p2pCounterparty(trade) {
+    return trade.counterpartyName || trade.counterpartyEmail || "BRX user";
+  }
+
+  function chatPreview(trade) {
+    if (trade.paymentMethod) return `${trade.paymentMethod} · ${statusText(trade.status)}`;
+    return statusText(trade.status);
+  }
+
+  function statusText(status) {
+    return String(status || "open").replace(/_/g, " ");
+  }
+
+  function chatDate(value, timeOnly = false) {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return "";
+    return timeOnly ? date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : date.toLocaleDateString([], { month: "2-digit", day: "2-digit" });
+  }
+
+  function shortId(value) {
+    return String(value || "").slice(0, 8).toUpperCase();
+  }
+
+  function displayInitial(value) {
+    return String(value || "B").trim().slice(0, 1).toUpperCase() || "B";
+  }
+
+  function escapeAttr(value) {
+    return escapeHtml(value).replace(/`/g, "&#96;");
+  }
   function filteredMarketOffers() {
     const requestedEtb = Number(amountFilter);
     const normalizedPayment = paymentFilter.toLowerCase();
@@ -528,5 +708,16 @@
   }
 
   window.BRX.pages.renderMarket = renderMarket;
+  window.BRX.pages.renderP2pChat = renderP2pChat;
 })();
+
+
+
+
+
+
+
+
+
+
 

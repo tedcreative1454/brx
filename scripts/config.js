@@ -1,6 +1,9 @@
 (function () {
   window.BRX = window.BRX || {};
 
+  const sameOriginApi = window.location.protocol.startsWith("http") ? [`${window.location.origin}/api`] : [];
+  const localApiBases = ["http://127.0.0.1:3000/api", "http://localhost:3000/api"];
+
   window.BRX.config = Object.freeze({
     RATE: 185,
     SELL_RATE: 184,
@@ -8,8 +11,8 @@
     SESSION_KEY: "brx_session_v1",
     PENDING_KEY: "brx_pending_email_v1",
     THEME_KEY: "brx_theme_v1",
-    API_BASES: ["http://127.0.0.1:3000/api", "http://localhost:3000/api"],
-    APP_ROUTES: ["dashboard", "market", "ads", "trades", "wallet", "kyc", "profile", "settings", "notifications", "referrals", "admin"],
+    API_BASES: [...sameOriginApi, ...localApiBases],
+    APP_ROUTES: ["dashboard", "market", "p2p-chat", "ads", "trades", "wallet", "kyc", "profile", "settings", "notifications", "referrals", "admin"],
     NETWORKS: Object.freeze([
       Object.freeze({
         id: "BEP20",

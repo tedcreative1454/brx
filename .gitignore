@@ -10,6 +10,7 @@ backend/uploads/
 .env.*
 !.env.example
 !backend/.env.example
+!backend/.env.production.example
 *.pem
 *.key
 *.p12

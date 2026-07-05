@@ -22,7 +22,6 @@
           <div>
             <p class="dashboard-eyebrow">Account overview</p>
             <h1>${greeting()}, ${name}</h1>
-            <p>Monitor your funds, enter the P2P market, and manage your account from one place.</p>
           </div>
           <a class="dashboard-profile-status" href="#/settings?tab=profile" aria-label="Open account settings">
             ${profileAvatar(user, rawName)}
@@ -69,8 +68,7 @@
     return `
       <section class="dashboard-balance-card">
         <div class="dashboard-card-head">
-          <div><span class="dashboard-card-icon">${icon("wallet")}</span><div><p class="dashboard-eyebrow">Portfolio</p><h2>Total balance</h2></div></div>
-          <span class="dashboard-network"><i></i>BEP20</span>
+          <div><span class="dashboard-card-icon">${icon("wallet")}</span><div><h2>Total balance</h2></div></div>
         </div>
 
         <div class="dashboard-balance-value">
@@ -80,7 +78,6 @@
 
         <div class="dashboard-balance-breakdown">
           ${balanceItem("Available", available, "available")}
-          ${balanceItem("In escrow", locked, "escrow")}
           ${pending > 0 ? balanceItem("Pending", pending, "pending") : ""}
         </div>
 
@@ -212,3 +209,4 @@
   window.BRX.components = { ...(window.BRX.components || {}), kycBanner };
   window.BRX.pages.renderDashboard = renderDashboard;
 })();
+

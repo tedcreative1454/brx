@@ -21,6 +21,7 @@ CREATE TABLE users (
   kyc_status kyc_status NOT NULL DEFAULT 'unsubmitted',
   status user_status NOT NULL DEFAULT 'active',
   role TEXT NOT NULL DEFAULT 'user',
+  trader_label TEXT,
   password_changed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -28,6 +29,7 @@ CREATE TABLE users (
 ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS google_sub TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS trader_label TEXT;
 
 CREATE TABLE email_verification_codes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

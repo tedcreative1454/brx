@@ -21,19 +21,19 @@
   function appNav(activeRoute) {
     const items = [
       ["dashboard", "Dashboard", "grid"],
-      ["market", "Market", "market"],
+      ["market", "P2P", "p2p", ["market", "p2p-chat"]],
       ["ads", "My Ads", "ads"],
       ["trades", "Trades", "trades"],
       ["wallet", "Wallet", "wallet"],
     ];
 
-    return items.map(([route, label, iconName]) => `<a class="${activeRoute === route ? "active" : ""}" href="#/${route}">${icon(iconName)}${label}</a>`).join("");
+    return items.map(([route, label, iconName, aliases]) => `<a class="${(aliases || [route]).includes(activeRoute) ? "active" : ""}" href="#/${route}">${icon(iconName)}${label}</a>`).join("");
   }
 
   function mobileBottomNav(activeRoute) {
     const items = [
       ["dashboard", "Home", "grid", ["dashboard"]],
-      ["market", "Market", "market", ["market", "ads"]],
+      ["market", "P2P", "p2p", ["market", "p2p-chat", "ads"]],
       ["trades", "Trades", "trades", ["trades"]],
       ["wallet", "Wallet", "wallet", ["wallet"]],
       ["settings", "Profile", "user", ["settings", "profile", "kyc", "notifications", "referrals"]],
@@ -288,5 +288,7 @@
 
   window.BRX.header = { renderHeader, signOut, applyTheme };
 })();
+
+
 
 

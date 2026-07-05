@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   window.BRX = window.BRX || {};
 
   const { requestJson } = window.BRX.api;
@@ -15,6 +15,13 @@
     });
   }
 
+
+  function updateUserLabel(userId, traderLabel, reason) {
+    return requestJson(`/admin/users/${userId}/label`, {
+      method: "PATCH",
+      body: JSON.stringify({ traderLabel, reason }),
+    });
+  }
   function listDeposits() {
     return requestJson("/admin/deposits");
   }
@@ -79,6 +86,6 @@
     });
   }
 
-  window.BRX.adminService = { stats, listUsers, updateUserStatus, listDeposits, listWithdrawals, processWithdrawals, listTrades, listAuditLogs, listKyc, getKyc, approveKyc, rejectKyc, listDisputes, resolveDispute, limits, updateLimit };
+  window.BRX.adminService = { stats, listUsers, updateUserStatus, updateUserLabel, listDeposits, listWithdrawals, processWithdrawals, listTrades, listAuditLogs, listKyc, getKyc, approveKyc, rejectKyc, listDisputes, resolveDispute, limits, updateLimit };
 })();
 

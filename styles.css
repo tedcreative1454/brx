@@ -3550,3 +3550,352 @@ body:has(.landing-redesign) {
   }
 }
 
+
+/* Professional P2P order ticket polish. */
+.order-modal-backdrop {
+  background: rgba(0, 0, 0, .76) !important;
+  backdrop-filter: blur(12px) saturate(120%) !important;
+}
+
+.order-ticket-modal {
+  width: min(560px, calc(100vw - 32px)) !important;
+  border-radius: 14px !important;
+  border: 1px solid rgba(0, 184, 255, .18) !important;
+  background: linear-gradient(180deg, #151b24 0%, #101721 100%) !important;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, .64), 0 0 0 1px rgba(255, 255, 255, .025) inset !important;
+}
+
+.order-modal-head {
+  padding: 22px 26px 12px !important;
+}
+
+.order-modal-head h3 {
+  font-size: 22px !important;
+  font-weight: 900 !important;
+}
+
+.order-modal-head p strong {
+  color: var(--blue-2) !important;
+  font-size: 34px !important;
+  font-weight: 950 !important;
+}
+
+.order-modal-head .icon-button {
+  border-radius: 10px !important;
+  color: var(--muted) !important;
+}
+
+.order-ticket-summary {
+  padding: 0 26px 16px !important;
+  border-bottom-color: rgba(166, 190, 226, .14) !important;
+}
+
+.order-ticket-summary span,
+.order-label,
+.order-input-label small,
+.order-quote span {
+  color: var(--muted) !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+}
+
+.order-ticket-summary strong {
+  font-size: 15px !important;
+  font-weight: 900 !important;
+}
+
+.order-modal-body {
+  padding: 16px 26px 18px !important;
+  gap: 15px !important;
+}
+
+.order-trader {
+  min-height: 78px !important;
+  border-color: rgba(166, 190, 226, .14) !important;
+  border-radius: 12px !important;
+  background: rgba(7, 13, 23, .62) !important;
+}
+
+.order-trader strong {
+  font-size: 18px !important;
+  font-weight: 900 !important;
+}
+
+.order-methods.selectable button {
+  min-height: 38px !important;
+  padding: 0 14px !important;
+  border-radius: 10px !important;
+  border-color: rgba(0, 184, 255, .24) !important;
+  background: rgba(0, 153, 255, .08) !important;
+  color: var(--blue-2) !important;
+}
+
+.order-methods.selectable button.active {
+  border-color: rgba(0, 184, 255, .7) !important;
+  background: rgba(0, 153, 255, .14) !important;
+  box-shadow: 0 0 0 3px rgba(0, 153, 255, .08) !important;
+}
+
+.order-methods.selectable button span,
+.order-methods.selectable button.active span {
+  background: var(--blue-2) !important;
+}
+
+.order-input-label > span {
+  color: var(--muted) !important;
+  font-weight: 900 !important;
+}
+
+.order-input-row {
+  min-height: 58px !important;
+  border-radius: 12px !important;
+  border-color: rgba(166, 190, 226, .2) !important;
+  background: #080d15 !important;
+  transition: border-color .18s ease, box-shadow .18s ease, background .18s ease !important;
+}
+
+.order-input-row:focus-within {
+  border-color: rgba(0, 184, 255, .52) !important;
+  box-shadow: 0 0 0 3px rgba(0, 153, 255, .08) !important;
+  background: #060b12 !important;
+}
+
+.order-input-row input,
+.order-input-row input:focus,
+.order-input-row input:focus-visible {
+  outline: 0 !important;
+  box-shadow: none !important;
+  border: 0 !important;
+}
+
+.order-input-row input {
+  font-size: 20px !important;
+  font-weight: 800 !important;
+}
+
+.order-input-row button {
+  min-width: 76px !important;
+  background: rgba(255, 255, 255, .045) !important;
+  color: var(--text) !important;
+}
+
+.order-quote {
+  padding: 12px 0 0 !important;
+}
+
+.order-quote strong {
+  font-size: 18px !important;
+  font-weight: 950 !important;
+}
+
+.order-escrow-note {
+  padding: 11px 13px !important;
+  border-color: rgba(0, 184, 255, .2) !important;
+  background: rgba(0, 153, 255, .06) !important;
+}
+
+.order-modal-footer {
+  padding: 16px 26px 22px !important;
+  background: rgba(5, 9, 15, .78) !important;
+  border-top-color: rgba(166, 190, 226, .12) !important;
+}
+
+.order-modal-footer .app-button,
+.order-ticket-modal.buy .buy-button,
+.order-ticket-modal.sell .sell-button {
+  min-height: 54px !important;
+  border: 1px solid rgba(0, 184, 255, .55) !important;
+  border-radius: 12px !important;
+  background: linear-gradient(135deg, var(--blue), #18c7f3) !important;
+  color: #fff !important;
+  font-size: 15px !important;
+  font-weight: 950 !important;
+  box-shadow: 0 16px 34px rgba(0, 153, 255, .22) !important;
+}
+
+.order-modal-footer .app-button:disabled {
+  opacity: .62 !important;
+  cursor: not-allowed !important;
+}
+
+@media (max-width: 640px) {
+  .order-ticket-modal {
+    border-radius: 16px 16px 0 0 !important;
+  }
+
+  .order-modal-head,
+  .order-ticket-summary,
+  .order-modal-body,
+  .order-modal-footer {
+    padding-left: 18px !important;
+    padding-right: 18px !important;
+  }
+}
+
+/* Keep P2P order confirm visible on every viewport. */
+.order-modal-backdrop {
+  z-index: 3000 !important;
+  align-items: center !important;
+}
+
+.order-ticket-modal {
+  max-height: min(760px, calc(100dvh - 28px)) !important;
+  display: grid !important;
+  grid-template-rows: auto auto minmax(0, 1fr) auto !important;
+  overflow: hidden !important;
+}
+
+.order-modal-body {
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+}
+
+.order-modal-footer {
+  position: relative !important;
+  z-index: 2 !important;
+  flex-shrink: 0 !important;
+}
+
+.order-escrow-note {
+  display: none !important;
+}
+
+@media (max-width: 640px) {
+  .order-modal-backdrop {
+    align-items: end !important;
+    padding: 0 !important;
+  }
+
+  .order-ticket-modal {
+    width: 100% !important;
+    max-height: calc(100dvh - 8px) !important;
+    border-radius: 16px 16px 0 0 !important;
+  }
+
+  .order-modal-head {
+    padding-top: 16px !important;
+    padding-bottom: 8px !important;
+  }
+
+  .order-modal-head h3 {
+    font-size: 20px !important;
+    margin-bottom: 6px !important;
+  }
+
+  .order-modal-head p strong {
+    font-size: 30px !important;
+  }
+
+  .order-ticket-summary {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 12px !important;
+    padding-bottom: 12px !important;
+  }
+
+  .order-ticket-summary span,
+  .order-label,
+  .order-input-label small,
+  .order-quote span {
+    font-size: 12px !important;
+  }
+
+  .order-modal-body {
+    gap: 12px !important;
+    padding-top: 12px !important;
+    padding-bottom: 12px !important;
+  }
+
+  .order-trader {
+    min-height: 68px !important;
+    padding: 10px 12px !important;
+  }
+
+  .trader-avatar {
+    width: 46px !important;
+    height: 46px !important;
+    flex-basis: 46px !important;
+  }
+
+  .order-trader strong {
+    font-size: 16px !important;
+  }
+
+  .order-trader small {
+    font-size: 11px !important;
+  }
+
+  .order-methods.selectable button {
+    min-height: 36px !important;
+  }
+
+  .order-input-label {
+    align-items: start !important;
+    flex-direction: column !important;
+    gap: 4px !important;
+  }
+
+  .order-input-row {
+    min-height: 54px !important;
+    grid-template-columns: minmax(0, 1fr) 54px 70px !important;
+  }
+
+  .order-input-row input {
+    font-size: 18px !important;
+    padding-left: 12px !important;
+  }
+
+  .order-input-row input::placeholder {
+    font-size: 16px !important;
+  }
+
+  .order-input-row > span {
+    padding: 0 8px !important;
+    text-align: center !important;
+  }
+
+  .order-input-row button {
+    min-width: 70px !important;
+  }
+
+  .order-quote {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px !important;
+  }
+
+  .order-quote div:last-child {
+    text-align: right !important;
+  }
+
+  .order-quote strong {
+    font-size: 16px !important;
+  }
+
+  .order-modal-footer {
+    padding: 12px 18px calc(14px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .order-modal-footer .app-button,
+  .order-ticket-modal.buy .buy-button,
+  .order-ticket-modal.sell .sell-button {
+    min-height: 52px !important;
+  }
+}
+
+@media (max-height: 720px) and (min-width: 641px) {
+  .order-ticket-modal {
+    max-height: calc(100dvh - 20px) !important;
+  }
+
+  .order-modal-head {
+    padding-top: 16px !important;
+  }
+
+  .order-modal-body {
+    gap: 11px !important;
+  }
+
+  .order-trader {
+    min-height: 66px !important;
+  }
+}
