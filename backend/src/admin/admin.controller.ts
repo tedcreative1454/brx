@@ -1,4 +1,4 @@
-﻿import { Body, Controller, Get, Headers, Param, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Param, Patch, Post } from "@nestjs/common";
 import { AuthService } from "../auth/auth.service";
 import { TradesService } from "../trades/trades.service";
 import { AdminService } from "./admin.service";
@@ -23,6 +23,15 @@ export class AdminController {
     return this.admin.users();
   }
 
+  @Patch("users/:userId/label")
+  async updateUserLabel(
+    @Headers("authorization") authorization: string | undefined,
+    @Param("userId") userId: string,
+    @Body() body: { traderLabel?: string; reason?: string },
+  ) {
+    const admin = await this.auth.requireAdmin(authorization);
+    return this.admin.updateUserLabel(admin.id, userId, body);
+  }
   @Patch("users/:userId/status")
   async updateUserStatus(
     @Headers("authorization") authorization: string | undefined,

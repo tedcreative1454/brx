@@ -48,6 +48,8 @@ interface TradeRow {
   offer_price?: string;
   buyer_email?: string;
   seller_email?: string;
+  buyer_last_seen_at?: Date | null;
+  seller_last_seen_at?: Date | null;
   dispute_status?: string | null;
   dispute_id?: string | null;
   evidence?: unknown;
@@ -97,6 +99,8 @@ export class TradesService {
     const result = await this.db.query<TradeRow>(
       `SELECT t.*, o.side AS offer_side, o.price AS offer_price,
               buyer.email AS buyer_email, seller.email AS seller_email,
+              (SELECT MAX(last_seen_at) FROM user_sessions WHERE user_id = buyer.id AND revoked_at IS NULL AND expires_at > now()) AS buyer_last_seen_at,
+              (SELECT MAX(last_seen_at) FROM user_sessions WHERE user_id = seller.id AND revoked_at IS NULL AND expires_at > now()) AS seller_last_seen_at,
               d.id AS dispute_id, d.status AS dispute_status
        FROM trades t
        JOIN offers o ON o.id = t.offer_id
@@ -118,6 +122,8 @@ export class TradesService {
     const result = await this.db.query<TradeRow>(
       `SELECT t.*, o.side AS offer_side, o.price AS offer_price,
               buyer.email AS buyer_email, seller.email AS seller_email,
+              (SELECT MAX(last_seen_at) FROM user_sessions WHERE user_id = buyer.id AND revoked_at IS NULL AND expires_at > now()) AS buyer_last_seen_at,
+              (SELECT MAX(last_seen_at) FROM user_sessions WHERE user_id = seller.id AND revoked_at IS NULL AND expires_at > now()) AS seller_last_seen_at,
               d.id AS dispute_id, d.status AS dispute_status,
               COALESCE((
                 SELECT json_agg(json_build_object(
@@ -491,6 +497,8 @@ export class TradesService {
     const result = await this.db.query<TradeRow & { opened_by_email?: string; dispute_created_at?: Date }>(
       `SELECT t.*, o.side AS offer_side, o.price AS offer_price,
               buyer.email AS buyer_email, seller.email AS seller_email,
+              (SELECT MAX(last_seen_at) FROM user_sessions WHERE user_id = buyer.id AND revoked_at IS NULL AND expires_at > now()) AS buyer_last_seen_at,
+              (SELECT MAX(last_seen_at) FROM user_sessions WHERE user_id = seller.id AND revoked_at IS NULL AND expires_at > now()) AS seller_last_seen_at,
               d.id AS dispute_id, d.status AS dispute_status, d.created_at AS dispute_created_at,
               opened.email AS opened_by_email,
               COALESCE((
@@ -821,6 +829,9 @@ export class TradesService {
       counterpartyEmail: role === "buyer" ? row.seller_email : row.buyer_email,
       buyerEmail: row.buyer_email,
       sellerEmail: row.seller_email,
+      buyerLastSeenAt: row.buyer_last_seen_at,
+      sellerLastSeenAt: row.seller_last_seen_at,
+      counterpartyLastSeenAt: role === "buyer" ? row.seller_last_seen_at : row.buyer_last_seen_at,
       paymentSentAt: row.payment_sent_at,
       paymentReference: row.payment_reference,
       paymentProofUrl: row.payment_proof_url,
@@ -850,4 +861,5 @@ export class TradesService {
     return number;
   }
 }
+
 

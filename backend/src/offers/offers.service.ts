@@ -16,7 +16,10 @@ interface OfferRow {
   created_at: Date;
   email?: string;
   username?: string | null;
+  trader_label?: string | null;
+  advertiser_avatar_url?: string | null;
   completed_trades?: string;
+  advertiser_last_seen_at?: Date | null;
 }
 
 export interface CreateOfferInput {
@@ -41,15 +44,23 @@ export class OffersService {
     if (normalizedSide) params.push(normalizedSide);
 
     const result = await this.db.query<OfferRow>(
-      `SELECT o.*, u.email, u.username,
-              COUNT(t.id) FILTER (WHERE t.status = 'released')::text AS completed_trades
+      `SELECT o.*, u.email, u.username, u.trader_label, p.avatar_url AS advertiser_avatar_url, sess.last_seen_at AS advertiser_last_seen_at,
+              COUNT(DISTINCT t.id) FILTER (WHERE t.status = 'released')::text AS completed_trades
        FROM offers o
        JOIN users u ON u.id = o.user_id
+       LEFT JOIN user_profiles p ON p.user_id = u.id
+       LEFT JOIN LATERAL (
+         SELECT MAX(last_seen_at) AS last_seen_at
+         FROM user_sessions
+         WHERE user_id = u.id
+           AND revoked_at IS NULL
+           AND expires_at > now()
+       ) sess ON true
        LEFT JOIN trades t ON t.offer_id = o.id
        WHERE o.status = 'active'
          AND o.available_amount > 0
          ${sideFilter}
-       GROUP BY o.id, u.email, u.username
+       GROUP BY o.id, u.email, u.username, u.trader_label, p.avatar_url, sess.last_seen_at
        ORDER BY
          CASE WHEN o.side = 'sell' THEN o.price END ASC,
          CASE WHEN o.side = 'buy' THEN o.price END DESC,
@@ -62,13 +73,21 @@ export class OffersService {
 
   async myOffers(userId: string) {
     const result = await this.db.query<OfferRow>(
-      `SELECT o.*, u.email, u.username,
-              COUNT(t.id) FILTER (WHERE t.status = 'released')::text AS completed_trades
+      `SELECT o.*, u.email, u.username, u.trader_label, p.avatar_url AS advertiser_avatar_url, sess.last_seen_at AS advertiser_last_seen_at,
+              COUNT(DISTINCT t.id) FILTER (WHERE t.status = 'released')::text AS completed_trades
        FROM offers o
        JOIN users u ON u.id = o.user_id
+       LEFT JOIN user_profiles p ON p.user_id = u.id
+       LEFT JOIN LATERAL (
+         SELECT MAX(last_seen_at) AS last_seen_at
+         FROM user_sessions
+         WHERE user_id = u.id
+           AND revoked_at IS NULL
+           AND expires_at > now()
+       ) sess ON true
        LEFT JOIN trades t ON t.offer_id = o.id
        WHERE o.user_id = $1
-       GROUP BY o.id, u.email, u.username
+       GROUP BY o.id, u.email, u.username, u.trader_label, p.avatar_url, sess.last_seen_at
        ORDER BY o.created_at DESC`,
       [userId],
     );
@@ -184,7 +203,10 @@ export class OffersService {
       paymentMethods: row.payment_methods ?? [],
       status: row.status,
       advertiser: row.username || emailName,
+      traderLabel: row.trader_label || "",
+      avatarUrl: row.advertiser_avatar_url || "",
       completedTrades: Number(row.completed_trades ?? 0),
+      advertiserLastSeenAt: row.advertiser_last_seen_at,
       createdAt: row.created_at,
     };
   }
@@ -247,3 +269,11 @@ export class OffersService {
     return [...new Set(clean)];
   }
 }
+
+
+
+
+
+
+
+

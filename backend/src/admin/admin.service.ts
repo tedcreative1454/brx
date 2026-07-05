@@ -1,4 +1,4 @@
-﻿import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { DatabaseService } from "../database/database.service";
 
 interface LimitRow {
@@ -87,7 +87,7 @@ export class AdminService {
 
   async users() {
     const result = await this.db.query(
-      `SELECT u.id, u.email, u.username, u.kyc_status, u.status, u.role, u.email_verified_at, u.created_at,
+      `SELECT u.id, u.email, u.username, u.kyc_status, u.status, u.role, u.trader_label, u.email_verified_at, u.created_at,
               COALESCE(b.available_balance, 0)::text AS available_balance,
               COALESCE(b.locked_balance, 0)::text AS locked_balance,
               COALESCE(b.pending_withdrawal, 0)::text AS pending_withdrawal
@@ -99,6 +99,25 @@ export class AdminService {
     return { users: result.rows.map((row) => this.keysToCamel(row)) };
   }
 
+  async updateUserLabel(adminId: string, userId: string, body: { traderLabel?: string; reason?: string }) {
+    const label = String(body.traderLabel ?? "").trim();
+    if (label.length > 18) throw new BadRequestException("Trader label must be 18 characters or fewer.");
+    if (label && !/^[a-zA-Z0-9 _-]+$/.test(label)) throw new BadRequestException("Trader label can use letters, numbers, spaces, dash, or underscore.");
+
+    const result = await this.db.query(
+      `UPDATE users SET trader_label = $2 WHERE id = $1 RETURNING id, email, trader_label`,
+      [userId, label || null],
+    );
+    if (!result.rowCount) throw new NotFoundException("User was not found.");
+
+    await this.db.query(
+      `INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, metadata)
+       VALUES ($1, 'admin.user_label_changed', 'user', $2, $3::jsonb)`,
+      [adminId, userId, JSON.stringify({ traderLabel: label, reason: body.reason ?? "" })],
+    );
+
+    return { user: this.keysToCamel(result.rows[0]) };
+  }
   async updateUserStatus(adminId: string, userId: string, body: { status?: string; reason?: string }) {
     const status = String(body.status ?? "").trim().toLowerCase();
     if (!["active", "suspended", "closed"].includes(status)) throw new BadRequestException("Status must be active, suspended, or closed.");
