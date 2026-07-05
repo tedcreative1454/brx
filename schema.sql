@@ -121,14 +121,14 @@ CREATE TABLE user_profiles (
 CREATE TABLE user_settings (
   user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   notification_preferences JSONB NOT NULL DEFAULT '{"emailVerification":true,"tradeUpdates":true,"depositAlerts":true,"withdrawalAlerts":true,"marketing":false}',
-  trade_preferences JSONB NOT NULL DEFAULT '{"market":"ETB/USDT","preferredPaymentRails":["M-Pesa","Bank transfer","Airtel Money"]}',
+  trade_preferences JSONB NOT NULL DEFAULT '{"market":"ETB/USDT","preferredPaymentRails":["Telebirr","M-Pesa","CBE Birr"]}',
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE payment_methods (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  type TEXT NOT NULL CHECK (type IN ('mpesa', 'airtel_money', 'bank', 'other')),
+  type TEXT NOT NULL CHECK (type IN ('telebirr', 'mpesa', 'cbe_birr', 'airtel_money', 'bank', 'other')),
   label TEXT NOT NULL,
   account_name TEXT NOT NULL,
   phone_number TEXT,
@@ -197,6 +197,7 @@ CREATE TABLE trades (
   fiat TEXT NOT NULL DEFAULT 'ETB',
   asset_amount NUMERIC(28, 8) NOT NULL CHECK (asset_amount > 0),
   fiat_amount NUMERIC(20, 2) NOT NULL CHECK (fiat_amount > 0),
+  payment_method TEXT,
   status trade_status NOT NULL DEFAULT 'opened',
   payment_sent_at TIMESTAMPTZ,
   released_at TIMESTAMPTZ,
@@ -206,6 +207,15 @@ CREATE TABLE trades (
   disputed_at TIMESTAMPTZ,
   dispute_reason TEXT,
   resolved_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE trade_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  trade_id UUID NOT NULL REFERENCES trades(id) ON DELETE CASCADE,
+  sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  body TEXT NOT NULL CHECK (char_length(body) BETWEEN 1 AND 1000),
+  read_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -278,6 +288,22 @@ CREATE TABLE dispute_evidence (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  entity_type TEXT,
+  entity_id UUID,
+  action_url TEXT,
+  idempotency_key TEXT NOT NULL,
+  is_read BOOLEAN NOT NULL DEFAULT false,
+  read_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, idempotency_key)
+);
+
 CREATE TABLE audit_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   actor_id UUID REFERENCES users(id),
@@ -309,6 +335,8 @@ CREATE INDEX idx_offers_market_status ON offers(fiat, asset, side, status, price
 CREATE INDEX idx_trades_buyer_status ON trades(buyer_id, status, created_at DESC);
 CREATE INDEX idx_trades_seller_status ON trades(seller_id, status, created_at DESC);
 CREATE INDEX idx_trades_status_expires ON trades(status, expires_at);
+CREATE INDEX idx_trade_messages_trade_created ON trade_messages(trade_id, created_at ASC);
+CREATE INDEX idx_trade_messages_unread ON trade_messages(trade_id, sender_id, created_at ASC) WHERE read_at IS NULL;
 CREATE INDEX idx_deposits_user_status ON deposits(user_id, status, created_at DESC);
 CREATE INDEX idx_deposits_tx_log ON deposits(tx_hash, log_index);
 CREATE INDEX idx_withdrawals_user_status ON withdrawals(user_id, status, created_at DESC);
@@ -317,6 +345,8 @@ CREATE INDEX idx_withdrawals_broadcast_queue ON withdrawals(status, broadcast_at
 CREATE INDEX idx_users_password_changed_at ON users(password_changed_at);
 CREATE INDEX idx_disputes_status_created ON disputes(status, created_at DESC);
 CREATE INDEX idx_dispute_evidence_dispute_created ON dispute_evidence(dispute_id, created_at DESC);
+CREATE INDEX idx_notifications_user_created ON notifications(user_id, created_at DESC);
+CREATE INDEX idx_notifications_user_unread ON notifications(user_id, created_at DESC) WHERE is_read = false;
 CREATE INDEX idx_kyc_submissions_user_status ON kyc_submissions(user_id, status, created_at DESC);
 CREATE INDEX idx_audit_logs_actor_created ON audit_logs(actor_id, created_at DESC);
 

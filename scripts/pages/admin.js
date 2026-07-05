@@ -7,80 +7,118 @@
   const { icon } = window.BRX.icons;
   const { format } = window.BRX.utils;
   const adminService = window.BRX.adminService;
+  const components = window.BRX.components;
 
   let adminState = { stats: null, submissions: [], selected: null, limits: [], disputes: [], users: [], deposits: [], withdrawals: [], trades: [], auditLogs: [] };
+  let adminUserSearch = "";
+  let adminUserStatusFilter = "all";
 
   function renderAdmin() {
     const user = requireUser();
     if (!user) return;
     if (user.role !== "admin") {
       refs.app.innerHTML = `
-        <section class="exchange-app app-page-narrow">
-          <section class="warning-card"><h3>Admin access required</h3><p>This area is only available to BRX admins.</p></section>
+        <section class="exchange-app app-page-narrow admin-access-denied">
+          <section class="warning-card">${icon("shield")}<div><h3>Admin access required</h3><p>This operations area is restricted to authorized BRX administrators.</p></div><a class="app-ghost-button small" href="#/dashboard">Return to dashboard</a></section>
         </section>
       `;
       return;
     }
 
     refs.app.innerHTML = `
-      <section class="exchange-app app-page-wide admin-page">
-        <section id="adminOverview" class="admin-hero">
-          <div class="settings-head">
-            <p class="app-label blue">Admin</p>
-            <h2>BRX Operations Dashboard</h2>
-            <p>Monitor users, KYC reviews, escrow disputes, marketplace activity, and risk limits.</p>
+      <section class="exchange-app app-page-wide admin-page admin-console-page">
+        <header id="adminOverview" class="admin-console-hero">
+          <div class="admin-console-title">
+            <span class="admin-console-mark">${icon("shield")}</span>
+            <div><p class="app-label blue">Restricted operations</p><h1>BRX Admin Console</h1><p>Monitor platform health, review identities, protect escrow, and control operational risk.</p></div>
           </div>
-          <div id="adminStats" class="admin-stats-grid">${loadingBlock("Loading platform statistics")}</div>
+          <div class="admin-console-actions">
+            <span class="admin-access-badge"><i></i>Administrator</span>
+            <button class="admin-refresh-button" id="refreshAdmin" type="button">${icon("activity")} Refresh data</button>
+          </div>
+        </header>
+
+        <section class="admin-console-section admin-metrics-section">
+          <div class="admin-console-section-head"><div><p class="app-label">Platform overview</p><h2>Live operations</h2></div><span>Database-backed metrics</span></div>
+          <div id="adminStats" class="admin-stats-grid professional-admin-stats">${loadingBlock("Loading platform statistics")}</div>
         </section>
 
-        <section id="adminKyc" class="admin-section">
-          <div class="admin-section-head">
-            <div><p class="app-label blue">Identity</p><h3>KYC Review Queue</h3></div>
-            <span class="settings-badge neutral">Manual review</span>
+        <section id="adminUsers" class="admin-console-section admin-users-section">
+          <div class="admin-console-section-head">
+            <div><p class="app-label blue">User management</p><h2>Accounts</h2><small>Search users, review verification state, and freeze suspicious accounts quickly.</small></div>
+            <span class="admin-section-badge">${icon("user")} Manage users</span>
           </div>
-          <div class="admin-grid">
-            <section class="settings-card settings-card-flat admin-queue">
-              <div class="settings-card-head"><div><h3>${icon("shield")} Pending Submissions</h3><p>Newest pending documents appear first.</p></div></div>
+          <div id="adminUsersBody">${loadingBlock("Loading users")}</div>
+        </section>
+
+        <section id="adminKyc" class="admin-console-section admin-review-section">
+          <div class="admin-console-section-head">
+            <div><p class="app-label blue">Identity operations</p><h2>KYC review center</h2><small>Inspect submitted documents before changing account limits.</small></div>
+            <span class="admin-section-badge">${icon("shield")} Manual decision</span>
+          </div>
+          <div class="admin-grid professional-admin-review-grid">
+            <section class="admin-console-panel admin-queue">
+              <div class="admin-panel-head"><div><span>${icon("activity")}</span><div><h3>Review queue</h3><p>Newest submissions appear first.</p></div></div></div>
               <div id="kycQueue">${loadingBlock("Loading KYC submissions")}</div>
             </section>
-
-            <section class="settings-card settings-card-flat admin-detail">
-              <div class="settings-card-head"><div><h3>${icon("user")} Submission Detail</h3><p>Open an item to inspect uploaded ID and selfie files.</p></div></div>
-              <div id="kycDetail">${emptyBlock("No submission selected", "Choose a KYC submission from the queue.")}</div>
+            <section class="admin-console-panel admin-detail">
+              <div class="admin-panel-head"><div><span>${icon("user")}</span><div><h3>Submission details</h3><p>Select a user to inspect their files.</p></div></div></div>
+              <div id="kycDetail">${emptyBlock("No submission selected", "Choose a KYC submission from the review queue.")}</div>
             </section>
           </div>
         </section>
 
-        <section id="adminDisputes" class="settings-card settings-card-flat admin-disputes-card">
-          <div class="settings-card-head"><div><h3>${icon("trades")} Trade Disputes</h3><p>Resolve locked escrow to buyer or seller after reviewing evidence.</p></div></div>
+        <section id="adminDisputes" class="admin-console-section admin-disputes-card">
+          <div class="admin-console-section-head"><div><p class="app-label blue">Escrow protection</p><h2>Trade disputes</h2><small>Review evidence before releasing or returning locked USDT.</small></div><span class="admin-section-badge warning">${icon("trades")} Decision required</span></div>
           <div id="disputeQueue">${loadingBlock("Loading disputes")}</div>
         </section>
 
-        <section id="adminOps" class="settings-card settings-card-flat admin-ops-card">
-          <div class="settings-card-head"><div><h3>${icon("activity")} Operations</h3><p>Users, wallet operations, trade activity, and audit logs.</p></div><button class="app-button small" type="button" id="processWithdrawals">Process withdrawals</button></div>
+        <section id="adminOps" class="admin-console-section admin-ops-card">
+          <div class="admin-console-section-head"><div><p class="app-label blue">Operations feed</p><h2>Platform activity</h2><small>Users, deposits, withdrawals, trades, and immutable audit events.</small></div><button class="admin-process-button" type="button" id="processWithdrawals">${icon("upload")} Process withdrawals</button></div>
           <div id="adminOpsBody">${loadingBlock("Loading operations")}</div>
         </section>
 
-        <section id="adminLimits" class="settings-card settings-form-card admin-limits-card">
-          <div class="settings-card-head"><div><h3>${icon("lock")} Tier Limits</h3><p>Limits are stored in PostgreSQL and used by risk checks.</p></div></div>
-          <div id="limitEditor">${loadingBlock("Loading tier limits")}</div>
-        </section>
+        <div class="admin-console-bottom-grid">
+          <section id="adminLimits" class="admin-console-section admin-limits-card">
+            <div class="admin-console-section-head"><div><p class="app-label blue">Risk controls</p><h2>Tier limits</h2><small>Enforced by PostgreSQL risk checks.</small></div>${icon("lock")}</div>
+            <div id="limitEditor">${loadingBlock("Loading tier limits")}</div>
+          </section>
 
-        <section id="adminSettings" class="settings-card settings-card-flat admin-settings-card">
-          <div class="settings-card-head"><div><h3>${icon("settings")} Admin Settings</h3><p>Launch configuration and operator-only controls.</p></div></div>
-          <div class="admin-settings-grid">
-            ${settingTile("Domain", "brxp2p.com", "Production domain reserved for launch.")}
-            ${settingTile("Custody model", "Platform controlled", "Deposits and withdrawals use platform wallets.")}
-            ${settingTile("Primary network", "USDT BEP20", "BNB Smart Chain through the wallet service.")}
-            ${settingTile("Email provider", "Resend", "Verification and security emails.")}
-            ${settingTile("Manual KYC", "Enabled", "Admins approve, reject, and set higher limits.")}
-            ${settingTile("Escrow ledger", "Database only", "P2P trades do not broadcast blockchain transactions.")}
-          </div>
-        </section>
+          <section id="adminSettings" class="admin-console-section admin-settings-card">
+            <div class="admin-console-section-head"><div><p class="app-label blue">System profile</p><h2>Launch configuration</h2><small>Read-only summary of production services.</small></div>${icon("settings")}</div>
+            <div class="admin-settings-grid">
+              ${settingTile("Domain", "brxp2p.com", "Production domain reserved for launch.")}
+              ${settingTile("Custody", "Platform controlled", "Deposits and withdrawals use platform wallets.")}
+              ${settingTile("Network", "USDT BEP20", "BNB Smart Chain wallet settlement.")}
+              ${settingTile("Email", "Resend", "Verification and security messages.")}
+              ${settingTile("KYC", "Manual review", "Admin approval raises account limits.")}
+              ${settingTile("Escrow", "Internal ledger", "P2P trades remain off-chain.")}
+            </div>
+          </section>
+        </div>
       </section>
     `;
 
+    document.querySelector("#refreshAdmin")?.addEventListener("click", (event) => refreshAdminConsole(event.currentTarget));
     void loadAdminData();
+  }
+
+  async function refreshAdminConsole(button) {
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Refreshing...";
+    }
+    try {
+      await loadAdminData();
+      showToast("Admin data refreshed.");
+    } catch (error) {
+      showToast(error.message || "Could not refresh admin data.");
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.innerHTML = `${icon("activity")} Refresh data`;
+      }
+    }
   }
 
   async function loadAdminData() {
@@ -118,12 +156,14 @@
     adminState.auditLogs = result.auditLogs.ok ? result.auditLogs.value.auditLogs || [] : [];
 
     renderStats();
+    renderAdminUsers();
     renderKycQueue();
     renderDisputes();
     renderLimitEditor();
     renderOperations();
 
     if (!result.stats.ok) document.querySelector("#adminStats").innerHTML = errorBlock(adminError(result.stats.error, "Could not load platform statistics."));
+    if (!result.users.ok) document.querySelector("#adminUsersBody").innerHTML = errorBlock(adminError(result.users.error, "Could not load users."));
     if (!result.kyc.ok) document.querySelector("#kycQueue").innerHTML = errorBlock(adminError(result.kyc.error, "Could not load KYC submissions."));
     if (!result.disputes.ok) document.querySelector("#disputeQueue").innerHTML = errorBlock(adminError(result.disputes.error, "Could not load disputes."));
     if (!result.limits.ok) document.querySelector("#limitEditor").innerHTML = errorBlock(adminError(result.limits.error, "Could not load tier limits."));
@@ -161,13 +201,90 @@
 
   function statCard(label, value, detail, iconName) {
     return `
-      <article class="admin-stat-card">
+      <article class="admin-stat-card ${escapeAttr(iconName)}">
         <span class="admin-stat-icon">${icon(iconName)}</span>
         <div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(detail)}</small></div>
       </article>
     `;
   }
 
+  function renderAdminUsers() {
+    const body = document.querySelector("#adminUsersBody");
+    if (!body) return;
+    const users = filteredAdminUsers();
+    const activeCount = adminState.users.filter((user) => user.status === "active").length;
+    const suspendedCount = adminState.users.filter((user) => user.status === "suspended").length;
+    const pendingKycCount = adminState.users.filter((user) => user.kycStatus === "pending").length;
+
+    body.innerHTML = `
+      <div class="admin-user-toolbar">
+        <label class="admin-user-search">${icon("user")}<input id="adminUserSearch" value="${escapeAttr(adminUserSearch)}" placeholder="Search by email, role, or status" /></label>
+        <div class="admin-user-filters" role="tablist" aria-label="Filter users">
+          ${userFilterButton("all", "All", adminState.users.length)}
+          ${userFilterButton("active", "Active", activeCount)}
+          ${userFilterButton("suspended", "Suspended", suspendedCount)}
+          ${userFilterButton("pending", "Pending KYC", pendingKycCount)}
+        </div>
+      </div>
+      ${users.length ? `
+        <div class="admin-user-table" role="table" aria-label="BRX users">
+          <div class="admin-user-row admin-user-head" role="row"><span>User</span><span>KYC</span><span>Status</span><span>Role</span><span>Joined</span><span></span></div>
+          ${users.map(adminUserRow).join("")}
+        </div>
+      ` : emptyBlock("No users found", "Adjust search or filters to see more accounts.")}
+    `;
+
+    document.querySelector("#adminUserSearch")?.addEventListener("input", (event) => {
+      adminUserSearch = event.currentTarget.value;
+      renderAdminUsers();
+    });
+    document.querySelectorAll("[data-admin-user-filter]").forEach((button) => {
+      button.addEventListener("click", () => {
+        adminUserStatusFilter = button.dataset.adminUserFilter || "all";
+        renderAdminUsers();
+      });
+    });
+    bindUserStatusButtons();
+  }
+
+  function filteredAdminUsers() {
+    const query = adminUserSearch.trim().toLowerCase();
+    return adminState.users.filter((user) => {
+      const status = String(user.status || "active").toLowerCase();
+      const kyc = String(user.kycStatus || "unsubmitted").toLowerCase();
+      if (adminUserStatusFilter === "active" && status !== "active") return false;
+      if (adminUserStatusFilter === "suspended" && status !== "suspended") return false;
+      if (adminUserStatusFilter === "pending" && kyc !== "pending") return false;
+      if (!query) return true;
+      return [user.email, user.role, status, kyc].some((value) => String(value || "").toLowerCase().includes(query));
+    });
+  }
+
+  function userFilterButton(key, label, count) {
+    return `<button class="${adminUserStatusFilter === key ? "active" : ""}" type="button" data-admin-user-filter="${key}"><span>${escapeHtml(label)}</span><strong>${number(count)}</strong></button>`;
+  }
+
+  function adminUserRow(user) {
+    const status = String(user.status || "active");
+    const kyc = String(user.kycStatus || "unsubmitted");
+    const frozen = status === "suspended";
+    return `
+      <div class="admin-user-row" role="row">
+        <span class="admin-user-main"><strong>${escapeHtml(user.email)}</strong><small>${escapeHtml(user.id || "")}</small></span>
+        <span><em class="admin-pill ${escapeAttr(kyc)}">${escapeHtml(kycLabel(kyc))}</em></span>
+        <span><em class="admin-pill ${escapeAttr(status)}">${escapeHtml(statusLabel(status))}</em></span>
+        <span>${escapeHtml(user.role || "user")}</span>
+        <span>${adminDate(user.createdAt)}</span>
+        <span class="admin-user-actions"><button class="outline-button tiny" type="button" data-user-id="${escapeAttr(user.id)}" data-user-status="${frozen ? "active" : "suspended"}">${frozen ? "Unfreeze" : "Freeze"}</button></span>
+      </div>
+    `;
+  }
+
+  function bindUserStatusButtons() {
+    document.querySelectorAll("[data-user-status]").forEach((button) => {
+      button.addEventListener("click", () => changeUserStatus(button.dataset.userId, button.dataset.userStatus));
+    });
+  }
   function renderKycQueue() {
     const queue = document.querySelector("#kycQueue");
     queue.innerHTML = adminState.submissions.length
@@ -309,14 +426,21 @@
       </div>
     `;
 
-    document.querySelectorAll("[data-user-status]").forEach((button) => {
-      button.addEventListener("click", () => changeUserStatus(button.dataset.userId, button.dataset.userStatus));
-    });
-    document.querySelector("#processWithdrawals")?.addEventListener("click", processWithdrawals);
+    bindUserStatusButtons();
+    const processButton = document.querySelector("#processWithdrawals");
+    if (processButton) processButton.onclick = processWithdrawals;
   }
 
   function operationPanel(title, content) {
-    return `<article class="admin-operation-panel"><h4>${escapeHtml(title)}</h4><div class="admin-mini-list">${content}</div></article>`;
+    return `<article class="admin-operation-panel ${escapeAttr(title.toLowerCase().replace(/\s+/g, "-"))}"><div class="admin-operation-head"><h4>${escapeHtml(title)}</h4><span>${icon(operationIcon(title))}</span></div><div class="admin-mini-list">${content}</div></article>`;
+  }
+
+  function operationIcon(title) {
+    if (title === "Users") return "user";
+    if (title === "Withdrawals") return "upload";
+    if (title === "Deposits") return "download";
+    if (title === "Trades") return "trades";
+    return "activity";
   }
 
   function userRow(user) {
@@ -359,6 +483,7 @@
       adminState.users = users.users || [];
       adminState.auditLogs = auditLogs.auditLogs || [];
       renderStats();
+      renderAdminUsers();
       renderOperations();
     } catch (error) {
       showToast(error.message || "Could not update user.");
@@ -374,6 +499,7 @@
       adminState.withdrawals = withdrawals.withdrawals || [];
       adminState.auditLogs = auditLogs.auditLogs || [];
       renderStats();
+      renderAdminUsers();
       renderOperations();
     } catch (error) {
       showToast(error.message || "Could not process withdrawals.");
@@ -425,6 +551,24 @@
     `;
   }
 
+  function kycLabel(status) {
+    if (status === "approved") return "Approved";
+    if (status === "pending") return "Pending";
+    if (status === "rejected") return "Rejected";
+    return "Unsubmitted";
+  }
+
+  function statusLabel(status) {
+    if (status === "suspended") return "Suspended";
+    if (status === "closed") return "Closed";
+    return "Active";
+  }
+
+  function adminDate(value) {
+    if (!value) return "--";
+    return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }
+
   function settingTile(label, value, detail) {
     return `
       <div class="admin-setting-tile">
@@ -441,11 +585,11 @@
   }
 
   function loadingBlock(text) {
-    return `<div class="settings-empty"><span class="mini-icon">...</span><strong>${escapeHtml(text)}</strong></div>`;
+    return components.loadingState(text, "Syncing the latest BRX data.", "admin-loading-state");
   }
 
   function emptyBlock(title, detail) {
-    return `<div class="settings-empty"><span class="mini-icon">ID</span><strong>${escapeHtml(title)}</strong><span>${escapeHtml(detail)}</span></div>`;
+    return components.emptyState({ iconName: "info", title, detail, className: "admin-empty-state" });
   }
 
   function errorBlock(message) {
@@ -476,5 +620,7 @@
 
   window.BRX.pages.renderAdmin = renderAdmin;
 })();
+
+
 
 

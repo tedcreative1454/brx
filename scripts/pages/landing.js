@@ -10,78 +10,90 @@
 
   function renderLanding(scrollTarget = null) {
     refs.app.innerHTML = `
-      <div class="landing">
-        <section class="hero">
-          <div class="hero-copy">
-            <div class="badge">P2P USDT / ETB Exchange</div>
-            <h1>Buy & Sell USDT with <span class="accent">Kenyan Shillings.</span></h1>
-            <p class="hero-text">Trade directly with verified users, protected by BRX escrow and settled through a clean internal ledger. Deposits and withdrawals start with USDT BEP20 on BNB Smart Chain.</p>
-            <div class="hero-actions">
-              <a class="primary-button large" href="#/register">Get started</a>
-              <a class="secondary-button large" href="#/login">Sign in</a>
+      <div class="landing landing-redesign">
+        <section class="landing-hero-v4">
+          <div class="landing-hero-grid">
+            <div class="hero-copy hero-v4-copy">
+              <div class="hero-kicker"><span></span>ETB / USDT P2P exchange</div>
+              <h1>Trade USDT with Ethiopian Birr.</h1>
+              <p class="hero-text">BRX connects verified ETB traders with escrow-protected USDT settlement on BEP20.</p>
+
+              <div class="hero-actions hero-v4-actions">
+                <a class="primary-button large" href="#/register">Get started</a>
+                <a class="secondary-button large" href="#/market">View market</a>
+              </div>
+
+              <div class="hero-proof-row hero-v4-proof" aria-label="BRX operating highlights">
+                <div><strong>185</strong><span>ETB reference</span></div>
+                <div><strong>15</strong><span>BEP20 confirmations</span></div>
+                <div><strong>Escrow</strong><span>Internal ledger</span></div>
+              </div>
             </div>
 
-            <section class="calculator-card" aria-label="Live rate P2P calculator">
-              <div class="card-top">
-                <p class="eyebrow">Live rate calculator</p>
-                <span class="rate-note">1 USDT = <strong id="rateText">${format(RATE)} ETB</strong></span>
-              </div>
-              <div class="segmented">
-                <button class="active" type="button" data-side="buy">Buy USDT</button>
-                <button type="button" data-side="sell">Sell USDT</button>
-              </div>
-              <div class="trade-inputs">
-                <label class="input-box">
-                  <span id="payLabel">Pay</span>
-                  <input id="kesInput" value="10000" inputmode="decimal" />
-                  <b>ETB</b>
-                </label>
-                <label class="input-box">
-                  <span id="receiveLabel">Receive</span>
-                  <input id="usdtInput" value="76.98" inputmode="decimal" />
-                  <b>USDT</b>
-                </label>
-              </div>
-              <div class="payment-row"><strong>Live market pricing</strong><span>M-Pesa, bank transfer</span></div>
-              <a class="primary-button full" href="#/register">Start trading free -></a>
-            </section>
-          </div>
+            <aside class="hero-exchange-panel" aria-label="BRX exchange preview">
+              <header class="exchange-panel-head">
+                <div>
+                  <span>BRX market</span>
+                  <strong>ETB/USDT</strong>
+                </div>
+                <em><i></i>Live</em>
+              </header>
 
-          <div class="phone-wrap" aria-label="BRX app preview">
-            <section class="phone-shell">
-              <div class="phone-status"><span>3:33</span><span>5G 82%</span></div>
-              <div class="phone-user"><span class="avatar">B</span><strong>verified trader</strong><span class="muted">BRX</span></div>
-              <article class="phone-card">
-                <small>Total wallet balance</small>
-                <strong>500.00 <span class="muted">USDT</span></strong>
-                <div class="phone-actions"><button>Buy</button><button>Sell</button><button>Deposit</button><button>Withdraw</button></div>
-              </article>
-              <article class="phone-card">
-                <small>Live index rate</small>
-                <strong>185.00 <span class="muted">ETB</span></strong>
-                <p class="muted">Per USDT marketplace index</p>
-              </article>
-              <div class="bottom-tabs"><span>M</span><span>A</span><span>W</span></div>
-            </section>
-          </div>
-        </section>
+              <div class="exchange-rate-strip">
+                <span>Reference rate</span>
+                <strong>1 USDT = <b id="rateText">${format(RATE)} ETB</b></strong>
+              </div>
 
-        <section class="section" id="features">
-          <div class="section-head"><div><p class="eyebrow">Features</p><h2>Simple enough to trust. Strong enough to operate.</h2></div></div>
-          <div class="feature-grid">
-            <article class="feature-card"><h3>Custodial USDT wallet</h3><p>BRX controls deposit and withdrawal wallets while users trade from internal balances.</p></article>
-            <article class="feature-card"><h3>Database escrow</h3><p>Seller USDT moves from available to locked when a buyer opens a trade.</p></article>
-            <article class="feature-card"><h3>Manual KYC</h3><p>Admin review unlocks higher limits, merchant ads, and full withdrawals.</p></article>
+              <section class="hero-rate-panel hero-panel-section" aria-label="ETB USDT rate calculator">
+                <div class="segmented hero-segmented">
+                  <button class="active" type="button" data-side="buy">Buy USDT</button>
+                  <button type="button" data-side="sell">Sell USDT</button>
+                </div>
+                <div class="trade-inputs hero-trade-inputs">
+                  <label class="input-box">
+                    <span id="payLabel">Pay</span>
+                    <input id="etbInput" value="10000" inputmode="decimal" aria-label="ETB amount" />
+                    <b>ETB</b>
+                  </label>
+                  <label class="input-box">
+                    <span id="receiveLabel">Receive</span>
+                    <input id="usdtInput" value="54.05" inputmode="decimal" aria-label="USDT amount" />
+                    <b>USDT</b>
+                  </label>
+                </div>
+              </section>
+
+              <div class="market-preview-list" aria-label="Sample market offers">
+                <div class="market-preview-row"><span>Seller</span><strong>185.00 ETB</strong><em>Telebirr</em></div>
+                <div class="market-preview-row"><span>Seller</span><strong>186.25 ETB</strong><em>CBE Birr</em></div>
+                <div class="market-preview-row muted-row"><span>Buyer</span><strong>184.00 ETB</strong><em>Bank</em></div>
+              </div>
+
+              <footer class="exchange-panel-foot">
+                <span>Escrow locked</span>
+                <span>Bank transfer</span>
+                <span>USDT BEP20</span>
+              </footer>
+            </aside>
           </div>
         </section>
 
-        <section class="section" id="how-it-works">
-          <div class="section-head"><div><p class="eyebrow">How it works</p><h2>Start trading in minutes</h2></div><a class="primary-button" href="#/register">Get started</a></div>
-          <div class="steps-grid">
-            <article class="step-card"><span>01</span><h3>Create account</h3><p>Sign up with email and verify your account.</p></article>
-            <article class="step-card"><span>02</span><h3>Browse market</h3><p>Compare ETB rates from BRX traders.</p></article>
-            <article class="step-card"><span>03</span><h3>Pay seller</h3><p>Send ETB outside BRX using M-Pesa or bank.</p></article>
-            <article class="step-card"><span>04</span><h3>Receive USDT</h3><p>Seller confirms and escrow releases internally.</p></article>
+        <section class="section landing-band" id="features">
+          <div class="section-head"><div><p class="eyebrow">Features</p><h2>Built for a real ETB/USDT desk.</h2></div></div>
+          <div class="feature-grid landing-feature-grid">
+            <article class="feature-card"><h3>Custodial wallet rail</h3><p>USDT deposits and withdrawals start on BNB Smart Chain while P2P trades settle internally.</p></article>
+            <article class="feature-card"><h3>Ledger escrow</h3><p>Seller funds move from available to locked when a buyer opens a trade, then release after payment confirmation.</p></article>
+            <article class="feature-card"><h3>Manual review</h3><p>KYC, disputes, withdrawals, and limits are controlled from the BRX admin console.</p></article>
+          </div>
+        </section>
+
+        <section class="section landing-band" id="how-it-works">
+          <div class="section-head"><div><p class="eyebrow">How it works</p><h2>Four steps from quote to release.</h2></div><a class="primary-button" href="#/register">Get started</a></div>
+          <div class="steps-grid landing-steps-grid">
+            <article class="step-card"><span>01</span><h3>Create account</h3><p>Sign up and verify your email before wallet access.</p></article>
+            <article class="step-card"><span>02</span><h3>Open a trade</h3><p>Choose an ETB offer and BRX locks seller USDT in escrow.</p></article>
+            <article class="step-card"><span>03</span><h3>Pay seller</h3><p>Send ETB outside BRX using Telebirr, CBE Birr, or bank.</p></article>
+            <article class="step-card"><span>04</span><h3>Receive USDT</h3><p>Seller confirms payment and escrow releases internally.</p></article>
           </div>
         </section>
       </div>
@@ -92,23 +104,23 @@
 
   function bindCalculator() {
     const sideButtons = document.querySelectorAll("[data-side]");
-    const kesInput = document.querySelector("#kesInput");
+    const etbInput = document.querySelector("#etbInput");
     const usdtInput = document.querySelector("#usdtInput");
     const payLabel = document.querySelector("#payLabel");
     const receiveLabel = document.querySelector("#receiveLabel");
     const rateText = document.querySelector("#rateText");
 
-    function updateFromKes() {
+    function updateFromEtb() {
       if (editing) return;
       editing = true;
-      usdtInput.value = format(toNumber(kesInput.value) / currentRate(activeSide), 2);
+      usdtInput.value = format(toNumber(etbInput.value) / currentRate(activeSide), 2);
       editing = false;
     }
 
     function updateFromUsdt() {
       if (editing) return;
       editing = true;
-      kesInput.value = format(toNumber(usdtInput.value) * currentRate(activeSide), 2);
+      etbInput.value = format(toNumber(usdtInput.value) * currentRate(activeSide), 2);
       editing = false;
     }
 
@@ -118,13 +130,13 @@
       payLabel.textContent = side === "buy" ? "Pay" : "Receive";
       receiveLabel.textContent = side === "buy" ? "Receive" : "Sell";
       rateText.textContent = `${format(currentRate(activeSide))} ETB`;
-      updateFromKes();
+      updateFromEtb();
     }
 
     sideButtons.forEach((button) => button.addEventListener("click", () => setSide(button.dataset.side)));
-    kesInput.addEventListener("input", updateFromKes);
+    etbInput.addEventListener("input", updateFromEtb);
     usdtInput.addEventListener("input", updateFromUsdt);
-    updateFromKes();
+    updateFromEtb();
   }
 
   window.BRX.pages.renderLanding = renderLanding;

@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   window.BRX = window.BRX || {};
 
   const { refs } = window.BRX.ui;
@@ -18,13 +18,36 @@
     return new URLSearchParams(query);
   }
 
+  function routeTitle(route) {
+    const titles = {
+      dashboard: "Dashboard",
+      market: "P2P Market",
+      ads: "My Ads",
+      trades: "Trades",
+      wallet: "Wallet",
+      kyc: "Identity Verification",
+      profile: "Profile",
+      settings: "Settings",
+      notifications: "Notifications",
+      referrals: "Refer & Earn",
+      admin: "Admin Console",
+      login: "Sign In",
+      register: "Create Account",
+    };
+    return `${titles[route] || "Buy & Sell USDT with ETB"} · BRX`;
+  }
+
   async function render() {
     const route = routeName();
     const requiresAppSession = window.BRX.config.APP_ROUTES.includes(route);
+    document.body.dataset.route = route;
+    document.title = routeTitle(route);
+    refs.app.setAttribute("aria-busy", "true");
 
     if (requiresAppSession && window.BRX.state.accessToken()) {
       const hydratedUser = await window.BRX.profileService.hydrateSession();
       if (!hydratedUser) {
+        refs.app.setAttribute("aria-busy", "false");
         location.hash = "#/login";
         return;
       }
@@ -44,6 +67,7 @@
     else if (route === "kyc") pages.renderKyc();
     else if (route === "profile") pages.renderProfile();
     else if (route === "settings") pages.renderSettings();
+    else if (route === "notifications") pages.renderNotifications();
     else if (route === "referrals") pages.renderReferrals();
     else if (route === "admin") pages.renderAdmin();
     else if (route === "features") pages.renderLanding("features");
@@ -51,6 +75,7 @@
     else pages.renderLanding();
 
     renderHeader();
+    refs.app.setAttribute("aria-busy", "false");
     refs.app.focus({ preventScroll: true });
   }
 

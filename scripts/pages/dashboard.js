@@ -2,7 +2,7 @@
   window.BRX = window.BRX || {};
   window.BRX.pages = window.BRX.pages || {};
 
-  const { RATE } = window.BRX.config;
+  const { RATE, SELL_RATE } = window.BRX.config;
   const { requireUser, currentUser } = window.BRX.state;
   const { refs } = window.BRX.ui;
   const { displayName, format, greeting } = window.BRX.utils;
@@ -12,43 +12,83 @@
     const user = requireUser();
     if (!user) return;
 
+    const rawName = displayName(user);
+    const name = escapeHtml(rawName);
+    const status = kycMeta(user);
+
     refs.app.innerHTML = `
-      <section class="exchange-app">
-        <p class="app-greeting">${greeting()}, <strong>${displayName(user)}</strong></p>
-        <div class="app-overview-grid">
+      <section class="exchange-app dashboard-page">
+        <header class="dashboard-welcome">
+          <div>
+            <p class="dashboard-eyebrow">Account overview</p>
+            <h1>${greeting()}, ${name}</h1>
+            <p>Monitor your funds, enter the P2P market, and manage your account from one place.</p>
+          </div>
+          <a class="dashboard-profile-status" href="#/settings?tab=profile" aria-label="Open account settings">
+            ${profileAvatar(user, rawName)}
+            <span class="dashboard-profile-copy"><small>Signed in as</small><strong>${name}</strong><em><i class="${status.tone}"></i>${status.label}</em></span>
+            <span class="dashboard-profile-open">${icon("external")}</span>
+          </a>
+        </header>
+
+        <div class="dashboard-primary-grid">
           ${walletSummaryCard()}
           ${rateCard()}
         </div>
-        ${kycBanner()}
-        <div class="shortcut-row">
-          ${shortcutCard("Post a New Ad", "Create custom sell or buy orders", "Ad", "#/ads")}
-          ${shortcutCard("Transfer USDT", "Send instant funds to BRX users", "USDT", "#/wallet?mode=transfer")}
-          ${shortcutCard("Refer & Earn", "Invite friends, earn USDT", "Refer", "#/dashboard")}
-        </div>
-        <section class="security-strip">
-          <span class="mini-icon">2FA</span>
-          <div><h3>Enable 2FA</h3><p>Protect your account with an authenticator app before withdrawals.</p></div>
-          <button class="app-ghost-button" type="button">Enable</button>
+
+        <section class="dashboard-quick-section" aria-labelledby="quickActionsTitle">
+          <div class="dashboard-section-heading">
+            <div><p class="dashboard-eyebrow">Workspace</p><h2 id="quickActionsTitle">Quick access</h2></div>
+            <a href="#/wallet">View wallet ${icon("external")}</a>
+          </div>
+          <div class="dashboard-shortcuts">
+            ${shortcutCard("Post an ad", "Create a P2P buy or sell offer", "ads", "#/ads")}
+            ${shortcutCard("Transfer USDT", "Send funds to another BRX user", "send", "#/wallet?mode=transfer")}
+            ${shortcutCard("Trade history", "Track active and completed orders", "trades", "#/trades")}
+            ${shortcutCard("Refer & earn", "Invite friends to join BRX", "gift", "#/referrals")}
+          </div>
         </section>
+
+        <div class="dashboard-account-grid">
+          ${kycBanner()}
+          ${securityCard()}
+        </div>
       </section>
     `;
   }
 
   function walletSummaryCard() {
     const balance = normalizedBalance(currentUser());
-    const total = Number(balance.available) + Number(balance.locked) + Number(balance.pendingDeposit) + Number(balance.pendingWithdrawal);
+    const available = Number(balance.available) || 0;
+    const locked = Number(balance.locked) || 0;
+    const pendingDeposit = Number(balance.pendingDeposit) || 0;
+    const pendingWithdrawal = Number(balance.pendingWithdrawal) || 0;
+    const pending = pendingDeposit + pendingWithdrawal;
+    const total = available + locked + pending;
+
     return `
-      <section class="app-card wallet-summary dashboard-wallet-compact">
-        <div>
-          <p class="app-label">Total balance</p>
-          <h2>${format(total)} <span>USDT</span></h2>
-          <p class="app-muted">Deposit USDT to get started</p>
+      <section class="dashboard-balance-card">
+        <div class="dashboard-card-head">
+          <div><span class="dashboard-card-icon">${icon("wallet")}</span><div><p class="dashboard-eyebrow">Portfolio</p><h2>Total balance</h2></div></div>
+          <span class="dashboard-network"><i></i>BEP20</span>
         </div>
-        <div class="wallet-actions">
-          ${roundAction("Buy", "buy", "#/market")}
-          ${roundAction("Sell", "sell", "#/market")}
-          ${roundAction("Deposit", "deposit", "#/wallet?mode=deposit")}
-          ${roundAction("Withdraw", "withdraw", "#/wallet?mode=withdraw")}
+
+        <div class="dashboard-balance-value">
+          <strong>${format(total)}</strong><span>USDT</span>
+          <small>&asymp; ${format(total * RATE)} ETB at the reference rate</small>
+        </div>
+
+        <div class="dashboard-balance-breakdown">
+          ${balanceItem("Available", available, "available")}
+          ${balanceItem("In escrow", locked, "escrow")}
+          ${pending > 0 ? balanceItem("Pending", pending, "pending") : ""}
+        </div>
+
+        <div class="dashboard-wallet-actions">
+          ${walletAction("Buy", "buyArrow", "buy", "#/market")}
+          ${walletAction("Sell", "sellArrow", "sell", "#/market")}
+          ${walletAction("Deposit", "download", "neutral", "#/wallet?mode=deposit")}
+          ${walletAction("Withdraw", "upload", "neutral", "#/wallet?mode=withdraw")}
         </div>
       </section>
     `;
@@ -56,43 +96,119 @@
 
   function rateCard() {
     return `
-      <section class="app-card rate-card">
-        <div class="rate-head"><p class="app-label blue">Live Rate</p><a class="app-button small" href="#/market">Trade ${icon("market")}</a></div>
-        <h2>${format(RATE)} <span>ETB</span></h2>
-        <p class="app-muted">Per USDT</p>
-        <div class="best-rates"><div><strong>184.00</strong><span>Best buy</span></div><div><strong>186.00</strong><span>Best sell</span></div></div>
+      <section class="dashboard-market-card">
+        <div class="dashboard-card-head">
+          <div><span class="dashboard-card-icon market">${icon("activity")}</span><div><p class="dashboard-eyebrow">P2P market</p><h2>Reference rate</h2></div></div>
+          <span class="dashboard-live"><i></i>Online</span>
+        </div>
+
+        <div class="dashboard-rate-value"><strong>${format(RATE)}</strong><span>ETB / USDT</span></div>
+
+        <div class="dashboard-rate-range">
+          <div><span>Sell reference</span><strong class="sell">${format(SELL_RATE)}</strong></div>
+          <div><span>Buy reference</span><strong>${format(RATE)}</strong></div>
+        </div>
+
+        <p class="dashboard-escrow-note">${icon("shield")} Seller funds are secured in BRX escrow during every trade.</p>
+        <a class="dashboard-market-link" href="#/market">Open P2P market ${icon("external")}</a>
       </section>
     `;
   }
 
-  function roundAction(label, tone, href) {
-    return `<a class="round-action ${tone}" href="${href}"><strong>${label}</strong></a>`;
+  function walletAction(label, iconName, tone, href) {
+    return `<a class="dashboard-wallet-action ${tone}" href="${href}"><span>${icon(iconName)}</span><strong>${label}</strong></a>`;
+  }
+
+  function balanceItem(label, value, tone) {
+    return `<div class="${tone}"><span>${label}</span><strong>${format(value)} <small>USDT</small></strong></div>`;
   }
 
   function kycBanner() {
-    const user = currentUser();
-    const pending = user?.kycStatus === "pending";
+    const meta = kycMeta(currentUser());
     return `
-      <a class="kyc-banner" href="#/kyc">
-        <div class="kyc-top"><span class="mini-icon">ID</span><div><h3>${pending ? "Identity review pending" : "Verify your identity - unlock 5,000 USDT limits"}</h3><p>${pending ? "Your uploaded documents are waiting for manual admin review." : "Unverified limit is 1,000 USDT. Upload your ID photos and selfie for manual admin review."}</p></div><span class="kyc-open">${pending ? "View" : "Open"}</span></div>
-        <div class="kyc-limits">
-          <div><span>Unverified</span><strong>1,000 USDT</strong></div>
-          <div><span>Verified</span><strong>5,000 USDT</strong></div>
-          <div><span>Merchant</span><strong>100,000 USDT</strong></div>
-          <div><span>Network</span><strong>BEP20</strong></div>
+      <a class="dashboard-status-card kyc" href="#/kyc">
+        <div class="dashboard-status-icon">${icon("shield")}</div>
+        <div class="dashboard-status-copy">
+          <div><p class="dashboard-eyebrow">Identity verification</p><span class="dashboard-status-badge ${meta.tone}">${meta.label}</span></div>
+          <h3>${meta.title}</h3>
+          <p>${meta.copy}</p>
+          <div class="dashboard-status-progress"><span style="width:${meta.progress}%"></span></div>
+          <small>${meta.limit}</small>
         </div>
+        <span class="dashboard-status-arrow">${icon("external")}</span>
       </a>
     `;
   }
 
-  function shortcutCard(title, text, icon, href) {
-    return `<a class="shortcut-card" href="${href}"><span class="mini-icon">${icon}</span><div><h3>${title}</h3><p>${text}</p></div><span class="chevron">></span></a>`;
+  function securityCard() {
+    return `
+      <a class="dashboard-status-card security" href="#/settings?tab=security">
+        <div class="dashboard-status-icon">${icon("fingerprint")}</div>
+        <div class="dashboard-status-copy">
+          <div><p class="dashboard-eyebrow">Account security</p><span class="dashboard-status-badge neutral">Review</span></div>
+          <h3>Protect your BRX account</h3>
+          <p>Manage two-factor authentication, active sessions, and your sign-in password.</p>
+          <ul><li>${icon("check")} Authenticator protection</li><li>${icon("check")} Session controls</li></ul>
+        </div>
+        <span class="dashboard-status-arrow">${icon("external")}</span>
+      </a>
+    `;
+  }
+
+  function shortcutCard(title, text, iconName, href) {
+    return `
+      <a class="dashboard-shortcut" href="${href}">
+        <span class="dashboard-shortcut-icon">${icon(iconName)}</span>
+        <div><h3>${title}</h3><p>${text}</p></div>
+        <span class="dashboard-shortcut-arrow">${icon("external")}</span>
+      </a>
+    `;
+  }
+
+  function kycMeta(user) {
+    const status = String(user?.kycStatus || "unsubmitted").toLowerCase();
+    if (status === "approved") {
+      return { label: "Verified", tone: "success", title: "Identity verified", copy: "Your account has increased limits and full verified access.", limit: "Current account limit: 5,000 USDT", progress: 100 };
+    }
+    if (status === "pending") {
+      return { label: "In review", tone: "pending", title: "Verification is being reviewed", copy: "Your documents are with the BRX review team. You can check their status anytime.", limit: "Current account limit: 1,000 USDT", progress: 66 };
+    }
+    if (status === "rejected") {
+      return { label: "Action needed", tone: "danger", title: "Update your verification", copy: "Review the feedback and submit clear, current identity documents.", limit: "Current account limit: 1,000 USDT", progress: 28 };
+    }
+    return { label: "Unverified", tone: "neutral", title: "Unlock higher trading limits", copy: "Verify your identity to increase your account limit and build trust with traders.", limit: "1,000 USDT now · 5,000 USDT after verification", progress: 32 };
+  }
+
+  function profileAvatar(user, fallbackName) {
+    const avatarUrl = String(user?.avatarUrl || "").trim();
+    if (avatarUrl) {
+      return `<span class="dashboard-avatar has-image" aria-hidden="true"><img src="${escapeAttr(avatarUrl)}" alt="" /></span>`;
+    }
+    return `<span class="dashboard-avatar" aria-hidden="true">${initials(fallbackName)}</span>`;
+  }
+
+  function initials(name) {
+    return String(name).split(/[\s._-]+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "BR";
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, (character) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#039;",
+    }[character]));
+  }
+
+  function escapeAttr(value) {
+    return escapeHtml(value).replace(/`/g, "&#96;");
   }
 
   function normalizedBalance(user) {
     return user?.balance || window.BRX.profileService.emptyBalance();
   }
 
-  window.BRX.components = { kycBanner };
+  window.BRX.components = { ...(window.BRX.components || {}), kycBanner };
   window.BRX.pages.renderDashboard = renderDashboard;
 })();

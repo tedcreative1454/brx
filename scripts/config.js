@@ -9,7 +9,7 @@
     PENDING_KEY: "brx_pending_email_v1",
     THEME_KEY: "brx_theme_v1",
     API_BASES: ["http://127.0.0.1:3000/api", "http://localhost:3000/api"],
-    APP_ROUTES: ["dashboard", "market", "ads", "trades", "wallet", "kyc", "profile", "settings", "referrals", "admin"],
+    APP_ROUTES: ["dashboard", "market", "ads", "trades", "wallet", "kyc", "profile", "settings", "notifications", "referrals", "admin"],
     NETWORKS: Object.freeze([
       Object.freeze({
         id: "BEP20",

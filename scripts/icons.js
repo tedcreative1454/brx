@@ -27,6 +27,8 @@
     calendar: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/></svg>',
     key: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="7.5" cy="14.5" r="4.5"/><path d="m11 11 9-9M16 6l2 2M14 8l2 2"/></svg>',
     fingerprint: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 11a3 3 0 0 1 3 3c0 1.7-.4 3.2-1.1 4.7M8.9 20.2c.8-1.5 1.1-3.5 1.1-6.2a2 2 0 0 1 4 0M17.8 17.6c.2-1.1.2-2.2.2-3.6a6 6 0 0 0-12 0c0 1.8-.3 3.4-.9 4.8M4 15.7c.1-.6.1-1.1.1-1.7a8 8 0 0 1 13.6-5.7M20 14a8 8 0 0 0-.4-2.5M9.5 4.4A10 10 0 0 1 22 14"/></svg>',
+    buyArrow: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 7 7 17M7 10v7h7"/></svg>',
+    sellArrow: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M10 7h7v7"/></svg>',
     activity: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>',
     database: '<svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>',
     external: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3h7v7M21 3l-9 9"/><path d="M12 5H5v14h14v-7"/></svg>',

@@ -12,30 +12,66 @@
   const marketplace = window.BRX.marketplaceService;
   const accountService = window.BRX.accountService;
   const securityService = window.BRX.securityService;
+  const notificationService = window.BRX.notificationService;
 
   let activeWalletMode = "deposit";
   const selectedWalletNetwork = { deposit: "", withdraw: "" };
   let showOfferForm = false;
+  let showPaymentMethodForm = false;
+  let offerRequirementsLoading = false;
+  let adStatusFilter = "all";
+  let lastMyOffers = [];
   let tradeCountdownTimer = null;
+  let tradeChatTimer = null;
+  let tradeChatLoading = false;
+  let tradeChatSignature = "";
+  let tradeStatusFilter = "all";
+  let lastMyTrades = [];
 
   function renderAds() {
     const user = requireUser();
     if (!user) return;
     refs.app.innerHTML = `
-      <section class="exchange-app app-page-narrow">
-        <div class="page-title"><h2>Your Ads</h2><button class="app-button" id="toggleOfferForm" type="button">${showOfferForm ? "Close" : "+ New Ad"}</button></div>
-        ${showOfferForm ? offerForm() : ""}
-        <div id="adsContent"><section class="empty-panel compact"><span class="mini-icon">...</span><h3>Loading ads</h3></section></div>
+      <section class="exchange-app app-page-narrow ads-page ${showOfferForm ? "ad-composer-page" : ""}">
+        <div class="page-title ad-page-title">
+          <div>
+            <p class="app-label blue">P2P marketplace</p>
+            <h2>${showOfferForm ? "Create new ad" : "Your Ads"}</h2>
+            <p class="app-muted">${showOfferForm ? "Set your price, order limits, and how traders will pay you." : "Manage active, paused, and completed marketplace listings."}</p>
+          </div>
+          <button class="${showOfferForm ? "app-ghost-button" : "app-button"}" id="toggleOfferForm" type="button">${showOfferForm ? "Back to ads" : "+ New Ad"}</button>
+        </div>
+        ${showOfferForm ? offerForm(user) : `<div id="adsContent"><section class="empty-panel compact"><span class="mini-icon">...</span><h3>Loading ads</h3></section></div>`}
       </section>
     `;
     document.querySelector("#toggleOfferForm").addEventListener("click", () => {
       showOfferForm = !showOfferForm;
       renderAds();
     });
-    document.querySelector("#offerForm")?.addEventListener("submit", handleCreateOffer);
-    void loadMyAds();
-  }
 
+    if (showOfferForm) {
+      document.querySelector("#offerForm")?.addEventListener("submit", handleCreateOffer);
+      document.querySelectorAll("[data-offer-side]").forEach((button) => {
+        button.addEventListener("click", () => {
+          document.querySelector("#offerSide").value = button.dataset.offerSide;
+          updateOfferEligibility();
+        });
+      });
+      ["offerAmount", "offerPrice", "offerMin", "offerMax"].forEach((id) => {
+        document.querySelector(`#${id}`)?.addEventListener("input", updateOfferEligibility);
+      });
+      document.querySelectorAll(".offer-method-grid input").forEach((input) => input.addEventListener("change", updateOfferEligibility));
+      document.querySelector("[data-use-max]")?.addEventListener("click", () => {
+        const amount = document.querySelector("#offerAmount");
+        if (amount) amount.value = String(Number(currentUser()?.balance?.available || 0));
+        updateOfferEligibility();
+      });
+      updateOfferEligibility();
+      if (!user.accountSettingsLoaded) void loadOfferRequirements();
+    } else {
+      void loadMyAds();
+    }
+  }
   function renderTrades() {
     const user = requireUser();
     if (!user) return;
@@ -44,77 +80,249 @@
       clearInterval(tradeCountdownTimer);
       tradeCountdownTimer = null;
     }
+    if (tradeChatTimer) {
+      clearInterval(tradeChatTimer);
+      tradeChatTimer = null;
+    }
     refs.app.innerHTML = `
-      <section class="exchange-app app-page-narrow">
-        <div class="page-title">
-          <div>
-            <p class="app-label blue">${tradeId ? "Trade detail" : "P2P trades"}</p>
-            <h2>${tradeId ? "Escrow trade" : "My Trades"}</h2>
-          </div>
-          <a class="app-button" href="${tradeId ? "#/trades" : "#/market"}">${tradeId ? "Back to trades" : "Trade"}</a>
-        </div>
-        <div id="tradesContent"><section class="empty-panel compact"><span class="mini-icon">...</span><h3>Loading trades</h3></section></div>
+      <section class="exchange-app app-page-narrow professional-trades-page ${tradeId ? "trade-detail-page" : "trade-list-page"}">
+        ${tradeId ? "" : `
+          <header class="professional-page-head">
+            <div><p class="app-label blue">P2P workspace</p><h1>My trades</h1><p>Track every order, payment, escrow release, and dispute in one place.</p></div>
+            <a class="professional-primary-link" href="#/market">${icon("trades")} Start a trade</a>
+          </header>
+        `}
+        <div id="tradesContent"><section class="professional-loading-card"><span></span><div><strong>Loading ${tradeId ? "trade room" : "your trades"}</strong><small>Syncing with BRX escrow...</small></div></section></div>
       </section>
     `;
     if (tradeId) void loadTradeDetail(tradeId);
     else void loadMyTrades();
   }
-
-  function offerForm() {
+  function offerForm(user) {
+    const methods = user.paymentMethods || [];
+    const available = Number(user.balance?.available || 0);
+    const settingsReady = Boolean(user.accountSettingsLoaded);
+    const disabled = !settingsReady || !methods.length || available <= 0;
     return `
-      <form class="offer-form" id="offerForm">
-        <div class="kyc-form-grid">
-          <label class="form-field"><span>Ad type</span><select id="offerSide" required><option value="sell">Sell USDT</option><option value="buy">Buy USDT</option></select></label>
-          <label class="form-field"><span>USDT amount</span><input id="offerAmount" inputmode="decimal" placeholder="100.00" required /></label>
-          <label class="form-field"><span>Price per USDT in ETB</span><input id="offerPrice" inputmode="decimal" placeholder="185.00" required /></label>
-          <label class="form-field"><span>Minimum ETB order</span><input id="offerMin" inputmode="decimal" placeholder="1000" required /></label>
-          <label class="form-field"><span>Maximum ETB order</span><input id="offerMax" inputmode="decimal" placeholder="10000" required /></label>
+      <form class="offer-composer" id="offerForm">
+        <input id="offerSide" type="hidden" value="sell" />
+        <div class="offer-composer-layout">
+          <div class="offer-composer-main">
+            <section class="offer-composer-section">
+              <div class="offer-section-head"><span>1</span><div><h3>Choose ad direction</h3><p>Decide whether traders buy USDT from you or sell USDT to you.</p></div></div>
+              <div class="offer-side-switch" role="group" aria-label="Ad direction">
+                <button class="active sell" type="button" data-offer-side="sell" aria-pressed="true"><strong>Sell USDT</strong><small>Receive ETB from buyers</small></button>
+                <button class="buy" type="button" data-offer-side="buy" aria-pressed="false"><strong>Buy USDT</strong><small>Pay ETB to sellers</small></button>
+              </div>
+            </section>
+
+            <section class="offer-composer-section">
+              <div class="offer-section-head"><span>2</span><div><h3>Set inventory and price</h3><p>Enter the amount available and your fixed ETB price.</p></div></div>
+              <div class="offer-field-grid">
+                <label class="offer-input-field"><span>USDT amount</span><div><input id="offerAmount" inputmode="decimal" autocomplete="off" placeholder="100.00" required /><b>USDT</b></div></label>
+                <label class="offer-input-field"><span>Price per USDT</span><div><input id="offerPrice" inputmode="decimal" autocomplete="off" placeholder="185.00" required /><b>ETB</b></div></label>
+              </div>
+            </section>
+
+            <section class="offer-composer-section">
+              <div class="offer-section-head"><span>3</span><div><h3>Set order limits</h3><p>Define the smallest and largest ETB order a trader can open.</p></div></div>
+              <div class="offer-field-grid">
+                <label class="offer-input-field"><span>Minimum order</span><div><input id="offerMin" inputmode="decimal" autocomplete="off" placeholder="500.00" required /><b>ETB</b></div></label>
+                <label class="offer-input-field"><span>Maximum order</span><div><input id="offerMax" inputmode="decimal" autocomplete="off" placeholder="5,000.00" required /><b>ETB</b></div></label>
+              </div>
+            </section>
+
+            <section class="offer-composer-section payment-section">
+              <div class="offer-section-head"><span>4</span><div><h3>Payment methods</h3><p id="offerPaymentCopy">Choose where buyers will send ETB.</p></div><a href="#/settings?tab=payments">Manage</a></div>
+              ${methods.length ? `
+                <div class="offer-method-grid payment-methods">
+                  ${methods.map((method, index) => `
+                    <label class="offer-method-option">
+                      <input type="checkbox" value="${escapeAttr(method.label)}" ${index === 0 ? "checked" : ""} />
+                      <span class="offer-method-mark">${escapeHtml(String(method.label || "P").slice(0, method.type === "cbe_birr" ? 3 : 1).toUpperCase())}</span>
+                      <span><strong>${escapeHtml(method.label)}</strong><small>${escapeHtml(method.phoneNumber || method.accountNumber || "Account linked")}</small></span>
+                      <i>${icon("check")}</i>
+                    </label>
+                  `).join("")}
+                </div>
+              ` : `<div class="offer-missing-method">${icon("info")}<div><strong>Payment method required</strong><span>Add Telebirr, M-Pesa, or CBE Birr before publishing an ad.</span></div><a href="#/settings?tab=payments">Add method</a></div>`}
+            </section>
+          </div>
+
+          <aside class="offer-summary-panel">
+            <div class="offer-summary-head"><span>Ad preview</span><strong id="offerPreviewSide">Sell USDT</strong></div>
+            <div class="offer-balance-card" data-sell-requirement>
+              <div><span>Available to sell</span><strong>${format(available)} USDT</strong></div>
+              <button type="button" data-use-max>Use max</button>
+            </div>
+            <div class="offer-summary-rows">
+              <div><span>Inventory</span><strong id="offerPreviewAmount">-- USDT</strong></div>
+              <div><span>Fixed price</span><strong id="offerPreviewPrice">-- ETB</strong></div>
+              <div><span>Total ad value</span><strong id="offerPreviewTotal">-- ETB</strong></div>
+              <div><span>Order limits</span><strong id="offerPreviewLimits">-- ETB</strong></div>
+              <div><span>Payment methods</span><strong id="offerPreviewMethods">1 selected</strong></div>
+            </div>
+            <div class="offer-eligibility" id="offerEligibilityBox"><span></span><p id="offerEligibilityMessage">Complete the ad details to continue.</p></div>
+            <div class="form-error" id="formError"></div>
+            <button class="app-button offer-publish-button" id="postOfferButton" type="submit" ${disabled ? "disabled" : ""}>Publish sell ad</button>
+            <small class="offer-publish-note">Your ad becomes visible on the marketplace immediately after publishing.</small>
+          </aside>
         </div>
-        <div class="payment-methods">
-          <label><input type="checkbox" value="M-Pesa" checked /> M-Pesa</label>
-          <label><input type="checkbox" value="Bank" /> Bank</label>
-          <label><input type="checkbox" value="Airtel Money" /> Airtel Money</label>
-        </div>
-        <div class="form-error" id="formError"></div>
-        <button class="app-button" type="submit">Post Ad</button>
       </form>
     `;
   }
+  async function loadOfferRequirements() {
+    if (offerRequirementsLoading || !accountService) return;
+    offerRequirementsLoading = true;
+    try {
+      await accountService.loadSettings();
+      if (window.BRX.router.routeName() === "ads" && showOfferForm) renderAds();
+    } catch (error) {
+      showError(error.message || "Could not load your wallet and payment methods.");
+    } finally {
+      offerRequirementsLoading = false;
+    }
+  }
 
+  function updateOfferEligibility() {
+    const side = document.querySelector("#offerSide")?.value || "sell";
+    const user = currentUser();
+    if (!user) return;
+
+    const amount = Number(String(document.querySelector("#offerAmount")?.value || "0").replace(/,/g, ""));
+    const price = Number(String(document.querySelector("#offerPrice")?.value || "0").replace(/,/g, ""));
+    const minFiat = Number(String(document.querySelector("#offerMin")?.value || "0").replace(/,/g, ""));
+    const maxFiat = Number(String(document.querySelector("#offerMax")?.value || "0").replace(/,/g, ""));
+    const totalFiat = amount > 0 && price > 0 ? amount * price : 0;
+    const methods = user.paymentMethods || [];
+    const selectedMethods = [...document.querySelectorAll(".offer-method-grid input:checked")];
+    const available = Number(user.balance?.available || 0);
+    const sellRequirement = document.querySelector("[data-sell-requirement]");
+    const message = document.querySelector("#offerEligibilityMessage");
+    const eligibilityBox = document.querySelector("#offerEligibilityBox");
+    const button = document.querySelector("#postOfferButton");
+    const formError = document.querySelector("#formError");
+
+    document.querySelectorAll("[data-offer-side]").forEach((sideButton) => {
+      const active = sideButton.dataset.offerSide === side;
+      sideButton.classList.toggle("active", active);
+      sideButton.setAttribute("aria-pressed", String(active));
+    });
+    sellRequirement?.classList.toggle("hidden", side !== "sell");
+
+    const previewSide = document.querySelector("#offerPreviewSide");
+    const previewAmount = document.querySelector("#offerPreviewAmount");
+    const previewPrice = document.querySelector("#offerPreviewPrice");
+    const previewTotal = document.querySelector("#offerPreviewTotal");
+    const previewLimits = document.querySelector("#offerPreviewLimits");
+    const previewMethods = document.querySelector("#offerPreviewMethods");
+    const paymentCopy = document.querySelector("#offerPaymentCopy");
+    if (previewSide) previewSide.textContent = side === "sell" ? "Sell USDT" : "Buy USDT";
+    if (previewAmount) previewAmount.textContent = amount > 0 ? `${format(amount)} USDT` : "-- USDT";
+    if (previewPrice) previewPrice.textContent = price > 0 ? `${format(price)} ETB` : "-- ETB";
+    if (previewTotal) previewTotal.textContent = totalFiat > 0 ? `${format(totalFiat)} ETB` : "-- ETB";
+    if (previewLimits) previewLimits.textContent = minFiat > 0 && maxFiat > 0 ? `${format(minFiat)} - ${format(maxFiat)} ETB` : "-- ETB";
+    if (previewMethods) previewMethods.textContent = `${selectedMethods.length} selected`;
+    if (paymentCopy) paymentCopy.textContent = side === "sell" ? "Choose where buyers will send ETB." : "Choose the ETB payment option shown to sellers.";
+    if (formError) formError.textContent = "";
+
+    let status = "ready";
+    let statusMessage = "Ad details are valid and ready to publish.";
+    if (!user.accountSettingsLoaded) {
+      status = "loading";
+      statusMessage = "Checking your wallet and linked payment methods...";
+    } else if (!methods.length || !selectedMethods.length) {
+      status = "error";
+      statusMessage = "Select at least one linked payment method.";
+    } else if (!(amount > 0 && price > 0 && minFiat > 0 && maxFiat > 0)) {
+      status = "pending";
+      statusMessage = "Complete the amount, price, and order limits.";
+    } else if (maxFiat < minFiat) {
+      status = "error";
+      statusMessage = "Maximum order must be higher than the minimum order.";
+    } else if (maxFiat > totalFiat) {
+      status = "error";
+      statusMessage = "Maximum order cannot exceed the total ad value.";
+    } else if (side === "sell" && (available <= 0 || amount > available)) {
+      status = "error";
+      statusMessage = "You don't have enough available USDT for this sell ad.";
+    }
+
+    if (message) message.textContent = statusMessage;
+    if (eligibilityBox) eligibilityBox.className = `offer-eligibility ${status}`;
+    if (button) {
+      button.disabled = status !== "ready";
+      button.textContent = side === "sell" ? "Publish sell ad" : "Publish buy ad";
+    }
+  }
   async function loadMyAds() {
     const content = document.querySelector("#adsContent");
+    if (!content) return;
     try {
       const result = await marketplace.myOffers();
-      const offers = result.offers || [];
-      content.innerHTML = offers.length ? `
-        <div class="tabs-bar"><button class="active">All</button><button>Active</button><button>Paused</button><button>Cancelled</button></div>
-        <div class="app-table">${offers.map(myOfferRow).join("")}</div>
-      ` : `<section class="empty-panel"><span class="mini-icon">Ad</span><h3>No ads yet</h3><p>Post your first P2P trade offer.</p><button class="app-button" id="emptyPostAd" type="button">+ Post an Ad</button></section>`;
-
-      document.querySelector("#emptyPostAd")?.addEventListener("click", () => {
-        showOfferForm = true;
-        renderAds();
-      });
-      document.querySelectorAll("[data-offer-status]").forEach((button) => {
-        button.addEventListener("click", () => handleOfferStatus(button.dataset.offerId, button.dataset.offerStatus));
-      });
+      lastMyOffers = result.offers || [];
+      renderAdsManager(content);
     } catch (error) {
       content.innerHTML = `<section class="warning-card"><h3>Could not load ads</h3><p>${escapeHtml(error.message || "Start the BRX backend and reload.")}</p></section>`;
     }
   }
 
+  function renderAdsManager(content = document.querySelector("#adsContent")) {
+    if (!content) return;
+    if (!lastMyOffers.length) {
+      content.innerHTML = `<section class="empty-panel"><span class="mini-icon">Ad</span><h3>No ads yet</h3><p>Post your first P2P trade offer.</p><button class="app-button" id="emptyPostAd" type="button">+ Post an Ad</button></section>`;
+      document.querySelector("#emptyPostAd")?.addEventListener("click", () => {
+        showOfferForm = true;
+        renderAds();
+      });
+      return;
+    }
+
+    const tabs = ["all", "active", "paused", "cancelled"];
+    const filtered = adStatusFilter === "all" ? lastMyOffers : lastMyOffers.filter((offer) => offer.status === adStatusFilter);
+    content.innerHTML = `
+      <div class="tabs-bar ad-status-tabs" role="tablist" aria-label="Filter ads by status">
+        ${tabs.map((status) => {
+          const count = status === "all" ? lastMyOffers.length : lastMyOffers.filter((offer) => offer.status === status).length;
+          return `<button class="${adStatusFilter === status ? "active" : ""}" type="button" role="tab" aria-selected="${adStatusFilter === status}" data-ad-filter="${status}">${statusLabel(status)} <span>${count}</span></button>`;
+        }).join("")}
+      </div>
+      ${filtered.length
+        ? `<div class="app-table ad-management-table">${filtered.map(myOfferRow).join("")}</div>`
+        : `<section class="empty-panel compact"><span class="mini-icon">${adStatusFilter.slice(0, 2)}</span><h3>No ${escapeHtml(adStatusFilter)} ads</h3><p>Ads with this status will appear here.</p></section>`}
+    `;
+
+    content.querySelectorAll("[data-ad-filter]").forEach((button) => {
+      button.addEventListener("click", () => {
+        adStatusFilter = button.dataset.adFilter || "all";
+        renderAdsManager(content);
+      });
+    });
+    content.querySelectorAll("[data-offer-edit]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const offer = lastMyOffers.find((item) => item.id === button.dataset.offerEdit);
+        if (offer) void openEditOfferModal(offer);
+      });
+    });
+    content.querySelectorAll("[data-offer-status]").forEach((button) => {
+      button.addEventListener("click", () => handleOfferStatus(button.dataset.offerId, button.dataset.offerStatus, button));
+    });
+  }
+
   function myOfferRow(offer) {
     const action = offer.side === "sell" ? "Sell" : "Buy";
+    const statusClass = offer.status === "active" ? "success" : offer.status === "paused" ? "warning" : "neutral";
     return `
       <div class="table-row my-ad-row">
-        <div><strong>${action} USDT</strong><small>${offer.status}</small></div>
+        <div><strong>${action} USDT</strong><span class="status-pill ${statusClass}">${statusLabel(offer.status)}</span></div>
         <strong class="table-price ${offer.side === "buy" ? "" : "sell-price"}">${format(Number(offer.price))}</strong>
         <div><strong>${format(Number(offer.availableAmount))} USDT</strong><small>${format(Number(offer.minFiat))}-${format(Number(offer.maxFiat))} ETB</small></div>
         <div class="chips">${offer.paymentMethods.map((method) => `<span>${escapeHtml(method)}</span>`).join("")}</div>
-        <div class="row-actions">
-          ${offer.status === "active" ? `<button class="app-ghost-button small" type="button" data-offer-id="${offer.id}" data-offer-status="paused">Pause</button>` : ""}
-          ${offer.status === "paused" ? `<button class="app-button small" type="button" data-offer-id="${offer.id}" data-offer-status="active">Resume</button>` : ""}
-          ${offer.status !== "cancelled" ? `<button class="danger-button small" type="button" data-offer-id="${offer.id}" data-offer-status="cancelled">Cancel</button>` : ""}
+        <div class="row-actions ad-row-actions">
+          ${offer.status !== "cancelled" ? `<button class="app-ghost-button small" type="button" data-offer-edit="${escapeAttr(offer.id)}">Edit</button>` : ""}
+          ${offer.status === "active" ? `<button class="app-ghost-button small" type="button" data-offer-id="${escapeAttr(offer.id)}" data-offer-status="paused">Pause</button>` : ""}
+          ${offer.status === "paused" ? `<button class="app-button small" type="button" data-offer-id="${escapeAttr(offer.id)}" data-offer-status="active">Resume</button>` : ""}
+          ${offer.status !== "cancelled" ? `<button class="danger-button small" type="button" data-offer-id="${escapeAttr(offer.id)}" data-offer-status="cancelled">Cancel</button>` : `<span class="app-muted">Closed</span>`}
         </div>
       </div>
     `;
@@ -123,54 +331,197 @@
   async function handleCreateOffer(event) {
     event.preventDefault();
     showError("");
-    const paymentMethods = [...document.querySelectorAll(".payment-methods input:checked")].map((input) => input.value);
+    const side = document.querySelector("#offerSide").value;
+    const amount = Number(String(document.querySelector("#offerAmount").value || "0").replace(/,/g, ""));
+    const price = Number(String(document.querySelector("#offerPrice").value || "0").replace(/,/g, ""));
+    const minFiat = Number(String(document.querySelector("#offerMin").value || "0").replace(/,/g, ""));
+    const maxFiat = Number(String(document.querySelector("#offerMax").value || "0").replace(/,/g, ""));
+    const available = Number(currentUser()?.balance?.available || 0);
+    const paymentMethods = [...document.querySelectorAll(".offer-method-grid input:checked")].map((input) => input.value);
+    const button = document.querySelector("#postOfferButton");
+    const originalText = button?.textContent;
+
+    if (!(amount > 0 && price > 0 && minFiat > 0 && maxFiat > 0)) return showError("Complete all pricing and order fields.");
+    if (maxFiat < minFiat) return showError("Maximum order must be higher than minimum order.");
+    if (maxFiat > amount * price) return showError("Maximum order cannot exceed the total ad value.");
+    if (side === "sell" && amount > available) return showError("You don't have enough USDT to sell.");
+    if (!paymentMethods.length) return showError("Select at least one linked payment method.");
+
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Publishing ad...";
+    }
     try {
-      await marketplace.createOffer({
-        side: document.querySelector("#offerSide").value,
-        amount: document.querySelector("#offerAmount").value,
-        price: document.querySelector("#offerPrice").value,
-        minFiat: document.querySelector("#offerMin").value,
-        maxFiat: document.querySelector("#offerMax").value,
-        paymentMethods,
-      });
-      showToast("Ad posted.");
+      await marketplace.createOffer({ side, amount, price, minFiat, maxFiat, paymentMethods });
+      showToast(`${side === "sell" ? "Sell" : "Buy"} ad published.`);
       showOfferForm = false;
+      adStatusFilter = "all";
+      await window.BRX.profileService.hydrateSession();
       renderAds();
     } catch (error) {
       showError(error.message || "Could not post ad.");
+      if (button) {
+        button.disabled = false;
+        button.textContent = originalText;
+      }
     }
   }
+  async function handleOfferStatus(offerId, status, button) {
+    const offer = lastMyOffers.find((item) => item.id === offerId);
+    if (!offer) return;
+    if (status === "paused" && !confirm("Pause this ad? It will be hidden from the marketplace until you resume it.")) return;
+    if (status === "cancelled" && !confirm("Cancel this ad permanently? A cancelled ad cannot be reactivated.")) return;
 
-  async function handleOfferStatus(offerId, status) {
+    const originalText = button?.textContent;
+    if (button) {
+      button.disabled = true;
+      button.textContent = status === "active" ? "Resuming..." : status === "paused" ? "Pausing..." : "Cancelling...";
+    }
     try {
       await marketplace.updateOfferStatus(offerId, status);
-      showToast("Ad updated.");
+      showToast(status === "active" ? "Ad resumed." : status === "paused" ? "Ad paused." : "Ad cancelled.");
       await loadMyAds();
     } catch (error) {
       showToast(error.message || "Could not update ad.");
+      if (button) {
+        button.disabled = false;
+        button.textContent = originalText;
+      }
     }
   }
 
+  async function openEditOfferModal(offer) {
+    try {
+      if (!currentUser()?.accountSettingsLoaded) await accountService.loadSettings();
+    } catch (error) {
+      return showToast(error.message || "Could not load payment methods.");
+    }
+    const methods = currentUser()?.paymentMethods || [];
+    const selected = new Set((offer.paymentMethods || []).map((method) => String(method).toLowerCase()));
+    const modal = document.createElement("div");
+    modal.className = "trade-modal-backdrop";
+    modal.innerHTML = `
+      <form class="trade-confirm-modal edit-offer-modal" id="editOfferForm">
+        <button class="modal-x" type="button" data-close-edit-offer aria-label="Close">x</button>
+        <div><p class="app-label blue">Manage ad</p><h3>Edit ${offer.side === "sell" ? "Sell" : "Buy"} USDT ad</h3><p class="app-muted">Update the remaining amount, price, limits, or payment methods.</p></div>
+        <div class="settings-form-grid">
+          <label class="form-field"><span>Available USDT amount</span><input id="editOfferAmount" inputmode="decimal" value="${escapeAttr(offer.availableAmount)}" required /></label>
+          <label class="form-field"><span>Price per USDT (ETB)</span><input id="editOfferPrice" inputmode="decimal" value="${escapeAttr(offer.price)}" required /></label>
+          <label class="form-field"><span>Minimum ETB order</span><input id="editOfferMin" inputmode="decimal" value="${escapeAttr(offer.minFiat)}" required /></label>
+          <label class="form-field"><span>Maximum ETB order</span><input id="editOfferMax" inputmode="decimal" value="${escapeAttr(offer.maxFiat)}" required /></label>
+        </div>
+        <div class="offer-payment-head"><div><strong>Payment methods</strong><small>Select at least one linked receiving account.</small></div><a href="#/settings?tab=payments">Manage</a></div>
+        <div class="payment-methods edit-offer-methods">
+          ${methods.map((method, index) => {
+            const checked = selected.has(String(method.label).toLowerCase()) || (!selected.size && index === 0);
+            return `<label><input type="checkbox" value="${escapeAttr(method.label)}" ${checked ? "checked" : ""} /> ${escapeHtml(method.label)}</label>`;
+          }).join("")}
+        </div>
+        ${methods.length ? "" : `<div class="deposit-note warning">Add a payment method before editing this ad.</div>`}
+        <div class="form-error" id="editOfferError"></div>
+        <div class="edit-offer-actions"><button class="app-ghost-button" type="button" data-close-edit-offer>Close</button><button class="app-button" id="saveOfferEdit" type="submit" ${methods.length ? "" : "disabled"}>Save changes</button></div>
+      </form>
+    `;
+    document.body.appendChild(modal);
+    const close = () => modal.remove();
+    modal.querySelectorAll("[data-close-edit-offer]").forEach((button) => button.addEventListener("click", close));
+    modal.addEventListener("click", (event) => { if (event.target === modal) close(); });
+    modal.querySelector("#editOfferForm").addEventListener("submit", (event) => handleEditOfferSubmit(event, offer, modal));
+  }
+
+  async function handleEditOfferSubmit(event, offer, modal) {
+    event.preventDefault();
+    const errorNode = modal.querySelector("#editOfferError");
+    const saveButton = modal.querySelector("#saveOfferEdit");
+    const paymentMethods = [...modal.querySelectorAll(".edit-offer-methods input:checked")].map((input) => input.value);
+    if (!paymentMethods.length) {
+      errorNode.textContent = "Select at least one linked payment method.";
+      return;
+    }
+    errorNode.textContent = "";
+    saveButton.disabled = true;
+    saveButton.textContent = "Saving...";
+    try {
+      await marketplace.updateOffer(offer.id, {
+        amount: modal.querySelector("#editOfferAmount").value,
+        price: modal.querySelector("#editOfferPrice").value,
+        minFiat: modal.querySelector("#editOfferMin").value,
+        maxFiat: modal.querySelector("#editOfferMax").value,
+        paymentMethods,
+      });
+      modal.remove();
+      showToast("Ad changes saved.");
+      await loadMyAds();
+    } catch (error) {
+      errorNode.textContent = error.message || "Could not save this ad.";
+      saveButton.disabled = false;
+      saveButton.textContent = "Save changes";
+    }
+  }
   async function loadMyTrades() {
     const content = document.querySelector("#tradesContent");
     try {
       const result = await marketplace.myTrades();
-      const trades = result.trades || [];
-      content.innerHTML = trades.length
-        ? `<div class="app-table">${trades.map(tradeRow).join("")}</div>`
-        : `<section class="empty-panel"><span class="mini-icon">Trade</span><h3>No trades yet</h3><p>Start trading on the marketplace.</p><a class="app-button" href="#/market">Browse Marketplace</a></section>`;
-
-      document.querySelectorAll("[data-trade-action]").forEach((button) => {
-        button.addEventListener("click", () => handleTradeAction(button.dataset.tradeId, button.dataset.tradeAction));
-      });
-      document.querySelectorAll("[data-trade-open]").forEach((button) => {
-        button.addEventListener("click", () => {
-          location.hash = `#/trades?id=${encodeURIComponent(button.dataset.tradeOpen)}`;
-        });
-      });
+      lastMyTrades = result.trades || [];
+      renderTradeCollection();
     } catch (error) {
-      content.innerHTML = `<section class="warning-card"><h3>Could not load trades</h3><p>${escapeHtml(error.message || "Start the BRX backend and reload.")}</p></section>`;
+      content.innerHTML = `<section class="professional-error-card">${icon("info")}<div><h3>Could not load trades</h3><p>${escapeHtml(error.message || "Check the BRX backend connection and try again.")}</p></div><button class="app-ghost-button small" id="retryTrades" type="button">Try again</button></section>`;
+      document.querySelector("#retryTrades")?.addEventListener("click", () => void loadMyTrades());
     }
+  }
+
+  function renderTradeCollection() {
+    const content = document.querySelector("#tradesContent");
+    if (!content) return;
+    const groups = {
+      active: lastMyTrades.filter((trade) => ["opened", "payment_sent", "disputed"].includes(trade.status)),
+      completed: lastMyTrades.filter((trade) => trade.status === "released"),
+      cancelled: lastMyTrades.filter((trade) => ["cancelled", "expired"].includes(trade.status)),
+    };
+    const filtered = tradeStatusFilter === "all" ? lastMyTrades : groups[tradeStatusFilter] || [];
+
+    content.innerHTML = `
+      <section class="trade-overview-grid">
+        <div><span>Total trades</span><strong>${lastMyTrades.length}</strong><small>All P2P orders</small></div>
+        <div class="active"><span>Active</span><strong>${groups.active.length}</strong><small>Need attention</small></div>
+        <div class="completed"><span>Completed</span><strong>${groups.completed.length}</strong><small>USDT released</small></div>
+      </section>
+      <section class="professional-trade-list-card">
+        <nav class="trade-list-filters" aria-label="Filter trades">
+          ${tradeFilterButton("all", "All", lastMyTrades.length)}
+          ${tradeFilterButton("active", "Active", groups.active.length)}
+          ${tradeFilterButton("completed", "Completed", groups.completed.length)}
+          ${tradeFilterButton("cancelled", "Cancelled", groups.cancelled.length)}
+        </nav>
+        <div class="professional-trade-list">
+          ${filtered.length ? filtered.map(tradeRow).join("") : `
+            <div class="professional-trade-empty">${icon("trades")}<h3>${lastMyTrades.length ? "No trades in this category" : "No trades yet"}</h3><p>${lastMyTrades.length ? "Choose another status to see your orders." : "Browse verified P2P offers and open your first escrow trade."}</p>${lastMyTrades.length ? "" : `<a class="app-button small" href="#/market">Browse market</a>`}</div>
+          `}
+        </div>
+      </section>
+    `;
+    bindTradeListEvents();
+  }
+
+  function tradeFilterButton(key, label, count) {
+    return `<button class="${tradeStatusFilter === key ? "active" : ""}" type="button" data-trade-filter="${key}"><span>${label}</span><b>${count}</b></button>`;
+  }
+
+  function bindTradeListEvents() {
+    document.querySelectorAll("[data-trade-filter]").forEach((button) => {
+      button.addEventListener("click", () => {
+        tradeStatusFilter = button.dataset.tradeFilter;
+        renderTradeCollection();
+      });
+    });
+    document.querySelectorAll("[data-trade-action]").forEach((button) => {
+      button.addEventListener("click", () => handleTradeAction(button.dataset.tradeId, button.dataset.tradeAction));
+    });
+    document.querySelectorAll("[data-trade-open]").forEach((button) => {
+      button.addEventListener("click", () => {
+        location.hash = `#/trades?id=${encodeURIComponent(button.dataset.tradeOpen)}`;
+      });
+    });
   }
 
   async function loadTradeDetail(tradeId) {
@@ -181,24 +532,37 @@
       content.innerHTML = tradeDetail(trade);
       bindTradeDetail(trade);
       startTradeCountdown(trade);
+      startTradeChat(trade);
     } catch (error) {
       content.innerHTML = `<section class="warning-card"><h3>Could not load trade</h3><p>${escapeHtml(error.message || "Start the BRX backend and reload.")}</p></section>`;
     }
   }
 
   function tradeRow(trade) {
-    const roleText = trade.role === "buyer" ? "You buy USDT" : "You sell USDT";
-    const deadline = trade.status === "opened" && trade.expiresAt ? `<small>Pay before ${dateTime(trade.expiresAt)}</small>` : "";
-    const payment = trade.paymentSentAt ? `<small>Payment sent ${dateTime(trade.paymentSentAt)}</small>` : "";
-    const reason = trade.cancelledReason || trade.disputeReason || "";
+    const isBuyer = trade.role === "buyer";
+    const roleText = isBuyer ? "Buy USDT" : "Sell USDT";
+    const counterparty = escapeHtml(trade.counterpartyEmail || "BRX user");
+    const tone = trade.status === "released" ? "success" : trade.status === "disputed" ? "warning" : ["cancelled", "expired"].includes(trade.status) ? "danger" : "active";
+    const nextStep = trade.status === "opened" && isBuyer ? "Payment required" : trade.status === "payment_sent" && trade.role === "seller" ? "Confirm payment" : statusLabel(trade.status);
     return `
-      <div class="table-row trade-row">
-        <div><strong>${roleText}</strong><small>Counterparty: ${escapeHtml(trade.counterpartyEmail || "BRX user")}</small>${deadline}${payment}</div>
-        <div><strong>${format(Number(trade.assetAmount))} USDT</strong><small>${format(Number(trade.fiatAmount))} ETB</small></div>
-        <div><strong>${statusLabel(trade.status)}</strong><small>${dateTime(trade.createdAt)}</small>${reason ? `<small>${escapeHtml(reason)}</small>` : ""}</div>
-        <div class="row-actions"><button class="app-ghost-button small" type="button" data-trade-open="${escapeAttr(trade.id)}">View</button>${tradeActions(trade)}</div>
-      </div>
+      <article class="professional-trade-row ${tone}">
+        <button class="trade-row-main" type="button" data-trade-open="${escapeAttr(trade.id)}">
+          <span class="trade-direction ${isBuyer ? "buy" : "sell"}">${icon(isBuyer ? "buyArrow" : "sellArrow")}</span>
+          <span class="trade-counterparty"><small>${roleText} · #${shortTradeId(trade.id)}</small><strong>${counterparty}</strong><em>${dateTime(trade.createdAt)}</em></span>
+          <span class="trade-row-amount"><strong>${format(Number(trade.assetAmount))} USDT</strong><small>${format(Number(trade.fiatAmount))} ETB</small></span>
+          <span class="trade-row-state"><b class="${tone}">${escapeHtml(nextStep)}</b><small>${format(Number(trade.offerPrice || Number(trade.fiatAmount) / Number(trade.assetAmount)))} ETB/USDT</small></span>
+          <span class="trade-row-open">${icon("external")}</span>
+        </button>
+        <div class="trade-row-actions">${tradeListAction(trade)}</div>
+      </article>
     `;
+  }
+
+  function tradeListAction(trade) {
+    if (trade.status === "released") return `<span class="trade-list-result success">${icon("check")} Completed</span>`;
+    if (["cancelled", "expired"].includes(trade.status)) return `<span class="trade-list-result closed">Closed</span>`;
+    if (trade.status === "disputed") return `<span class="trade-list-result warning">Admin review</span>`;
+    return tradeActions(trade);
   }
 
   function tradeDetail(trade) {
@@ -210,7 +574,7 @@
             <div>
               <p class="app-label blue">${trade.role === "buyer" ? "Buy USDT" : "Sell USDT"}</p>
               <h3>${format(Number(trade.assetAmount))} USDT</h3>
-              <p class="app-muted">${format(Number(trade.fiatAmount))} ETB Â· ${format(Number(trade.offerPrice || Number(trade.fiatAmount) / Number(trade.assetAmount)))} ETB/USDT</p>
+              <p class="app-muted">${format(Number(trade.fiatAmount))} ETB · ${format(Number(trade.offerPrice || Number(trade.fiatAmount) / Number(trade.assetAmount)))} ETB/USDT</p>
             </div>
             <span class="status-pill ${trade.status === "disputed" ? "warning" : ""}">${statusLabel(trade.status)}</span>
           </div>
@@ -462,43 +826,47 @@
   function tradeDetail(trade) {
     const sellerMethods = trade.sellerPaymentMethods || [];
     const isBuyer = trade.role === "buyer";
+    const price = Number(trade.offerPrice || Number(trade.fiatAmount) / Number(trade.assetAmount));
+    const counterparty = counterpartyName(trade);
+    const counterpartyEmail = String(trade.counterpartyEmail || "");
+    const showCounterpartyEmail = counterpartyEmail && counterpartyEmail.toLowerCase() !== String(counterparty).toLowerCase();
     return `
       <section class="escrow-workspace">
-        <div class="escrow-topline">
-          <button class="icon-link" type="button" data-back-to-trades>&larr; My Trades</button>
-          <span>Trade #${shortTradeId(trade.id)}</span>
-          <span class="status-pill ${trade.status === "disputed" ? "warning" : ""}">${statusLabel(trade.status)}</span>
-        </div>
+        <header class="trade-room-header">
+          <div class="trade-room-heading">
+            <button class="trade-back-button" type="button" data-back-to-trades aria-label="Back to trades">&larr;</button>
+            <div><span>Trade #${shortTradeId(trade.id)}</span><h2>${isBuyer ? "Buy" : "Sell"} USDT</h2></div>
+          </div>
+          <span class="status-pill trade-status ${trade.status === "disputed" ? "warning" : trade.status === "released" ? "success" : ""}">${statusLabel(trade.status)}</span>
+        </header>
+
         <section class="escrow-grid">
           <article class="escrow-main">
-            <div class="trade-detail-head">
-              <div>
-                <p class="app-label blue">${isBuyer ? "Buy USDT" : "Sell USDT"}</p>
-                <h3>${format(Number(trade.assetAmount))} USDT</h3>
-                <p class="app-muted">${format(Number(trade.fiatAmount))} ETB at ${format(Number(trade.offerPrice || Number(trade.fiatAmount) / Number(trade.assetAmount)))} ETB/USDT</p>
+            <section class="trade-amount-summary">
+              <div class="trade-asset-total">
+                <p class="app-label blue">${isBuyer ? "You are buying" : "You are selling"}</p>
+                <h3>${format(Number(trade.assetAmount))} <span>USDT</span></h3>
               </div>
-            </div>
+              <div class="trade-summary-metrics">
+                <div><span>ETB total</span><strong>${format(Number(trade.fiatAmount))} ETB</strong></div>
+                <div><span>Price</span><strong>${format(price)} ETB/USDT</strong></div>
+              </div>
+            </section>
+
             ${escrowStepper(trade)}
             ${isBuyer ? buyerPaymentBlock(trade, sellerMethods) : sellerPaymentBlock(trade)}
             ${countdownBlock(trade)}
-            ${tradeSafetyNote(trade)}
             <div class="trade-actions-panel">${tradeActions(trade)}</div>
+            ${tradeSafetyNote(trade)}
           </article>
 
           <aside class="escrow-side">
             <div class="counterparty-card">
-              <div class="avatar small">${displayInitial(counterpartyName(trade))}</div>
-              <div>
-                <strong>${escapeHtml(counterpartyName(trade))}</strong>
-                <small>${escapeHtml(trade.counterpartyEmail || "BRX user")}</small>
-              </div>
+              <div class="avatar small">${displayInitial(counterparty)}</div>
+              <div><small>${isBuyer ? "Seller" : "Buyer"}</small><strong>${escapeHtml(counterparty)}</strong>${showCounterpartyEmail ? `<span>${escapeHtml(counterpartyEmail)}</span>` : ""}</div>
             </div>
             ${isBuyer ? sellerPaymentSummary(trade, sellerMethods) : buyerPaymentSummary(trade)}
-            <div class="trade-chat-box">
-              <div class="mini-icon">MSG</div>
-              <strong>No messages yet</strong>
-              <small>Trade chat will appear here.</small>
-            </div>
+            ${tradeChatPanel(trade)}
           </aside>
         </section>
       </section>
@@ -506,7 +874,6 @@
       ${disputeAccessPanel(trade)}
     `;
   }
-
   function escrowStepper(trade) {
     const stage = tradeStage(trade);
     const steps = [
@@ -516,17 +883,16 @@
       ["Completed", 4],
     ];
     return `
-      <section class="escrow-stepper">
+      <section class="escrow-stepper" aria-label="Trade progress">
         ${steps.map(([label, number]) => `
           <div class="escrow-step ${stage > number ? "done" : ""} ${stage === number ? "active" : ""}">
-            <span>${stage > number ? "OK" : number}</span>
+            <span>${stage > number ? icon("check") : number}</span>
             <strong>${label}</strong>
           </div>
         `).join("")}
       </section>
     `;
   }
-
   function tradeStage(trade) {
     if (trade.status === "released") return 4;
     if (trade.status === "payment_sent" || trade.status === "disputed") return 3;
@@ -573,29 +939,23 @@
   function sellerPaymentBlock(trade) {
     if (trade.status === "opened") {
       return `
-        <section class="payment-instructions">
-          <p class="app-label">Waiting for buyer</p>
-          <h4>${format(Number(trade.assetAmount))} USDT locked</h4>
-          <p class="app-muted">Your USDT is locked in escrow. Wait for the buyer to send ETB and submit payment proof.</p>
+        <section class="payment-instructions seller-waiting-card">
+          <div><p class="app-label">Waiting for buyer</p><h4>${format(Number(trade.assetAmount))} USDT secured</h4></div>
+          <p class="app-muted">Your USDT is locked in escrow. The buyer must pay and submit proof before the payment window closes.</p>
         </section>
       `;
     }
     if (trade.status === "payment_sent") {
       return `
-        <section class="payment-instructions">
-          <p class="app-label">Buyer marked payment sent</p>
-          <h4>Confirm ${format(Number(trade.fiatAmount))} ETB</h4>
-          <p class="app-muted">Check your receiving account carefully. Release USDT only after the ETB payment is fully received.</p>
-          ${paymentProofBlock(trade)}
+        <section class="payment-instructions seller-review-card">
+          <div><p class="app-label">Payment marked as sent</p><h4>Verify ${format(Number(trade.fiatAmount))} ETB</h4></div>
+          <p class="app-muted">Open the buyer receipt on the right and check your actual receiving account. Release USDT only after the full ETB amount is visible in your account.</p>
         </section>
       `;
     }
-    if (trade.status === "disputed") {
-      return `<p class="deposit-note">This trade is under admin review. Add evidence below if needed.</p>`;
-    }
+    if (trade.status === "disputed") return `<p class="deposit-note warning">This trade is under admin review. Add evidence below if needed.</p>`;
     return `<p class="deposit-note">This trade is ${statusLabel(trade.status)}.</p>`;
   }
-
   function paymentMethodCard(method) {
     const rows = [
       ["Name", method.accountName],
@@ -622,6 +982,107 @@
     `;
   }
 
+  function tradeChatPanel(trade) {
+    const canSend = ["opened", "payment_sent", "disputed"].includes(trade.status);
+    return `
+      <section class="trade-chat-panel">
+        <div class="trade-chat-head">
+          <div><strong>Trade chat</strong><small>Buyer and seller only</small></div>
+          <span class="trade-chat-live"><i></i> Live</span>
+        </div>
+        <div class="trade-chat-messages" id="tradeChatMessages" aria-live="polite">
+          <div class="trade-chat-empty"><span>${icon("mail")}</span><strong>No messages yet</strong><small>Use this chat to coordinate payment safely.</small></div>
+        </div>
+        ${canSend ? `
+          <form class="trade-chat-form" id="tradeChatForm">
+            <textarea id="tradeChatInput" rows="2" maxlength="1000" placeholder="Message the ${trade.role === "buyer" ? "seller" : "buyer"}..." required></textarea>
+            <button class="app-button" id="tradeChatSend" type="submit" aria-label="Send message">${icon("send")}<span>Send</span></button>
+            <div class="trade-chat-error" id="tradeChatError"></div>
+          </form>
+        ` : `<p class="trade-chat-closed">This trade is closed. Chat history remains available.</p>`}
+      </section>
+    `;
+  }
+
+  function startTradeChat(trade) {
+    if (tradeChatTimer) clearInterval(tradeChatTimer);
+    tradeChatTimer = null;
+    tradeChatSignature = "";
+    void loadTradeMessages(trade, true);
+    tradeChatTimer = setInterval(() => {
+      const activeTradeId = window.BRX.router.routeParams().get("id");
+      if (window.BRX.router.routeName() !== "trades" || activeTradeId !== trade.id) {
+        clearInterval(tradeChatTimer);
+        tradeChatTimer = null;
+        return;
+      }
+      void loadTradeMessages(trade, false);
+    }, 3000);
+  }
+
+  async function loadTradeMessages(trade, forceScroll) {
+    if (tradeChatLoading) return;
+    const container = document.querySelector("#tradeChatMessages");
+    if (!container) return;
+    tradeChatLoading = true;
+    const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 56;
+    try {
+      const result = await marketplace.tradeMessages(trade.id);
+      const messages = result.messages || [];
+      const signature = messages.map((message) => `${message.id}:${message.isRead ? 1 : 0}`).join("|");
+      if (signature !== tradeChatSignature) {
+        tradeChatSignature = signature;
+        container.innerHTML = messages.length
+          ? messages.map(tradeChatMessage).join("")
+          : `<div class="trade-chat-empty"><span>${icon("mail")}</span><strong>No messages yet</strong><small>Use this chat to coordinate payment safely.</small></div>`;
+        if (forceScroll || nearBottom) container.scrollTop = container.scrollHeight;
+      }
+    } catch (error) {
+      if (forceScroll) {
+        container.innerHTML = `<div class="trade-chat-empty"><strong>Chat unavailable</strong><small>${escapeHtml(error.message || "Could not load messages.")}</small></div>`;
+      }
+    } finally {
+      tradeChatLoading = false;
+    }
+  }
+
+  function tradeChatMessage(message) {
+    const body = escapeHtml(message.body).replace(/\n/g, "<br>");
+    return `
+      <div class="trade-chat-message ${message.isMine ? "mine" : "theirs"}">
+        <div class="trade-chat-bubble"><p>${body}</p></div>
+        <small>${chatTime(message.createdAt)}${message.isMine && message.isRead ? " · Read" : ""}</small>
+      </div>
+    `;
+  }
+
+  async function handleTradeChatSubmit(event, trade) {
+    event.preventDefault();
+    const input = document.querySelector("#tradeChatInput");
+    const button = document.querySelector("#tradeChatSend");
+    const errorNode = document.querySelector("#tradeChatError");
+    const body = input?.value.trim() || "";
+    if (!body) return;
+
+    if (errorNode) errorNode.textContent = "";
+    if (button) button.disabled = true;
+    try {
+      await marketplace.sendTradeMessage(trade.id, body);
+      input.value = "";
+      await loadTradeMessages(trade, true);
+      input.focus();
+    } catch (error) {
+      if (errorNode) errorNode.textContent = error.message || "Could not send message.";
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  function chatTime(value) {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return "";
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
   function sellerPaymentSummary(trade, sellerMethods) {
     return `
       <section class="side-section">
@@ -642,16 +1103,54 @@
 
   function paymentProofBlock(trade) {
     if (!trade.paymentReference && !trade.paymentProofName) {
-      return `<div class="proof-card empty"><strong>No payment proof yet</strong><small>Proof appears here after the buyer marks payment sent.</small></div>`;
+      return `<div class="proof-card empty"><strong>No payment proof yet</strong><small>The buyer receipt appears here after payment is marked sent.</small></div>`;
     }
     return `
-      <div class="proof-card">
-        ${trade.paymentReference ? `<div><small>Reference</small><strong>${escapeHtml(trade.paymentReference)}</strong></div>` : ""}
-        ${trade.paymentProofName ? `<div><small>Receipt</small><strong>${escapeHtml(trade.paymentProofName)}</strong></div>` : ""}
+      <div class="proof-card ${trade.paymentProofName ? "has-file" : ""}">
+        ${trade.paymentReference ? `<div class="proof-reference"><small>Payment reference</small><strong>${escapeHtml(trade.paymentReference)}</strong></div>` : ""}
+        ${trade.paymentProofName ? `
+          <div class="proof-file-head"><div><small>Buyer receipt</small><strong>${escapeHtml(trade.paymentProofName)}</strong></div><span>Secure</span></div>
+          <div class="payment-proof-preview" data-payment-proof-preview="${escapeAttr(trade.id)}"><span>Loading receipt preview...</span></div>
+        ` : ""}
       </div>
     `;
   }
 
+  async function loadPaymentProof(trade) {
+    const previews = [...document.querySelectorAll(`[data-payment-proof-preview="${CSS.escape(trade.id)}"]`)];
+    if (!previews.length || !trade.paymentProofName) return;
+    try {
+      const result = await marketplace.paymentProof(trade.id);
+      const proof = result.proof;
+      const isImage = String(proof.mimeType || "").startsWith("image/");
+      previews.forEach((preview) => {
+        preview.innerHTML = isImage
+          ? `<button class="proof-preview-button" type="button" data-open-payment-proof><img src="${proof.dataUrl}" alt="Buyer payment receipt" /><span>View full receipt</span></button>`
+          : `<button class="proof-document-button" type="button" data-open-payment-proof>${icon("external")}<span>Open PDF receipt</span></button>`;
+        preview.querySelector("[data-open-payment-proof]")?.addEventListener("click", () => openPaymentProofViewer(proof));
+      });
+    } catch (error) {
+      previews.forEach((preview) => {
+        preview.innerHTML = `<div class="proof-preview-error">${escapeHtml(error.message || "Could not load receipt.")}</div>`;
+      });
+    }
+  }
+
+  function openPaymentProofViewer(proof) {
+    const modal = document.createElement("div");
+    const isImage = String(proof.mimeType || "").startsWith("image/");
+    modal.className = "proof-viewer-backdrop";
+    modal.innerHTML = `
+      <section class="proof-viewer" role="dialog" aria-modal="true" aria-label="Payment receipt">
+        <header><div><span>Buyer payment receipt</span><strong>${escapeHtml(proof.fileName || "Receipt")}</strong></div><button type="button" data-close-proof aria-label="Close receipt">&times;</button></header>
+        <div class="proof-viewer-content">${isImage ? `<img src="${proof.dataUrl}" alt="Buyer payment receipt" />` : `<iframe src="${proof.dataUrl}" title="Buyer payment receipt"></iframe>`}</div>
+      </section>
+    `;
+    const close = () => modal.remove();
+    modal.querySelector("[data-close-proof]").addEventListener("click", close);
+    modal.addEventListener("click", (event) => { if (event.target === modal) close(); });
+    document.body.appendChild(modal);
+  }
   function tradeSafetyNote(trade) {
     if (trade.status === "released") {
       return `<div class="deposit-note success">Trade completed. USDT has been released to the buyer.</div>`;
@@ -664,36 +1163,34 @@
 
   function tradeActions(trade) {
     const disputeButton = canDispute(trade) && disputeUnlocked(trade)
-      ? `<button class="danger-button small" type="button" data-trade-id="${escapeAttr(trade.id)}" data-trade-action="dispute">Open dispute</button>`
+      ? `<button class="danger-button trade-secondary-action" type="button" data-trade-id="${escapeAttr(trade.id)}" data-trade-action="dispute">Open dispute</button>`
       : "";
 
     if (trade.status === "opened" && trade.role === "buyer") {
-      return `<button class="app-button small" type="button" data-trade-id="${trade.id}" data-trade-action="payment-sent">Payment sent</button><button class="app-ghost-button small" type="button" data-trade-id="${trade.id}" data-trade-action="cancel">Cancel</button>`;
+      return `<button class="app-button trade-primary-action" type="button" data-trade-id="${trade.id}" data-trade-action="payment-sent">I have paid ${format(Number(trade.fiatAmount))} ETB</button><button class="app-ghost-button trade-secondary-action" type="button" data-trade-id="${trade.id}" data-trade-action="cancel">Cancel trade</button>`;
     }
     if (trade.status === "payment_sent" && trade.role === "seller") {
-      return `<button class="app-button small" type="button" data-trade-id="${trade.id}" data-trade-action="release">Release USDT</button>${disputeButton}`;
+      return `<button class="app-button trade-primary-action release" type="button" data-trade-id="${trade.id}" data-trade-action="release">Payment received &mdash; Release ${format(Number(trade.assetAmount))} USDT</button>${disputeButton}`;
     }
     if (trade.status === "payment_sent" && trade.role === "buyer") {
-      return `<span class="app-muted">Waiting for seller to release</span>${disputeButton}`;
+      return `<span class="trade-waiting-status">Payment submitted. Waiting for seller confirmation.</span>${disputeButton}`;
     }
     if (trade.status === "opened") {
-      return `<button class="app-ghost-button small" type="button" data-trade-id="${trade.id}" data-trade-action="cancel">Cancel</button>${disputeButton}`;
+      return `<button class="app-ghost-button trade-secondary-action" type="button" data-trade-id="${trade.id}" data-trade-action="cancel">Cancel trade</button>${disputeButton}`;
     }
-    if (trade.status === "disputed") {
-      return `<span class="status-pill warning">Admin review</span>`;
-    }
-    return `<span class="app-muted">No action</span>`;
+    if (trade.status === "disputed") return `<span class="status-pill warning">Admin review in progress</span>`;
+    if (trade.status === "released") return `<span class="trade-complete-status">${icon("check")} Trade completed successfully</span>`;
+    return `<span class="app-muted">This trade is closed.</span>`;
   }
-
   async function handleTradeAction(tradeId, action) {
     try {
       if (action === "payment-sent") {
-        const trade = await marketplace.tradeDetail(tradeId);
+        const { trade } = await marketplace.getTrade(tradeId);
         openPaymentSentModal(trade);
         return;
       }
       if (action === "release") {
-        const trade = await marketplace.tradeDetail(tradeId);
+        const { trade } = await marketplace.getTrade(tradeId);
         openReleaseModal(trade);
         return;
       }
@@ -728,7 +1225,17 @@
       });
     });
     bindAppealCountdown(trade);
+    if (trade.paymentProofName) void loadPaymentProof(trade);
     document.querySelector("#evidenceForm")?.addEventListener("submit", (event) => handleEvidenceSubmit(event, trade));
+    const chatForm = document.querySelector("#tradeChatForm");
+    const chatInput = document.querySelector("#tradeChatInput");
+    chatForm?.addEventListener("submit", (event) => handleTradeChatSubmit(event, trade));
+    chatInput?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        chatForm?.requestSubmit();
+      }
+    });
   }
 
   function openPaymentSentModal(trade) {
@@ -756,20 +1263,35 @@
 
   async function handlePaymentSentSubmit(event, trade) {
     event.preventDefault();
-    const errorNode = document.querySelector("#paymentSentError");
+    const form = event.currentTarget;
+    const errorNode = form.querySelector("#paymentSentError");
+    const submit = form.querySelector('button[type="submit"]');
+    const reference = form.querySelector("#paymentReference").value.trim();
+    const selectedFile = form.querySelector("#paymentProofFile")?.files?.[0];
     errorNode.textContent = "";
+    if (!reference && !selectedFile) {
+      errorNode.textContent = "Add a payment reference or upload a receipt.";
+      return;
+    }
+    const originalText = submit?.textContent;
+    if (submit) {
+      submit.disabled = true;
+      submit.textContent = "Submitting payment proof...";
+    }
     try {
-      const reference = document.querySelector("#paymentReference").value.trim();
-      const file = await filePayload("paymentProofFile");
+      const file = await filePayload("paymentProofFile", 8 * 1024 * 1024);
       await marketplace.markPaymentSent(trade.id, { reference, file });
       closeTradeModal();
-      showToast("Payment proof submitted.");
+      showToast("Payment proof submitted. The seller has been notified.");
       await loadTradeDetail(trade.id);
     } catch (error) {
       errorNode.textContent = error.message || "Could not submit payment proof.";
+      if (submit) {
+        submit.disabled = false;
+        submit.textContent = originalText;
+      }
     }
   }
-
   function openReleaseModal(trade) {
     const modal = document.createElement("div");
     modal.className = "trade-modal-backdrop";
@@ -785,6 +1307,7 @@
       </form>
     `;
     document.body.appendChild(modal);
+    if (trade.paymentProofName) void loadPaymentProof(trade);
     modal.querySelector("[data-close-modal]").addEventListener("click", closeTradeModal);
     modal.addEventListener("click", (event) => {
       if (event.target === modal) closeTradeModal();
@@ -792,14 +1315,24 @@
     modal.querySelector("#releaseTradeForm").addEventListener("submit", async (event) => {
       event.preventDefault();
       const errorNode = document.querySelector("#releaseError");
+      const submit = event.currentTarget.querySelector('button[type="submit"]');
+      const originalText = submit?.textContent;
       errorNode.textContent = "";
+      if (submit) {
+        submit.disabled = true;
+        submit.textContent = "Releasing USDT...";
+      }
       try {
         await marketplace.releaseTrade(trade.id);
         closeTradeModal();
-        showToast("USDT released.");
+        showToast("USDT released to the buyer.");
         await loadTradeDetail(trade.id);
       } catch (error) {
         errorNode.textContent = error.message || "Could not release trade.";
+        if (submit) {
+          submit.disabled = false;
+          submit.textContent = originalText;
+        }
       }
     });
   }
@@ -884,30 +1417,46 @@
 
     const depositAddress = user.depositAddress || "";
     const balance = user.balance || window.BRX.profileService.emptyBalance();
-    const total = Number(balance.available) + Number(balance.locked) + Number(balance.pendingDeposit) + Number(balance.pendingWithdrawal);
+    const available = Number(balance.available) || 0;
+    const locked = Number(balance.locked) || 0;
+    const pendingDeposit = Number(balance.pendingDeposit) || 0;
+    const pendingWithdrawal = Number(balance.pendingWithdrawal) || 0;
+    const total = available + locked + pendingDeposit + pendingWithdrawal;
 
     refs.app.innerHTML = `
-      <section class="exchange-app app-page-narrow">
-        <section class="app-card wallet-page-card">
-          <p class="app-label">USDT balance</p>
-          <h2>${format(total)} <span>USDT</span></h2>
-          <p class="app-muted">Deposit USDT to start trading.</p>
-          <div class="balance-breakdown">
-            <div><span>Available</span><strong>${format(Number(balance.available))} USDT</strong></div>
-            <div><span>Locked</span><strong>${format(Number(balance.locked))} USDT</strong></div>
-            <div><span>Pending deposit</span><strong>${format(Number(balance.pendingDeposit))} USDT</strong></div>
-            <div><span>Pending withdrawal</span><strong>${format(Number(balance.pendingWithdrawal))} USDT</strong></div>
+      <section class="exchange-app app-page-narrow professional-wallet-page">
+        <header class="professional-page-head wallet-page-head">
+          <div><p class="app-label blue">BRX wallet</p><h1>USDT wallet</h1><p>Manage deposits, withdrawals, internal transfers, and escrow balances.</p></div>
+          <span class="wallet-network-status"><i></i>BNB Smart Chain</span>
+        </header>
+
+        <section class="professional-wallet-summary">
+          <div class="wallet-total-block">
+            <span class="wallet-summary-icon">${icon("wallet")}</span>
+            <div><p>Total balance</p><h2>${format(total)} <span>USDT</span></h2><small>Available and escrow-held BRX funds</small></div>
           </div>
-          <div class="wallet-mode-tabs">
-            <button class="${activeWalletMode === "deposit" ? "active" : ""}" type="button" data-wallet-mode="deposit">${icon("download")}Deposit</button>
-            <button class="${activeWalletMode === "withdraw" ? "active" : ""}" type="button" data-wallet-mode="withdraw">${icon("upload")}Withdraw</button>
-            <button class="${activeWalletMode === "transfer" ? "active" : ""}" type="button" data-wallet-mode="transfer">${icon("send")}Transfer</button>
+          <div class="professional-balance-grid">
+            <div class="available"><span>Available</span><strong>${format(available)} <small>USDT</small></strong></div>
+            <div class="locked"><span>In escrow</span><strong>${format(locked)} <small>USDT</small></strong></div>
+            ${pendingDeposit > 0 ? `<div class="pending"><span>Pending deposit</span><strong>${format(pendingDeposit)} <small>USDT</small></strong></div>` : ""}
+            ${pendingWithdrawal > 0 ? `<div class="pending"><span>Pending withdrawal</span><strong>${format(pendingWithdrawal)} <small>USDT</small></strong></div>` : ""}
           </div>
         </section>
 
-        ${walletModePanel(activeWalletMode, depositAddress, user)}
+        <nav class="professional-wallet-tabs" aria-label="Wallet action">
+          <button class="${activeWalletMode === "deposit" ? "active" : ""}" type="button" data-wallet-mode="deposit">${icon("download")}<span><strong>Deposit</strong><small>Receive USDT</small></span></button>
+          <button class="${activeWalletMode === "withdraw" ? "active" : ""}" type="button" data-wallet-mode="withdraw">${icon("upload")}<span><strong>Withdraw</strong><small>Send on-chain</small></span></button>
+          <button class="${activeWalletMode === "transfer" ? "active" : ""}" type="button" data-wallet-mode="transfer">${icon("send")}<span><strong>Transfer</strong><small>BRX user transfer</small></span></button>
+        </nav>
 
-        <section class="empty-panel compact"><span class="mini-icon">tx</span><h3>No transactions yet</h3></section>
+        <div class="professional-wallet-workspace">
+          <div class="wallet-operation-panel">${walletModePanel(activeWalletMode, depositAddress, user)}</div>
+          <aside class="wallet-activity-panel">
+            <div class="wallet-activity-head"><div><p class="app-label">Recent activity</p><h3>Transactions</h3></div><span>${icon("activity")}</span></div>
+            <div class="wallet-activity-empty">${icon("database")}<strong>No wallet activity yet</strong><p>Your confirmed deposits and withdrawals will appear here.</p></div>
+            <a href="#/trades">View P2P trade activity ${icon("external")}</a>
+          </aside>
+        </div>
       </section>
     `;
 
@@ -926,26 +1475,22 @@
     });
 
     const selectedNetwork = selectedWalletNetwork[activeWalletMode];
-
     if (activeWalletMode === "deposit" && selectedNetwork === "BEP20" && depositAddress) {
       document.querySelector("#copyDepositAddress")?.addEventListener("click", () => copyDepositAddress(depositAddress));
       return;
     }
-
     if (activeWalletMode === "withdraw") {
       document.querySelector("#withdrawForm")?.addEventListener("submit", handleWithdrawalSubmit);
       return;
     }
-
     if (activeWalletMode === "transfer") {
-      document.querySelector("#transferForm").addEventListener("submit", handleUnavailableWalletAction);
+      document.querySelector("#internalTransferForm")?.addEventListener("submit", handleInternalTransferSubmit);
       return;
     }
-
     if (activeWalletMode === "deposit" && selectedNetwork === "BEP20" && !depositAddress) {
       void syncBackendWallet(user).then(() => renderWallet()).catch((error) => {
         console.error(error);
-        showToast("Backend wallet request failed. Check Console for details.");
+        showToast("Could not load your deposit address. Check the backend connection.");
       });
     }
   }
@@ -1032,19 +1577,21 @@
 
   function transferPanel() {
     return `
-      <section class="wallet-panel wallet-form-panel">
+      <section class="wallet-panel wallet-form-panel internal-transfer-panel">
         <div class="sheet-head">
-          <div>
-            <p class="app-label blue">Internal transfer</p>
-            <h2>Send to BRX user</h2>
-          </div>
-          <span class="sheet-badge">Instant</span>
+          <div><p class="app-label blue">Internal transfer</p><h2>Send BRX to BRX</h2></div>
+          <span class="sheet-badge">USDT</span>
         </div>
-        <form class="wallet-action-form" id="transferForm">
-          <label class="form-field"><span>Recipient email or BRX ID</span><input id="transferRecipient" placeholder="user@example.com" /></label>
-          <label class="form-field"><span>Amount</span><input id="transferAmount" inputmode="decimal" placeholder="0.00" /></label>
-          <p class="deposit-note">Internal transfers will move funds in the database ledger with no blockchain transaction. The backend transfer endpoint is the next wallet feature.</p>
-          <button class="app-button" type="submit">Continue transfer</button>
+        <div class="wallet-feature-preview">
+          <span>${icon("send")}</span>
+          <div><h3>Move USDT through the BRX ledger</h3><p>Send available USDT to another BRX user by email or username. Internal transfers are instant and do not use the blockchain network.</p></div>
+        </div>
+        <form class="wallet-action-form" id="internalTransferForm">
+          <label class="form-field"><span>Recipient email or username</span><input id="transferRecipient" autocomplete="off" placeholder="trader@example.com" required /></label>
+          <label class="form-field"><span>Amount</span><input id="transferAmount" inputmode="decimal" placeholder="0.00" required /></label>
+          <label class="form-field"><span>Note optional</span><input id="transferNote" maxlength="180" placeholder="Payment note" /></label>
+          <p class="deposit-note">Only available USDT can be transferred. Escrow, pending deposits, and pending withdrawals are not spendable.</p>
+          <button class="app-button" type="submit">Send internal transfer</button>
         </form>
       </section>
     `;
@@ -1084,6 +1631,31 @@
     }
   }
 
+  async function handleInternalTransferSubmit(event) {
+    event.preventDefault();
+    const submit = event.currentTarget.querySelector("button[type=submit]");
+    const originalText = submit?.textContent;
+    try {
+      if (submit) {
+        submit.disabled = true;
+        submit.textContent = "Sending transfer...";
+      }
+      const result = await accountService.internalTransfer({
+        recipient: document.querySelector("#transferRecipient").value,
+        amount: document.querySelector("#transferAmount").value,
+        note: document.querySelector("#transferNote").value,
+      });
+      showToast(`Sent ${format(Number(result.transfer?.amount || 0))} USDT to ${result.transfer?.recipientEmail || "BRX user"}.`);
+      renderWallet();
+    } catch (error) {
+      showToast(error.message || "Could not send internal transfer.");
+      if (submit) {
+        submit.disabled = false;
+        submit.textContent = originalText;
+      }
+    }
+  }
+
   async function handleWithdrawalSubmit(event) {
     event.preventDefault();
     const withdrawalAddressId = document.querySelector("#withdrawAddressId")?.value;
@@ -1102,10 +1674,6 @@
       showToast(error.message || "Could not request withdrawal.");
     }
   }
-  function handleUnavailableWalletAction(event) {
-    event.preventDefault();
-    showToast("This flow needs the next backend wallet endpoint before real funds can move.");
-  }
 
   function renderKyc() {
     const user = requireUser();
@@ -1119,7 +1687,7 @@
         <form class="kyc-form" id="kycForm" novalidate>
           <div class="kyc-form-grid">
             <label class="form-field"><span>Legal full name</span><input id="kycName" placeholder="Name as shown on ID" required /></label>
-            <label class="form-field"><span>Phone number</span><input id="kycPhone" placeholder="+254..." required /></label>
+            <label class="form-field"><span>Phone number</span><input id="kycPhone" placeholder="+251..." required /></label>
             <label class="form-field"><span>ID type</span><input id="kycIdType" placeholder="National ID or Passport" required /></label>
             <label class="form-field"><span>ID number</span><input id="kycIdNumber" placeholder="Document number" required /></label>
           </div>
@@ -1140,45 +1708,142 @@
     document.querySelector("#kycForm").addEventListener("submit", handleKycSubmit);
   }
 
+  function renderNotifications() {
+    const user = requireUser();
+    if (!user) return;
+    refs.app.innerHTML = `
+      <section class="exchange-app app-page-narrow notifications-page">
+        <div class="page-title">
+          <div><p class="app-label blue">Activity center</p><h2>Notifications</h2></div>
+          <button class="app-ghost-button" id="notificationsReadAll" type="button">Mark all as read</button>
+        </div>
+        <p class="app-muted notifications-intro">New orders and every important P2P step appear here. Select an alert to open the related trade.</p>
+        <div id="notificationsContent"><section class="empty-panel compact"><span class="mini-icon">...</span><h3>Loading notifications</h3></section></div>
+      </section>
+    `;
+    document.querySelector("#notificationsReadAll")?.addEventListener("click", async () => {
+      try {
+        await notificationService.markAllRead();
+        await loadNotificationsPage();
+        window.BRX.header.renderHeader();
+      } catch (error) {
+        showToast(error.message || "Could not update notifications.");
+      }
+    });
+    void loadNotificationsPage();
+  }
+
+  async function loadNotificationsPage() {
+    const content = document.querySelector("#notificationsContent");
+    if (!content || !notificationService) return;
+    try {
+      const result = await notificationService.list(50);
+      const notifications = result.notifications || [];
+      content.innerHTML = notifications.length
+        ? `<section class="notification-feed">${notifications.map(notificationPageItem).join("")}</section>`
+        : `<section class="empty-panel"><span class="mini-icon">${icon("bell")}</span><h3>No notifications yet</h3><p>New P2P orders and trade updates will appear here.</p></section>`;
+      content.querySelectorAll("[data-open-notification]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const notificationId = button.dataset.openNotification;
+          try {
+            await notificationService.markRead(notificationId);
+          } catch (error) {
+            console.error(error);
+          }
+          location.hash = button.dataset.notificationUrl || "#/trades";
+        });
+      });
+    } catch (error) {
+      content.innerHTML = `<section class="warning-card"><h3>Could not load notifications</h3><p>${escapeHtml(error.message || "Start the BRX backend and run migrations.")}</p></section>`;
+    }
+  }
+
+  function notificationPageItem(notification) {
+    const typeLabel = String(notification.type || "trade.update").split(".").pop().replace(/_/g, " ");
+    return `
+      <button class="notification-feed-item ${notification.isRead ? "" : "unread"}" type="button"
+        data-open-notification="${escapeAttr(notification.id)}"
+        data-notification-url="${escapeAttr(notificationService.actionUrl(notification))}">
+        <span class="notification-feed-icon">${icon(notificationPageIcon(notification.type))}</span>
+        <span class="notification-feed-copy">
+          <span class="notification-feed-meta"><small>${escapeHtml(typeLabel)}</small><time>${escapeHtml(notificationService.relativeTime(notification.createdAt))}</time></span>
+          <strong>${escapeHtml(notification.title)}</strong>
+          <span>${escapeHtml(notification.message)}</span>
+        </span>
+        <span class="notification-unread-marker" aria-hidden="true"></span>
+      </button>
+    `;
+  }
+
+  function notificationPageIcon(type) {
+    if (type === "trade.message") return "mail";
+    if (type === "trade.payment_sent") return "card";
+    if (type === "trade.released") return "wallet";
+    if (type === "trade.disputed" || type === "trade.resolved") return "shield";
+    if (type === "trade.expired" || type === "trade.cancelled") return "info";
+    return "trades";
+  }
   function renderProfile() {
     const user = requireUser();
     if (!user) return;
     refs.app.innerHTML = `
-      <section class="exchange-app app-page-narrow">
-        <div class="page-title"><div><p class="app-label blue">Profile</p><h2>View Profile</h2></div></div>
-        <section class="app-card account-detail-card">
-          <span class="mini-icon">${displayInitial(user.email)}</span>
-          <div>
-            <h3>${escapeHtml(user.email.split("@")[0])}</h3>
-            <p class="app-muted">${escapeHtml(user.email)}</p>
-            <p class="app-muted">KYC status: ${escapeHtml(user.kycStatus || "unsubmitted")}</p>
+      <section class="exchange-app app-page-wide profile-page professional-profile-page">
+        <section class="profile-summary-card settings-identity profile-view-identity">
+          <div class="settings-avatar-wrap profile-summary-avatar">
+            ${profileAvatarMarkup(user, "settings-avatar", user.email)}
           </div>
+          <div class="profile-summary-main">
+            <p class="app-label blue">Profile</p>
+            <h1>${escapeHtml(accountDisplayName(user))}</h1>
+            <div class="profile-summary-meta">
+              <span>${escapeHtml(user.email)}</span>
+              <span>${brxId(user)}</span>
+              <span>${kycLabel(user.kycStatus)}</span>
+            </div>
+          </div>
+          <a class="app-button" href="#/settings?tab=profile">Edit profile ${icon("external")}</a>
+        </section>
+
+        <section class="settings-card settings-card-flat profile-view-card">
+          ${settingsRow("mail", "Email", escapeHtml(user.email), user.emailVerified ? statusBadge("Verified", "success") : statusBadge("Not verified", "warning"))}
+          ${settingsRow("user", "Trader username", escapeHtml(user.username || displayName(user)), "")}
+          ${settingsRow("phone", "Phone number", escapeHtml(user.phone || "Not added"), "")}
+          ${settingsRow("shield", "KYC status", kycLabel(user.kycStatus), statusBadge(kycTier(user), "neutral"))}
+          ${settingsRow("calendar", "Member since", memberSince(user), "")}
         </section>
       </section>
     `;
   }
-
   function renderSettings() {
     const user = requireUser();
     if (!user) return;
     const activeTab = validSettingsTab(window.BRX.router.routeParams().get("tab"));
+    const tabTitle = activeTab.charAt(0).toUpperCase() + activeTab.slice(1);
     refs.app.innerHTML = `
-      <section class="exchange-app app-page-wide settings-page">
-        <div class="settings-head">
-          <h2>Account Settings</h2>
-          <p>Manage your profile, security, payment details, and trading preferences.</p>
+      <section class="exchange-app app-page-wide settings-page professional-settings-page">
+        <header class="professional-settings-head">
+          <div class="professional-settings-person">
+            ${profileAvatarMarkup(user, "settings-head-avatar", user.email)}
+            <div><p class="app-label blue">Account center</p><h1>Settings</h1><small>${escapeHtml(accountDisplayName(user))} · ${escapeHtml(user.email)}</small></div>
+          </div>
+          <div class="professional-settings-state">${icon("shield")}<span><strong>${kycTier(user)}</strong><small>${kycLabel(user.kycStatus)}</small></span></div>
+        </header>
+        <div class="professional-settings-layout">
+          ${settingsTabs(activeTab)}
+          <main class="settings-content">
+            <header class="settings-content-head"><div><p class="app-label">Account settings</p><h2>${tabTitle}</h2></div><a href="#/dashboard">Back to dashboard ${icon("external")}</a></header>
+            ${settingsContent(activeTab, user)}
+          </main>
         </div>
-        ${settingsTabs(activeTab)}
-        <div class="settings-content">${settingsContent(activeTab, user)}</div>
       </section>
     `;
     bindSettingsEvents();
-    if (activeTab === "security" && securityService && !user.securityLoaded) {
+    if (["security", "account"].includes(activeTab) && securityService && !user.securityLoaded) {
       void securityService.loadSecurity().then(() => {
         if (window.BRX.router.routeName() === "settings") renderSettings();
       }).catch((error) => {
         console.error(error);
-        showToast("Start the BRX backend and run migrations to load security settings.");
+        showToast("Could not load security settings. Check the BRX backend connection.");
       });
     }
     if (!user.accountSettingsLoaded && accountService) {
@@ -1186,7 +1851,7 @@
         if (window.BRX.router.routeName() === "settings") renderSettings();
       }).catch((error) => {
         console.error(error);
-        showToast("Start the BRX backend and run migrations to load account settings.");
+        showToast("Could not load account settings. Check the BRX backend connection.");
       });
     }
   }
@@ -1197,20 +1862,21 @@
 
   function settingsTabs(activeTab) {
     const tabs = [
-      ["profile", "user", "Profile"],
-      ["security", "shield", "Security"],
-      ["payments", "card", "Payments"],
-      ["addresses", "mapPin", "Addresses"],
-      ["account", "settings", "Account"],
-      ["notifications", "bell", "Notifications"],
-      ["trades", "trades", "Trades"],
+      ["profile", "user", "Profile", "Personal details"],
+      ["security", "shield", "Security", "2FA and sessions"],
+      ["payments", "card", "Payments", "ETB receiving accounts"],
+      ["addresses", "mapPin", "Addresses", "Withdrawal destinations"],
+      ["account", "settings", "Account", "Status and access"],
+      ["notifications", "bell", "Notifications", "Alert preferences"],
+      ["trades", "trades", "Trading", "P2P preferences"],
     ];
 
     return `
-      <nav class="settings-tabs" aria-label="Account settings">
-        ${tabs.map(([key, iconName, label]) => `
+      <nav class="settings-tabs professional-settings-nav" aria-label="Account settings">
+        <span class="settings-nav-label">Preferences</span>
+        ${tabs.map(([key, iconName, label, detail]) => `
           <button class="settings-tab ${activeTab === key ? "active" : ""}" type="button" data-settings-tab="${key}">
-            ${icon(iconName)}<span>${label}</span>
+            ${icon(iconName)}<span><strong>${label}</strong><small>${detail}</small></span>${icon("external")}
           </button>
         `).join("")}
       </nav>
@@ -1229,35 +1895,33 @@
 
   function settingsProfile(user) {
     return `
-      <section class="settings-identity">
+      <section class="settings-identity settings-profile-card">
         <div class="settings-avatar-wrap">
-          <span class="settings-avatar">${displayInitial(user.email)}</span>
-          <button class="settings-camera settings-toast-action" type="button" data-toast="Profile photo upload will be connected to storage next.">${icon("camera")}</button>
+          ${profileAvatarMarkup(user, "settings-avatar", user.email)}
         </div>
-        <div class="settings-id-main">
-          <span class="settings-muted">${brxId(user)} <button class="inline-icon-button settings-copy-id" type="button" title="Copy BRX ID">${icon("copy")}</button></span>
+        <div class="settings-id-main settings-profile-main">
+          <p class="app-label blue">Profile</p>
           <h3>${escapeHtml(accountDisplayName(user))}</h3>
+          <small>${escapeHtml(user.email)}</small>
+          <span class="settings-muted">${brxId(user)} <button class="inline-icon-button settings-copy-id" type="button" title="Copy BRX ID">${icon("copy")}</button></span>
+          <input id="settingsAvatarUrl" type="hidden" value="${escapeAttr(user.avatarUrl || "")}" />
+          <div class="settings-avatar-actions">
+            <label class="settings-avatar-upload" for="settingsAvatarInput">${icon("camera")}<span>Upload photo</span><input id="settingsAvatarInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" /></label>
+            ${user.avatarUrl ? `<button class="settings-avatar-remove" id="settingsAvatarRemove" type="button">Remove</button>` : ""}
+          </div>
+          <small class="settings-avatar-help">PNG, JPG, WebP, or GIF up to 512 KB. Uploads save automatically.</small>
         </div>
       </section>
 
-      <form class="settings-card settings-form-card" id="settingsProfileForm">
-        <div class="settings-card-head"><div><h3>${icon("user")} Profile Details</h3><p>These details are stored in PostgreSQL and used on BRX account pages.</p></div></div>
-        <div class="settings-form-grid">
-          <label class="form-field"><span>Full name</span><input id="settingsFullName" value="${escapeAttr(user.fullName || user.kycSubmission?.name || "")}" placeholder="Your legal or display name" /></label>
-          <label class="form-field"><span>Phone number</span><input id="settingsPhone" value="${escapeAttr(user.phone || "")}" placeholder="+254..." /></label>
-          <label class="form-field"><span>Trader username</span><input id="settingsUsername" value="${escapeAttr(user.username || "")}" placeholder="habeshahit1454" /></label>
-        </div>
-        <div class="settings-form-actions"><button class="app-button" type="submit">Save profile</button></div>
-      </form>
-
-      <section class="settings-card settings-card-flat">
+      <section class="settings-card settings-card-flat settings-profile-facts">
         ${settingsRow("mail", "Email", escapeHtml(user.email), user.emailVerified ? statusBadge("Verified", "success") : statusBadge("Not verified", "warning"))}
+        ${settingsRow("user", "Trader username", escapeHtml(user.username || displayName(user)), "")}
+        ${settingsRow("phone", "Phone number", escapeHtml(user.phone || "Not added"), "")}
         ${settingsRow("shield", "KYC Status", kycLabel(user.kycStatus), statusBadge(kycTier(user), "neutral"))}
         ${settingsRow("calendar", "Member Since", memberSince(user), "")}
       </section>
     `;
   }
-
   function settingsSecurity(user) {
     const security = user.security || {};
     const sessions = security.sessions || [];
@@ -1299,40 +1963,50 @@
   function settingsPayments(user) {
     const methods = user.paymentMethods || [];
     return `
-      <section class="settings-card settings-form-card">
-        <div class="settings-card-head">
-          <div><h3>${icon("card")} Add Payment Method</h3><p>Add ETB receiving details for P2P trades. Sellers will show these after a buyer opens a trade.</p></div>
+      <section class="settings-card settings-payment-card">
+        <div class="settings-card-head payment-card-head">
+          <div><h3>${icon("card")} Payment Methods</h3><p>Your ETB receiving accounts used in P2P trades.</p></div>
+          ${showPaymentMethodForm ? "" : `<button class="payment-add-button" id="togglePaymentMethodForm" type="button"><span aria-hidden="true">+</span> Add</button>`}
         </div>
-        <form id="paymentMethodForm" class="settings-payment-form">
-          <div class="settings-form-grid payment-grid">
-            <label class="form-field"><span>Type</span><select id="paymentType"><option value="mpesa">M-Pesa</option><option value="airtel_money">Airtel Money</option><option value="bank">Bank transfer</option><option value="other">Other</option></select></label>
-            <label class="form-field"><span>Label</span><input id="paymentLabel" placeholder="My M-Pesa" /></label>
-            <label class="form-field"><span>Account name</span><input id="paymentAccountName" placeholder="Name on account" required /></label>
-            <label class="form-field"><span>Phone number</span><input id="paymentPhone" placeholder="+254..." /></label>
-            <label class="form-field"><span>Bank name</span><input id="paymentBank" placeholder="Bank name" /></label>
-            <label class="form-field"><span>Account number</span><input id="paymentAccountNumber" placeholder="Bank account number" /></label>
-          </div>
-          <label class="check-row settings-default-check"><input id="paymentDefault" type="checkbox" ${methods.length ? "" : "checked"} /><span>Make this my default payment method</span></label>
-          <div class="settings-form-actions"><button class="app-button" type="submit">Save payment method</button></div>
-        </form>
-      </section>
 
-      <section class="settings-card settings-card-flat">
-        <div class="settings-card-head">
-          <div><h3>${icon("card")} Payment Methods</h3><p>Your active ETB receiving accounts.</p></div>
-          ${statusBadge(`${methods.length} saved`, "neutral")}
+        ${showPaymentMethodForm ? `
+          <form id="paymentMethodForm" class="payment-method-editor">
+            <h4>Add New Payment Method</h4>
+            <label class="form-field wide"><span>Payment Type</span>
+              <select id="paymentType" required>
+                <option value="">Select mobile money method</option>
+                <option value="telebirr">Telebirr</option>
+                <option value="mpesa">M-Pesa</option>
+                <option value="cbe_birr">CBE Birr</option>
+              </select>
+            </label>
+            <label class="form-field wide"><span>Account Holder Name</span><input id="paymentAccountName" autocomplete="name" placeholder="Full name on the account" required /></label>
+            <label class="form-field wide" id="paymentPhoneField" hidden><span>Phone Number</span><input id="paymentPhone" inputmode="tel" autocomplete="tel" placeholder="+251 9XX XXX XXX" /></label>
+            <div class="payment-editor-actions">
+              <button class="app-button" type="submit"><span aria-hidden="true">+</span> Add Payment Method</button>
+              <button class="payment-cancel-button" id="cancelPaymentMethodForm" type="button">Cancel</button>
+            </div>
+          </form>
+        ` : ""}
+
+        <div class="payment-method-list">
+          ${methods.length ? methods.map(paymentMethodRow).join("") : `
+            <div class="payment-method-empty">
+              ${icon("card")}
+              <strong>No payment methods yet</strong>
+              <span>Add a mobile money account (Telebirr, M-Pesa, or CBE Birr) to start trading.</span>
+            </div>
+          `}
         </div>
-        ${methods.length ? methods.map(paymentMethodRow).join("") : settingsEmpty("card", "No payment methods yet", "Add M-Pesa, bank, or mobile money details before posting sell ads.")}
       </section>
     `;
   }
-
   function settingsAddresses(user) {
     const addresses = user.withdrawalAddresses || [];
     return `
       <section class="settings-card settings-form-card">
         <div class="settings-card-head">
-          <div><h3>${icon("mapPin")} Save Withdrawal Address</h3><p>Only save addresses you control. Withdrawals will later require email and 2FA confirmation.</p></div>
+          <div><h3>${icon("mapPin")} Save Withdrawal Address</h3><p>Only save addresses you control. Withdrawal requests require two-factor authentication.</p></div>
         </div>
         <form id="withdrawalAddressForm">
           <div class="settings-form-grid">
@@ -1356,28 +2030,31 @@
   }
 
   function settingsAccount(user) {
+    const twoFactor = user.security?.twoFactor;
+    const twoFactorText = user.securityLoaded ? (twoFactor?.enabled ? "Enabled" : "Disabled") : "Open Security to review";
+    const twoFactorTone = twoFactor?.enabled ? "success" : "neutral";
+    const methodCount = (user.paymentMethods || []).length;
     return `
-      <section class="settings-card settings-card-flat">
-        <div class="settings-card-head"><div><h3>${icon("user")} Account Overview</h3><p>Your identity and verification status on BRX.</p></div></div>
-        ${settingsRow("user", "Full Name", escapeHtml(accountDisplayName(user)), "")}
-        ${settingsRow("mail", "Email", escapeHtml(user.email), "")}
-        ${settingsRow("calendar", "Member Since", memberSince(user), "")}
-        ${settingsRow("shield", "KYC Status", kycLabel(user.kycStatus), statusBadge(kycTier(user), "neutral"))}
-        ${settingsRow("lock", "Two-Factor Auth", "Disabled", statusBadge("Disabled", "neutral"))}
+      <section class="settings-card settings-card-flat account-readiness-card">
+        <div class="settings-card-head"><div><h3>${icon("user")} Account overview</h3><p>Your BRX identity, access level, and configured trading tools.</p></div>${statusBadge(kycTier(user), user.kycStatus === "approved" ? "success" : "neutral")}</div>
+        ${settingsRow("user", "Account name", escapeHtml(accountDisplayName(user)), "")}
+        ${settingsRow("mail", "Email", escapeHtml(user.email), user.emailVerified ? statusBadge("Verified", "success") : statusBadge("Verification needed", "warning"))}
+        ${settingsRow("calendar", "Member since", memberSince(user), "")}
+        ${settingsRow("shield", "KYC status", kycLabel(user.kycStatus), `<a class="settings-action" href="#/kyc">${user.kycStatus === "approved" ? "View" : "Verify"}</a>`)}
+        ${settingsRow("fingerprint", "Two-factor authentication", twoFactorText, `<a class="settings-action ${twoFactorTone}" href="#/settings?tab=security">Manage</a>`)}
       </section>
 
       <section class="settings-card settings-card-flat">
-        <div class="settings-card-head"><div><h3>${icon("market")} Merchant Application</h3><p>Request higher limits when your KYC and payment methods are ready.</p></div>${statusBadge("Placeholder", "warning")}</div>
-        ${settingsRow("shield", "Unverified limit", "1,000 USDT", "")}
-        ${settingsRow("check", "Verified limit", "5,000 USDT", "")}
-        ${settingsRow("market", "Merchant limit", "Up to 100,000 USDT", "")}
+        <div class="settings-card-head"><div><h3>${icon("activity")} Trading readiness</h3><p>Complete these essentials before opening larger P2P orders.</p></div></div>
+        ${settingsRow("card", "Payment methods", `${methodCount} saved`, `<a class="settings-action" href="#/settings?tab=payments">Manage</a>`)}
+        ${settingsRow("mapPin", "Withdrawal addresses", `${(user.withdrawalAddresses || []).length} saved`, `<a class="settings-action" href="#/settings?tab=addresses">Manage</a>`)}
+        ${settingsRow("info", "Current trade limit", user.kycStatus === "approved" ? "5,000 USDT" : "1,000 USDT", "")}
+        ${settingsRow("trades", "Escrow network", "BRX internal ledger · BEP20 wallet settlement", "")}
       </section>
 
-      <div class="danger-divider"><span>${icon("info")} Danger Zone</span></div>
-      <section class="settings-card settings-card-flat">
-        ${settingsRow("logOut", "Sign Out All Other Devices", "Revoke active sessions except this one.", actionButton("Revoke Sessions", "Session revocation will be connected to backend sessions next.", "warning"))}
-        ${settingsRow("database", "Request Data Export", "Download profile, trade history, and KYC records.", actionButton("Export My Data", "Data export request placeholder saved.", "success"))}
-        ${settingsRow("user", "Close Account", "A 14-day grace period should apply before deletion.", actionButton("Close Account", "Account closure requires backend approval flow.", "danger"), "danger")}
+      <section class="settings-card settings-card-flat account-session-card">
+        <div class="settings-card-head"><div><h3>${icon("logOut")} Session controls</h3><p>Keep this browser signed in and revoke access from every other device.</p></div></div>
+        ${settingsRow("activity", "Other signed-in devices", "Revoke all active sessions except this one.", `<button class="settings-action warning" type="button" id="revokeOtherSessions">Revoke others</button>`)}
       </section>
     `;
   }
@@ -1415,7 +2092,7 @@
         <form id="tradePreferencesForm">
           <div class="settings-form-grid">
             <label class="form-field"><span>Market</span><input value="ETB / USDT" disabled /></label>
-            <label class="form-field"><span>Preferred payment rails</span><input id="preferredPaymentRails" value="${escapeAttr(rails.join(", "))}" placeholder="M-Pesa, Bank transfer" /></label>
+            <label class="form-field"><span>Preferred payment rails</span><input id="preferredPaymentRails" value="${escapeAttr(rails.join(", "))}" placeholder="Telebirr, M-Pesa, CBE Birr" /></label>
           </div>
           <div class="settings-form-actions"><button class="app-button" type="submit">Save trade preferences</button></div>
         </form>
@@ -1454,7 +2131,19 @@
     });
 
     document.querySelector("#settingsProfileForm")?.addEventListener("submit", handleSettingsProfileSubmit);
+    document.querySelector("#settingsAvatarInput")?.addEventListener("change", handleSettingsAvatarChange);
+    document.querySelector("#settingsAvatarRemove")?.addEventListener("click", handleSettingsAvatarRemove);
     document.querySelector("#paymentMethodForm")?.addEventListener("submit", handlePaymentMethodSubmit);
+    document.querySelector("#togglePaymentMethodForm")?.addEventListener("click", () => {
+      showPaymentMethodForm = true;
+      renderSettings();
+    });
+    document.querySelector("#cancelPaymentMethodForm")?.addEventListener("click", () => {
+      showPaymentMethodForm = false;
+      renderSettings();
+    });
+    document.querySelector("#paymentType")?.addEventListener("change", updatePaymentMethodFields);
+    updatePaymentMethodFields();
     document.querySelector("#tradePreferencesForm")?.addEventListener("submit", handleTradePreferencesSubmit);
     document.querySelector("#passwordChangeForm")?.addEventListener("submit", handlePasswordChange);
     document.querySelector("#withdrawalAddressForm")?.addEventListener("submit", handleWithdrawalAddressSubmit);
@@ -1464,7 +2153,7 @@
     document.querySelector("#revokeOtherSessions")?.addEventListener("click", handleRevokeOtherSessions);
 
     document.querySelectorAll("[data-payment-delete]").forEach((button) => {
-      button.addEventListener("click", () => handlePaymentDelete(button.dataset.paymentDelete));
+      button.addEventListener("click", () => handlePaymentDelete(button.dataset.paymentDelete, button));
     });
 
     document.querySelectorAll("[data-payment-default]").forEach((button) => {
@@ -1506,6 +2195,7 @@
         fullName: document.querySelector("#settingsFullName").value,
         phone: document.querySelector("#settingsPhone").value,
         username: document.querySelector("#settingsUsername").value,
+        avatarUrl: document.querySelector("#settingsAvatarUrl")?.value || "",
       });
       showToast("Profile saved.");
       renderSettings();
@@ -1514,36 +2204,136 @@
     }
   }
 
+  async function handleSettingsAvatarChange(event) {
+    const file = event.currentTarget.files?.[0];
+    if (!file) return;
+    try {
+      const dataUrl = await readAvatarDataUrl(file);
+      const hidden = document.querySelector("#settingsAvatarUrl");
+      if (hidden) hidden.value = dataUrl;
+      updateAvatarPreview(dataUrl);
+      await saveSettingsAvatar(dataUrl, "Profile photo saved.");
+    } catch (error) {
+      event.currentTarget.value = "";
+      showToast(error.message || "Could not save profile photo.");
+      renderSettings();
+    }
+  }
+
+  async function handleSettingsAvatarRemove() {
+    const hidden = document.querySelector("#settingsAvatarUrl");
+    const input = document.querySelector("#settingsAvatarInput");
+    if (hidden) hidden.value = "";
+    if (input) input.value = "";
+    updateAvatarPreview("");
+    try {
+      await saveSettingsAvatar("", "Profile photo removed.");
+    } catch (error) {
+      showToast(error.message || "Could not remove profile photo.");
+      renderSettings();
+    }
+  }
+
+  async function saveSettingsAvatar(avatarUrl, message) {
+    const user = currentUser();
+    if (!user) return;
+    await accountService.saveProfile({
+      fullName: user.fullName || user.kycSubmission?.name || "",
+      phone: user.phone || "",
+      username: user.username || "",
+      avatarUrl,
+    });
+    showToast(message);
+    renderSettings();
+  }
+
+  function readAvatarDataUrl(file) {
+    const allowedTypes = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+    if (!allowedTypes.includes(file.type)) return Promise.reject(new Error("Upload a PNG, JPG, WebP, or GIF image."));
+    if (file.size > 512 * 1024) return Promise.reject(new Error("Profile image must be 512 KB or smaller."));
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(new Error(`Could not read ${file.name}.`));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function updateAvatarPreview(dataUrl) {
+    document.querySelectorAll("[data-avatar-preview]").forEach((avatar) => {
+      if (dataUrl) {
+        avatar.classList.add("has-image");
+        avatar.innerHTML = `<img src="${escapeAttr(dataUrl)}" alt="" />`;
+      } else {
+        avatar.classList.remove("has-image");
+        avatar.textContent = avatar.dataset.avatarInitial || "B";
+      }
+    });
+  }
+
+  function updatePaymentMethodFields() {
+    const type = document.querySelector("#paymentType")?.value || "";
+    const phoneField = document.querySelector("#paymentPhoneField");
+    const phoneInput = document.querySelector("#paymentPhone");
+    if (!phoneField || !phoneInput) return;
+    phoneField.hidden = !type;
+    phoneInput.required = Boolean(type);
+    const placeholders = {
+      telebirr: "+251 9XX XXX XXX",
+      mpesa: "+251 7XX XXX XXX",
+      cbe_birr: "+251 9XX XXX XXX",
+    };
+    phoneInput.placeholder = placeholders[type] || "+251 9XX XXX XXX";
+  }
+
   async function handlePaymentMethodSubmit(event) {
     event.preventDefault();
+    const submit = event.currentTarget.querySelector('button[type="submit"]');
+    const type = document.querySelector("#paymentType")?.value || "";
+    if (!type) return showToast("Select Telebirr, M-Pesa, or CBE Birr.");
+    const originalText = submit?.textContent;
+    if (submit) {
+      submit.disabled = true;
+      submit.textContent = "Adding...";
+    }
     try {
       await accountService.createPaymentMethod({
-        type: document.querySelector("#paymentType").value,
-        label: document.querySelector("#paymentLabel").value,
+        type,
+        label: paymentTypeLabel(type),
         accountName: document.querySelector("#paymentAccountName").value,
         phoneNumber: document.querySelector("#paymentPhone").value,
-        bankName: document.querySelector("#paymentBank").value,
-        accountNumber: document.querySelector("#paymentAccountNumber").value,
-        isDefault: document.querySelector("#paymentDefault").checked,
+        isDefault: !(currentUser()?.paymentMethods || []).length,
       });
+      showPaymentMethodForm = false;
       showToast("Payment method saved.");
       renderSettings();
     } catch (error) {
       showToast(error.message || "Could not save payment method.");
+      if (submit) {
+        submit.disabled = false;
+        submit.textContent = originalText;
+      }
     }
   }
-
-  async function handlePaymentDelete(paymentMethodId) {
+  async function handlePaymentDelete(paymentMethodId, button) {
     if (!paymentMethodId || !confirm("Remove this payment method?")) return;
+    const originalText = button?.textContent;
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Removing...";
+    }
     try {
       await accountService.deletePaymentMethod(paymentMethodId);
       showToast("Payment method removed.");
       renderSettings();
     } catch (error) {
       showToast(error.message || "Could not remove payment method.");
+      if (button) {
+        button.disabled = false;
+        button.textContent = originalText;
+      }
     }
   }
-
   async function handlePaymentDefault(paymentMethodId) {
     if (!paymentMethodId) return;
     try {
@@ -1619,7 +2409,7 @@
     return `
       <div class="settings-row session-row">
         <span class="settings-row-icon">${icon("activity")}</span>
-        <span class="settings-row-main"><strong>${escapeHtml(title)}</strong><small>Last seen ${dateTime(session.lastSeenAt)} Â· Created ${dateTime(session.createdAt)}</small></span>
+        <span class="settings-row-main"><strong>${escapeHtml(title)}</strong><small>Last seen ${dateTime(session.lastSeenAt)} · Created ${dateTime(session.createdAt)}</small></span>
         <span class="settings-row-aside session-actions">
           ${statusBadge(state, session.active ? "success" : "neutral")}
           ${!session.current && session.active ? `<button class="settings-action danger" type="button" data-session-revoke="${escapeAttr(session.id)}">Revoke</button>` : ""}
@@ -1632,7 +2422,7 @@
     return `
       <div class="settings-row withdrawal-address-row">
         <span class="settings-row-icon">${icon("wallet")}</span>
-        <span class="settings-row-main"><strong>${escapeHtml(address.label)}</strong><small>${escapeHtml(address.network)} Â· ${escapeHtml(shortAddress(address.address))}</small></span>
+        <span class="settings-row-main"><strong>${escapeHtml(address.label)}</strong><small>${escapeHtml(address.network)} · ${escapeHtml(shortAddress(address.address))}</small></span>
         <span class="settings-row-aside payment-actions">
           ${address.isDefault ? statusBadge("Default", "success") : `<button class="settings-action" type="button" data-withdrawal-default="${escapeAttr(address.id)}">Make default</button>`}
           <button class="settings-action danger" type="button" data-withdrawal-delete="${escapeAttr(address.id)}">Remove</button>
@@ -1765,10 +2555,12 @@
   }
 
   function paymentMethodRow(method) {
+    const typeLabel = paymentTypeLabel(method.type);
+    const providerMark = method.type === "cbe_birr" ? "CBE" : typeLabel.slice(0, 1).toUpperCase();
     return `
-      <div class="settings-row payment-method-row">
-        <span class="settings-row-icon">${icon(method.type === "bank" ? "card" : "phone")}</span>
-        <span class="settings-row-main"><strong>${escapeHtml(method.label || paymentTypeLabel(method.type))}</strong><small>${escapeHtml(paymentMethodDetail(method))}</small></span>
+      <div class="payment-method-entry">
+        <span class="payment-provider-mark ${escapeAttr(method.type)}">${escapeHtml(providerMark)}</span>
+        <span class="settings-row-main"><strong>${escapeHtml(typeLabel)}</strong><small>${escapeHtml(method.phoneNumber || method.accountNumber || "Account details saved")}</small><small>${escapeHtml(method.accountName)}</small></span>
         <span class="settings-row-aside payment-actions">
           ${method.isDefault ? statusBadge("Default", "success") : `<button class="settings-action" type="button" data-payment-default="${escapeAttr(method.id)}">Make default</button>`}
           <button class="settings-action danger" type="button" data-payment-delete="${escapeAttr(method.id)}">Remove</button>
@@ -1776,14 +2568,14 @@
       </div>
     `;
   }
-
   function paymentTypeLabel(type) {
+    if (type === "telebirr") return "Telebirr";
     if (type === "mpesa") return "M-Pesa";
+    if (type === "cbe_birr") return "CBE Birr";
     if (type === "airtel_money") return "Airtel Money";
     if (type === "bank") return "Bank transfer";
     return "Other";
   }
-
   function paymentMethodDetail(method) {
     if (method.type === "bank") return `${method.bankName || "Bank"} - ${method.accountNumber || "account"} - ${method.accountName}`;
     return `${paymentTypeLabel(method.type)} - ${method.phoneNumber || "phone not set"} - ${method.accountName}`;
@@ -1793,6 +2585,16 @@
     return user.fullName || user.username || displayName(user);
   }
 
+
+  function profileAvatarMarkup(user, className, fallbackValue) {
+    const initial = displayInitial(fallbackValue || accountDisplayName(user) || user?.email);
+    const avatarUrl = String(user?.avatarUrl || "").trim();
+    const baseAttrs = `data-avatar-preview data-avatar-initial="${escapeAttr(initial)}"`;
+    if (avatarUrl) {
+      return `<span class="${className} has-image" ${baseAttrs}><img src="${escapeAttr(avatarUrl)}" alt="" /></span>`;
+    }
+    return `<span class="${className}" ${baseAttrs}>${escapeHtml(initial)}</span>`;
+  }
   function brxId(user) {
     return `BRX-${String(user.backendUserId || user.id || "000000").replace(/-/g, "").slice(0, 6).toUpperCase().padEnd(6, "0")}`;
   }
@@ -1913,10 +2715,13 @@
     location.hash = "#/dashboard";
   }
 
-  function filePayload(id) {
+  function filePayload(id, maxBytes = null) {
     const input = document.querySelector(`#${id}`);
     const file = input?.files?.[0];
     if (!file) return Promise.resolve(null);
+    if (maxBytes && file.size > maxBytes) {
+      return Promise.reject(new Error(`File must be under ${Math.floor(maxBytes / (1024 * 1024))} MB.`));
+    }
 
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -1956,9 +2761,15 @@
   window.BRX.pages.renderWallet = renderWallet;
   window.BRX.pages.renderKyc = renderKyc;
   window.BRX.pages.renderProfile = renderProfile;
+  window.BRX.pages.renderNotifications = renderNotifications;
   window.BRX.pages.renderSettings = renderSettings;
   window.BRX.pages.renderReferrals = renderReferrals;
 })();
+
+
+
+
+
 
 
 

@@ -53,7 +53,7 @@ Every balance movement must create immutable ledger entries inside the same data
 4. Seller posts a sell offer.
 5. Buyer opens a trade.
 6. Escrow locks seller USDT from available to locked.
-7. Buyer pays ETB outside BRX by M-Pesa or bank.
+7. Buyer pays ETB outside BRX by Telebirr, M-Pesa, CBE Birr, or bank.
 8. Buyer marks payment sent.
 9. Seller confirms payment.
 10. Escrow releases locked USDT to buyer available balance.
@@ -114,3 +114,4 @@ BRX should not accept deposits until these are complete:
 - Admin KYC/dispute/withdrawal screens built.
 - Legal placeholders replaced with reviewed documents.
 - Incident response and support process defined.
+

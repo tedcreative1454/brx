@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
 import { DatabaseService } from "../database/database.service";
 
 interface ProfileRow {
@@ -50,6 +51,13 @@ export interface UpdateProfileBody {
   fullName?: string;
   phone?: string;
   username?: string;
+  avatarUrl?: string | null;
+}
+
+export interface InternalTransferBody {
+  recipient?: string;
+  amount?: string;
+  note?: string;
 }
 
 export interface NotificationPreferencesBody {
@@ -93,7 +101,7 @@ const DEFAULT_NOTIFICATIONS = {
 
 const DEFAULT_TRADE_PREFERENCES = {
   market: "ETB/USDT",
-  preferredPaymentRails: ["M-Pesa", "Bank transfer", "Airtel Money"],
+  preferredPaymentRails: ["Telebirr", "M-Pesa", "CBE Birr"],
 };
 
 @Injectable()
@@ -133,6 +141,8 @@ export class AccountService {
     const fullName = this.optionalText(body.fullName, 120);
     const phone = this.optionalText(body.phone, 40);
     const username = this.optionalUsername(body.username);
+    const hasAvatarUrl = Object.prototype.hasOwnProperty.call(body, "avatarUrl");
+    const avatarUrl = hasAvatarUrl ? this.optionalAvatarUrl(body.avatarUrl) : "";
 
     try {
       await this.db.transaction(async (client) => {
@@ -141,13 +151,14 @@ export class AccountService {
         }
 
         await client.query(
-          `INSERT INTO user_profiles (user_id, full_name, phone, updated_at)
-           VALUES ($1, $2, $3, now())
+          `INSERT INTO user_profiles (user_id, full_name, phone, avatar_url, updated_at)
+           VALUES ($1, $2, $3, $4, now())
            ON CONFLICT (user_id) DO UPDATE SET
              full_name = EXCLUDED.full_name,
              phone = EXCLUDED.phone,
+             avatar_url = CASE WHEN $5::boolean THEN user_profiles.avatar_url ELSE EXCLUDED.avatar_url END,
              updated_at = now()`,
-          [userId, fullName || null, phone || null],
+          [userId, fullName || null, phone || null, avatarUrl || null, !hasAvatarUrl],
         );
       });
     } catch (error: unknown) {
@@ -182,6 +193,91 @@ export class AccountService {
     const next = { ...DEFAULT_TRADE_PREFERENCES, preferredPaymentRails: rails };
     await this.db.query("UPDATE user_settings SET trade_preferences = $2, updated_at = now() WHERE user_id = $1", [userId, next]);
     return this.profile(userId);
+  }
+
+
+  async internalTransfer(userId: string, body: InternalTransferBody) {
+    const recipientLookup = this.requiredText(body.recipient, "Recipient", 160).toLowerCase();
+    const amount = this.transferAmount(body.amount);
+    const note = this.optionalText(body.note, 180);
+    const transferId = randomUUID();
+
+    return this.db.transaction(async (client) => {
+      const recipientResult = await client.query<{ id: string; email: string; username: string | null; status: string }>(
+        `SELECT id, email, username, status
+         FROM users
+         WHERE lower(email) = $1 OR lower(username) = $1
+         LIMIT 1`,
+        [recipientLookup],
+      );
+      const recipient = recipientResult.rows[0];
+      if (!recipient) throw new BadRequestException("No BRX user found for that email or username.");
+      if (recipient.id === userId) throw new BadRequestException("You cannot transfer USDT to yourself.");
+      if (recipient.status !== "active") throw new BadRequestException("Recipient account is not active.");
+
+      await client.query(
+        `INSERT INTO balances (user_id, asset)
+         VALUES ($1, 'USDT'), ($2, 'USDT')
+         ON CONFLICT (user_id, asset) DO NOTHING`,
+        [userId, recipient.id],
+      );
+
+      const senderUpdate = await client.query(
+        `UPDATE balances
+         SET available_balance = available_balance - $1::numeric,
+             updated_at = now()
+         WHERE user_id = $2
+           AND asset = 'USDT'
+           AND available_balance >= $1::numeric`,
+        [amount, userId],
+      );
+      if (senderUpdate.rowCount === 0) throw new BadRequestException("Insufficient available USDT balance.");
+
+      await client.query(
+        `UPDATE balances
+         SET available_balance = available_balance + $1::numeric,
+             updated_at = now()
+         WHERE user_id = $2 AND asset = 'USDT'`,
+        [amount, recipient.id],
+      );
+
+      await client.query(
+        `INSERT INTO ledger_entries
+          (user_id, asset, balance_type, amount, direction, reason, reference_type, reference_id, idempotency_key)
+         VALUES
+          ($1, 'USDT', 'available', $3::numeric, 'debit', 'internal_transfer', 'brx_transfer', $4, $5),
+          ($2, 'USDT', 'available', $3::numeric, 'credit', 'internal_transfer', 'brx_transfer', $4, $6)`,
+        [
+          userId,
+          recipient.id,
+          amount,
+          transferId,
+          `brx-transfer:${transferId}:sender-debit`,
+          `brx-transfer:${transferId}:recipient-credit`,
+        ],
+      );
+
+      const balance = await client.query(
+        `SELECT available_balance, locked_balance, pending_deposit, pending_withdrawal
+         FROM balances
+         WHERE user_id = $1 AND asset = 'USDT'
+         LIMIT 1`,
+        [userId],
+      );
+
+      return {
+        transfer: {
+          id: transferId,
+          amount,
+          asset: "USDT",
+          recipientEmail: recipient.email,
+          recipientUsername: recipient.username,
+          note,
+          createdAt: new Date().toISOString(),
+        },
+        balance: this.balanceToApi(balance.rows[0]),
+      };
+    });
   }
 
   async paymentMethods(userId: string) {
@@ -449,7 +545,7 @@ export class AccountService {
     const accountNumber = this.optionalText(body.accountNumber, 60);
     const instructions = this.optionalText(body.instructions, 300);
 
-    if ((type === "mpesa" || type === "airtel_money") && !phoneNumber) {
+    if (["telebirr", "mpesa", "cbe_birr", "airtel_money"].includes(type) && !phoneNumber) {
       throw new BadRequestException("Mobile money payment methods require a phone number.");
     }
     if (type === "bank" && (!bankName || !accountNumber)) {
@@ -528,8 +624,8 @@ export class AccountService {
 
   private paymentType(type: string | undefined) {
     const normalized = String(type ?? "").trim().toLowerCase();
-    if (["mpesa", "airtel_money", "bank", "other"].includes(normalized)) return normalized;
-    throw new BadRequestException("Payment method type must be M-Pesa, Airtel Money, bank, or other.");
+    if (["telebirr", "mpesa", "cbe_birr", "airtel_money", "bank", "other"].includes(normalized)) return normalized;
+    throw new BadRequestException("Payment method type must be Telebirr, M-Pesa, or CBE Birr.");
   }
 
   private withdrawalNetwork(network: string | undefined) {
@@ -553,7 +649,9 @@ export class AccountService {
   }
 
   private defaultLabel(type: string) {
+    if (type === "telebirr") return "Telebirr";
     if (type === "mpesa") return "M-Pesa";
+    if (type === "cbe_birr") return "CBE Birr";
     if (type === "airtel_money") return "Airtel Money";
     if (type === "bank") return "Bank Transfer";
     return "Payment Method";
@@ -577,6 +675,24 @@ export class AccountService {
     return trimmed;
   }
 
+  private transferAmount(value: string | undefined) {
+    const trimmed = String(value ?? "").replace(/,/g, "").trim();
+    if (!/^\d+(\.\d{1,8})?$/.test(trimmed)) throw new BadRequestException("Enter a valid USDT amount.");
+    const amount = Number(trimmed);
+    if (!Number.isFinite(amount) || amount <= 0) throw new BadRequestException("Enter a valid USDT amount.");
+    if (amount < 0.01) throw new BadRequestException("Minimum transfer is 0.01 USDT.");
+    return trimmed;
+  }
+
+  private balanceToApi(row?: { available_balance?: string; locked_balance?: string; pending_deposit?: string; pending_withdrawal?: string }) {
+    return {
+      available: row?.available_balance ?? "0",
+      locked: row?.locked_balance ?? "0",
+      pendingDeposit: row?.pending_deposit ?? "0",
+      pendingWithdrawal: row?.pending_withdrawal ?? "0",
+    };
+  }
+
   private requiredText(value: string | undefined, label: string, maxLength: number) {
     const trimmed = this.optionalText(value, maxLength);
     if (!trimmed) throw new BadRequestException(`${label} is required.`);
@@ -590,7 +706,22 @@ export class AccountService {
     return trimmed;
   }
 
+  private optionalAvatarUrl(value: string | undefined | null) {
+    if (value === undefined || value === null) return "";
+    const trimmed = String(value).trim();
+    if (!trimmed) return "";
+    if (trimmed.length > 800_000) throw new BadRequestException("Profile image must be 512 KB or smaller.");
+    if (!/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/i.test(trimmed)) {
+      throw new BadRequestException("Upload a PNG, JPG, WebP, or GIF profile image.");
+    }
+    return trimmed;
+  }
+
   private isUniqueViolation(error: unknown) {
     return typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "23505";
   }
 }
+
+
+
+

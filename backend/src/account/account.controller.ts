@@ -1,7 +1,8 @@
-﻿import { Body, Controller, Delete, Get, Headers, Param, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post } from "@nestjs/common";
 import { AuthService } from "../auth/auth.service";
 import {
   AccountService,
+  InternalTransferBody,
   NotificationPreferencesBody,
   PaymentMethodBody,
   TradePreferencesBody,
@@ -35,6 +36,12 @@ export class AccountController {
   ) {
     const user = await this.auth.authenticate(authorization);
     return this.account.updateNotifications(user.id, body);
+  }
+
+  @Post("transfers")
+  async internalTransfer(@Headers("authorization") authorization: string | undefined, @Body() body: InternalTransferBody) {
+    const user = await this.auth.authenticate(authorization);
+    return this.account.internalTransfer(user.id, body);
   }
 
   @Patch("trade-preferences")
@@ -105,3 +112,4 @@ export class AccountController {
     return this.account.deleteWithdrawalAddress(user.id, id);
   }
 }
+

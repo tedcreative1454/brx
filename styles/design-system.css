@@ -1,0 +1,279 @@
+/* BRX design system: shared tokens, primitives, accessibility, and motion. */
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --radius-xs: 6px;
+  --radius-sm: 9px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+  --control-sm: 36px;
+  --control-md: 42px;
+  --control-lg: 48px;
+  --transition-fast: 150ms ease;
+  --transition-base: 200ms ease;
+  --focus-ring: 0 0 0 3px rgba(2, 184, 255, .22);
+  --surface-hover: rgba(255, 255, 255, .045);
+  --surface-selected: rgba(0, 153, 255, .11);
+  --danger-soft: rgba(255, 75, 103, .1);
+  --success-soft: rgba(8, 201, 139, .1);
+  --warning-soft: rgba(246, 184, 63, .1);
+}
+
+:root[data-theme="light"] {
+  --surface-hover: rgba(7, 17, 31, .045);
+  --surface-selected: rgba(0, 128, 255, .09);
+  --focus-ring: 0 0 0 3px rgba(0, 128, 255, .18);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: rgba(0, 153, 255, .3);
+  color: var(--text);
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  transition: border-color var(--transition-fast), background-color var(--transition-fast), color var(--transition-fast), opacity var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--blue-2);
+  outline-offset: 2px;
+  box-shadow: var(--focus-ring);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: rgba(0, 184, 255, .55);
+}
+
+button:disabled,
+input:disabled,
+select:disabled,
+a[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: .5;
+  transform: none;
+}
+
+#app[aria-busy="true"] {
+  cursor: progress;
+}
+
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.ui-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.ui-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+  margin-bottom: var(--space-5);
+}
+
+.ui-page-header h1 {
+  margin: 2px 0 5px;
+  font-size: clamp(28px, 3vw, 40px);
+  line-height: 1.08;
+  letter-spacing: -.035em;
+}
+
+.ui-page-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ui-eyebrow {
+  margin: 0;
+  color: var(--blue-2);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.ui-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: max-content;
+  min-height: 26px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+
+.ui-status.success {
+  color: var(--green);
+  background: var(--success-soft);
+}
+
+.ui-status.warning {
+  color: var(--yellow);
+  background: var(--warning-soft);
+}
+
+.ui-status.danger {
+  color: var(--red);
+  background: var(--danger-soft);
+}
+
+.ui-empty-state,
+.ui-loading-state,
+.ui-error-state {
+  min-height: 180px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  text-align: center;
+}
+
+.ui-empty-state > svg,
+.ui-error-state > svg {
+  width: 28px;
+  height: 28px;
+  color: var(--blue-2);
+}
+
+.ui-error-state > svg {
+  color: var(--red);
+}
+
+.ui-empty-state h3,
+.ui-error-state h3,
+.ui-loading-state strong,
+.ui-empty-state p,
+.ui-error-state p {
+  margin: 0;
+}
+
+.ui-empty-state h3,
+.ui-error-state h3,
+.ui-loading-state strong {
+  font-size: 14px;
+}
+
+.ui-empty-state p,
+.ui-error-state p,
+.ui-loading-state small {
+  max-width: 420px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.ui-loading-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(0, 184, 255, .16);
+  border-top-color: var(--blue-2);
+  border-radius: 50%;
+  animation: ui-spin .8s linear infinite;
+}
+
+@keyframes ui-spin {
+  to { transform: rotate(360deg); }
+}
+
+.toast {
+  border-radius: var(--radius-md);
+  backdrop-filter: blur(16px);
+}
+
+.toast.show {
+  animation: toast-enter var(--transition-base) both;
+}
+
+@keyframes toast-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+:is(.app-card, .settings-card, .wallet-panel, .admin-console-section, .dashboard-balance-card, .dashboard-market-card, .market-results-panel) {
+  isolation: isolate;
+}
+
+@media (hover: hover) {
+  :is(.app-button, .app-ghost-button, .primary-button, .secondary-button, .professional-primary-link):not(:disabled):hover {
+    transform: translateY(-1px);
+  }
+}
+
+@media (max-width: 760px) {
+  .ui-page-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  :is(.app-button, .app-ghost-button, .primary-button, .secondary-button, .danger-button, .outline-button, .settings-action) {
+    min-height: 44px;
+  }
+
+  .app-table {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}

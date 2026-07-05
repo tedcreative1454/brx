@@ -11,7 +11,9 @@
         const response = await fetch(`${base}${path}`, {
           ...requestOptions,
           headers: {
-            "content-type": "application/json",
+            ...(requestOptions.body !== undefined && requestOptions.body !== null
+              ? { "content-type": "application/json" }
+              : {}),
             ...(window.BRX.state.accessToken() ? { authorization: `Bearer ${window.BRX.state.accessToken()}` } : {}),
             ...headers,
           },
@@ -36,6 +38,8 @@
         }
         return payload;
       } catch (error) {
+        const isNetworkError = error instanceof TypeError || error?.message === "Failed to fetch";
+        if (!isNetworkError) throw error;
         lastError = error;
       }
     }

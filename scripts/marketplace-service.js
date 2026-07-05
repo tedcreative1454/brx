@@ -18,6 +18,12 @@
     });
   }
 
+  function updateOffer(offerId, input) {
+    return requestJson(`/offers/${encodeURIComponent(offerId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    });
+  }
   function updateOfferStatus(offerId, status) {
     return requestJson(`/offers/${offerId}/status`, {
       method: "PATCH",
@@ -25,10 +31,10 @@
     });
   }
 
-  function openTrade(offerId, assetAmount) {
+  function openTrade(offerId, assetAmount, paymentMethod) {
     return requestJson("/trades", {
       method: "POST",
-      body: JSON.stringify({ offerId, assetAmount }),
+      body: JSON.stringify({ offerId, assetAmount, paymentMethod }),
     });
   }
 
@@ -40,6 +46,19 @@
     return requestJson(`/trades/${tradeId}`);
   }
 
+  function paymentProof(tradeId) {
+    return requestJson(`/trades/${encodeURIComponent(tradeId)}/payment-proof`);
+  }
+  function tradeMessages(tradeId) {
+    return requestJson(`/trades/${encodeURIComponent(tradeId)}/messages`);
+  }
+
+  function sendTradeMessage(tradeId, body) {
+    return requestJson(`/trades/${encodeURIComponent(tradeId)}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ body }),
+    });
+  }
   function markPaymentSent(tradeId, input = {}) {
     return requestJson(`/trades/${tradeId}/payment-sent`, {
       method: "POST",
@@ -74,10 +93,14 @@
     listOffers,
     myOffers,
     createOffer,
+    updateOffer,
     updateOfferStatus,
     openTrade,
     myTrades,
     getTrade,
+    paymentProof,
+    tradeMessages,
+    sendTradeMessage,
     markPaymentSent,
     releaseTrade,
     cancelTrade,

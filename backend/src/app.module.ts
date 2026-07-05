@@ -9,6 +9,7 @@ import { HealthModule } from "./health/health.module";
 import { JobsModule } from "./jobs/jobs.module";
 import { KycModule } from "./kyc/kyc.module";
 import { LedgerModule } from "./ledger/ledger.module";
+import { NotificationsModule } from "./notifications/notifications.module";
 import { OffersModule } from "./offers/offers.module";
 import { SecurityModule } from "./security/security.module";
 import { TradesModule } from "./trades/trades.module";
@@ -28,6 +29,7 @@ import { WithdrawalsModule } from "./withdrawals/withdrawals.module";
     WithdrawalsModule,
     AuthModule,
     KycModule,
+    NotificationsModule,
     OffersModule,
     TradesModule,
     SecurityModule,

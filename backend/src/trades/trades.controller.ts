@@ -1,4 +1,4 @@
-﻿import { Body, Controller, Get, Headers, Param, Post } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Param, Post } from "@nestjs/common";
 import { AuthService } from "../auth/auth.service";
 import { TradesService } from "./trades.service";
 
@@ -15,6 +15,26 @@ export class TradesController {
     return this.trades.myTrades(user.id);
   }
 
+  @Get(":id/messages")
+  async messages(@Headers("authorization") authorization: string | undefined, @Param("id") tradeId: string) {
+    const user = await this.auth.authenticate(authorization);
+    return this.trades.messages(user.id, tradeId);
+  }
+
+  @Post(":id/messages")
+  async sendMessage(
+    @Headers("authorization") authorization: string | undefined,
+    @Param("id") tradeId: string,
+    @Body() body: { body?: string },
+  ) {
+    const user = await this.auth.authenticate(authorization);
+    return this.trades.sendMessage(user.id, tradeId, body.body);
+  }
+  @Get(":id/payment-proof")
+  async paymentProof(@Headers("authorization") authorization: string | undefined, @Param("id") tradeId: string) {
+    const user = await this.auth.authenticate(authorization);
+    return this.trades.paymentProof(user.id, tradeId);
+  }
   @Get(":id")
   async getTrade(@Headers("authorization") authorization: string | undefined, @Param("id") tradeId: string) {
     const user = await this.auth.authenticate(authorization);
@@ -22,7 +42,7 @@ export class TradesController {
   }
 
   @Post()
-  async open(@Headers("authorization") authorization: string | undefined, @Body() body: { offerId?: string; assetAmount?: string | number }) {
+  async open(@Headers("authorization") authorization: string | undefined, @Body() body: { offerId?: string; assetAmount?: string | number; paymentMethod?: string }) {
     const user = await this.auth.authenticate(authorization);
     return this.trades.open(user.id, body);
   }

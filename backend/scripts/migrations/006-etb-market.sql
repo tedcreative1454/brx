@@ -16,10 +16,11 @@ SET trade_preferences = jsonb_set(
 WHERE trade_preferences->>'market' = 'KES/USDT';
 
 ALTER TABLE user_settings
-ALTER COLUMN trade_preferences SET DEFAULT '{"market":"ETB/USDT","preferredPaymentRails":["M-Pesa","Bank transfer","Airtel Money"]}';
+ALTER COLUMN trade_preferences SET DEFAULT '{"market":"ETB/USDT","preferredPaymentRails":["Telebirr","M-Pesa","CBE Birr"]}';
 
 ALTER TABLE offers
 ALTER COLUMN fiat SET DEFAULT 'ETB';
 
 ALTER TABLE trades
 ALTER COLUMN fiat SET DEFAULT 'ETB';
+

@@ -99,6 +99,18 @@
     return loadSettings();
   }
 
+  async function internalTransfer(transfer) {
+    const result = await requestJson("/account/transfers", {
+      method: "POST",
+      body: JSON.stringify(transfer),
+    });
+    const existing = currentUser();
+    if (existing && result.balance) {
+      upsertUser({ ...existing, balance: result.balance });
+    }
+    return result;
+  }
+
   async function requestWithdrawal(withdrawal) {
     const result = await requestJson("/withdrawals", {
       method: "POST",
@@ -127,7 +139,7 @@
   function defaultTradePreferences() {
     return {
       market: "ETB/USDT",
-      preferredPaymentRails: ["M-Pesa", "Bank transfer", "Airtel Money"],
+      preferredPaymentRails: ["Telebirr", "M-Pesa", "CBE Birr"],
     };
   }
 
@@ -142,10 +154,12 @@
     createWithdrawalAddress,
     updateWithdrawalAddress,
     deleteWithdrawalAddress,
+    internalTransfer,
     requestWithdrawal,
     listWithdrawals,
     defaultNotifications,
     defaultTradePreferences,
   };
 })();
+
 

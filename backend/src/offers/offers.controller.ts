@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Headers, Param, Patch, Post, Query } from "@nestjs/common";
 import { AuthService } from "../auth/auth.service";
-import { CreateOfferInput, OffersService } from "./offers.service";
+import { CreateOfferInput, OffersService, UpdateOfferInput } from "./offers.service";
 
 @Controller("offers")
 export class OffersController {
@@ -26,6 +26,15 @@ export class OffersController {
     return this.offers.create(user.id, body);
   }
 
+  @Patch(":id")
+  async update(
+    @Headers("authorization") authorization: string | undefined,
+    @Param("id") offerId: string,
+    @Body() body: UpdateOfferInput,
+  ) {
+    const user = await this.auth.authenticate(authorization);
+    return this.offers.update(user.id, offerId, body);
+  }
   @Patch(":id/status")
   async updateStatus(
     @Headers("authorization") authorization: string | undefined,

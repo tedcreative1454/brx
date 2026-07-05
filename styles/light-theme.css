@@ -1,0 +1,385 @@
+/* BRX light theme: calm neutral canvas, white surfaces, and restrained blue accents. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f4f7fb;
+  --bg-soft: #eef3f9;
+  --surface: #ffffff;
+  --surface-2: #f8fafc;
+  --surface-3: #f1f5f9;
+  --line: #dbe3ed;
+  --line-blue: rgba(0, 125, 230, .28);
+  --text: #0f172a;
+  --muted: #526174;
+  --muted-2: #7b8797;
+  --blue: #0788ed;
+  --blue-2: #0098e8;
+  --green: #00a978;
+  --red: #e83d5b;
+  --yellow: #c88912;
+  --shadow: 0 16px 44px rgba(36, 55, 79, .09);
+  --surface-hover: #f3f7fb;
+  --surface-selected: #eaf5ff;
+}
+
+:root[data-theme="light"] html,
+:root[data-theme="light"] body {
+  background: #f4f7fb;
+}
+
+:root[data-theme="light"] body {
+  background-image: linear-gradient(180deg, #fbfdff 0, #f4f7fb 340px, #f4f7fb 100%);
+  color: var(--text);
+}
+
+:root[data-theme="light"] body:has(.landing),
+:root[data-theme="light"] body:has(.auth-page) {
+  background: #f4f7fb;
+}
+
+/* Header and navigation */
+:root[data-theme="light"] .site-header {
+  background: rgba(255, 255, 255, .94);
+  border-bottom-color: #dfe7f0;
+  box-shadow: 0 8px 26px rgba(35, 54, 78, .06);
+}
+
+:root[data-theme="light"] .app-header .nav {
+  border-color: #dce5ef;
+  background: #f6f9fc;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9);
+}
+
+:root[data-theme="light"] .nav a,
+:root[data-theme="light"] .nav button,
+:root[data-theme="light"] .header-icon,
+:root[data-theme="light"] .menu-button,
+:root[data-theme="light"] .inline-icon-button {
+  color: #526174;
+}
+
+:root[data-theme="light"] .nav a.active,
+:root[data-theme="light"] .nav button.active {
+  color: #007dce;
+  background: #e8f4ff;
+}
+
+:root[data-theme="light"] .header-icon:hover,
+:root[data-theme="light"] .menu-button:hover {
+  color: #007dce;
+  background: #eef5fb;
+}
+
+:root[data-theme="light"] .account-menu,
+:root[data-theme="light"] .notification-menu {
+  background: #fff;
+  border-color: #dbe3ed;
+  box-shadow: 0 18px 46px rgba(35, 54, 78, .14);
+}
+
+/* Shared controls and surfaces */
+:root[data-theme="light"] :is(
+  .calculator-card, .phone-card, .feature-card, .step-card, .app-card,
+  .wallet-panel, .settings-card, .trade-ticket, .warning-card, .empty-panel,
+  .security-strip, .shortcut-card, .review-card, .kyc-form, .offer-form,
+  .ui-card, .ui-empty-state, .ui-loading-state, .ui-error-state
+) {
+  background-color: #fff;
+  border-color: #dbe3ed;
+  box-shadow: 0 10px 30px rgba(35, 54, 78, .055);
+}
+
+:root[data-theme="light"] :is(
+  .secondary-button, .app-ghost-button, .outline-button, .settings-action,
+  .filter-chip, .sheet-badge, .status-pill, .settings-badge
+) {
+  background-color: #f5f8fc;
+  border-color: #d7e1ec;
+  color: #243247;
+}
+
+:root[data-theme="light"] :is(
+  .input-box, .form-field input, .form-field select, textarea,
+  .filter-input-chip input, .filter-input-chip select
+) {
+  background-color: #fff;
+  border-color: #d5dfeb;
+  color: #0f172a;
+}
+
+:root[data-theme="light"] :is(.segmented, .tabs-bar, .wallet-mode-tabs) {
+  background: #eef3f8;
+  border-color: #d7e1eb;
+}
+
+:root[data-theme="light"] .toast {
+  background: rgba(255, 255, 255, .96);
+  border-color: #d8e2ed;
+  color: #172033;
+  box-shadow: 0 18px 50px rgba(35, 54, 78, .16);
+}
+
+/* Dashboard */
+:root[data-theme="light"] .dashboard-profile-status {
+  border-color: #d5e1ec;
+  background: #fff;
+  box-shadow: 0 10px 28px rgba(35, 54, 78, .07);
+}
+
+:root[data-theme="light"] .dashboard-profile-status:hover {
+  border-color: rgba(0, 136, 220, .4);
+  background: #f9fcff;
+}
+
+:root[data-theme="light"] .dashboard-profile-open {
+  color: #66758a;
+  background: #f3f7fb;
+}
+
+:root[data-theme="light"] .dashboard-balance-card,
+:root[data-theme="light"] .dashboard-market-card {
+  border-color: #d8e3ee;
+  background: #fff;
+  box-shadow: 0 14px 38px rgba(35, 54, 78, .075);
+}
+
+:root[data-theme="light"] .dashboard-balance-card::after {
+  background: rgba(0, 153, 255, .055);
+}
+
+:root[data-theme="light"] .dashboard-network,
+:root[data-theme="light"] .dashboard-live {
+  border-color: #d6e1ec;
+  background: #f4f8fb;
+}
+
+:root[data-theme="light"] .dashboard-balance-breakdown > div,
+:root[data-theme="light"] .dashboard-rate-range > div {
+  border-color: #dfe7ef;
+  background: #f7f9fc;
+}
+
+:root[data-theme="light"] .dashboard-wallet-action.neutral,
+:root[data-theme="light"] .dashboard-shortcut {
+  border-color: #d8e2ec;
+  background: #f7f9fc;
+}
+
+:root[data-theme="light"] .dashboard-quick-section,
+:root[data-theme="light"] .dashboard-status-card {
+  border-color: #d8e3ee;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(35, 54, 78, .055);
+}
+
+:root[data-theme="light"] .dashboard-status-card.kyc {
+  background: #f8fbff;
+}
+
+:root[data-theme="light"] .dashboard-status-card.security {
+  background: #f8fcfa;
+}
+
+/* Market and ads */
+:root[data-theme="light"] .market-hero,
+:root[data-theme="light"] .professional-market .market-hero.compact {
+  border-color: #d9e4ee;
+  background: #fff;
+  box-shadow: 0 12px 34px rgba(35, 54, 78, .06);
+}
+
+:root[data-theme="light"] .market-intent-tabs,
+:root[data-theme="light"] .offer-side-switch {
+  background: #eef3f8;
+  border-color: #d6e0eb;
+}
+
+:root[data-theme="light"] .market-filter-panel,
+:root[data-theme="light"] .market-results-panel,
+:root[data-theme="light"] .professional-trade-list-card {
+  border-color: #d9e3ed;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(35, 54, 78, .05);
+}
+
+:root[data-theme="light"] .market-filter-field input,
+:root[data-theme="light"] .market-filter-field select,
+:root[data-theme="light"] .market-filter-field.asset strong,
+:root[data-theme="light"] .offer-input-field > div,
+:root[data-theme="light"] .payment-method-editor input,
+:root[data-theme="light"] .payment-method-editor select {
+  background: #fff;
+  border-color: #d4dfeb;
+  color: #0f172a;
+}
+
+:root[data-theme="light"] .payment-method-editor {
+  border-color: #cfe2f2;
+  background: #f8fbfe;
+}
+
+:root[data-theme="light"] .market-offer-row,
+:root[data-theme="light"] .professional-trade-row,
+:root[data-theme="light"] .offer-composer-section,
+:root[data-theme="light"] .offer-summary-panel {
+  border-color: #dde5ee;
+  background-color: #fff;
+}
+
+:root[data-theme="light"] .market-offer-row:hover,
+:root[data-theme="light"] .professional-trade-row:hover {
+  background: #f7fbff;
+}
+
+/* Trades and chat */
+:root[data-theme="light"] :is(
+  .trade-room-header, .escrow-main, .escrow-side, .trade-confirm-modal,
+  .trade-countdown-card, .payment-method-card, .proof-card, .trade-chat-panel,
+  .appeal-card, .dispute-panel
+) {
+  background-color: #fff;
+  border-color: #d9e3ed;
+  box-shadow: 0 12px 34px rgba(35, 54, 78, .06);
+}
+
+:root[data-theme="light"] :is(
+  .escrow-stepper, .payment-instructions, .side-section, .trade-chat-body,
+  .trade-chat-form, .evidence-item, .payment-proof-preview
+) {
+  background-color: #f7f9fc;
+  border-color: #dde5ee;
+}
+
+:root[data-theme="light"] .payment-proof-preview {
+  color: #526174;
+}
+
+:root[data-theme="light"] .proof-viewer-backdrop,
+:root[data-theme="light"] .trade-confirm-backdrop,
+:root[data-theme="light"] .order-modal-backdrop,
+:root[data-theme="light"] .edit-offer-backdrop {
+  background: rgba(15, 23, 42, .54);
+}
+
+:root[data-theme="light"] .proof-viewer,
+:root[data-theme="light"] .order-modal,
+:root[data-theme="light"] .edit-offer-modal {
+  background: #fff;
+  border-color: #d8e2ec;
+  box-shadow: 0 28px 90px rgba(15, 23, 42, .24);
+}
+
+/* Wallet */
+:root[data-theme="light"] .professional-wallet-summary,
+:root[data-theme="light"] .wallet-activity-panel,
+:root[data-theme="light"] .professional-wallet-page .wallet-panel {
+  border-color: #d8e3ee;
+  background: #fff;
+  box-shadow: 0 12px 34px rgba(35, 54, 78, .06);
+}
+
+:root[data-theme="light"] .professional-balance-grid > div,
+:root[data-theme="light"] .professional-wallet-tabs,
+:root[data-theme="light"] .wallet-network-card,
+:root[data-theme="light"] .wallet-feature-preview {
+  border-color: #dce5ee;
+  background: #f7f9fc;
+}
+
+:root[data-theme="light"] .professional-wallet-tabs button.active,
+:root[data-theme="light"] .wallet-network-card.active {
+  border-color: #b8d9f0;
+  background: #ebf6ff;
+  box-shadow: none;
+}
+
+:root[data-theme="light"] .deposit-address-card {
+  border-color: #badcf3;
+  background: #f1f9ff;
+}
+
+/* Settings */
+:root[data-theme="light"] .professional-settings-head,
+:root[data-theme="light"] .professional-settings-page .settings-identity {
+  border-color: #d8e3ee;
+  background: #fff;
+  box-shadow: 0 12px 34px rgba(35, 54, 78, .055);
+}
+
+:root[data-theme="light"] .professional-settings-head::after {
+  background: rgba(0, 153, 255, .04);
+}
+
+:root[data-theme="light"] .professional-settings-state,
+:root[data-theme="light"] .settings-content-head,
+:root[data-theme="light"] .professional-settings-page .professional-settings-nav,
+:root[data-theme="light"] .professional-settings-page .settings-card {
+  border-color: #dae4ee;
+  background: #fff;
+}
+
+:root[data-theme="light"] .professional-settings-page .settings-tab:hover {
+  background: #f3f7fb;
+}
+
+:root[data-theme="light"] .professional-settings-page .settings-tab.active {
+  border-color: #bdddf3;
+  background: #eaf6ff;
+}
+
+:root[data-theme="light"] .professional-settings-page .settings-row-icon,
+:root[data-theme="light"] .payment-method-entry,
+:root[data-theme="light"] .settings-security-block {
+  background: #f4f8fb;
+  border-color: #dce5ee;
+}
+
+/* Admin */
+:root[data-theme="light"] .admin-console-hero,
+:root[data-theme="light"] .admin-console-section,
+:root[data-theme="light"] .admin-console-panel,
+:root[data-theme="light"] .admin-operation-panel {
+  border-color: #d8e3ee;
+  background: #fff;
+  box-shadow: 0 12px 34px rgba(35, 54, 78, .055);
+}
+
+:root[data-theme="light"] .admin-console-hero::after {
+  background: rgba(0, 153, 255, .035);
+}
+
+:root[data-theme="light"] .admin-access-badge,
+:root[data-theme="light"] .admin-section-badge,
+:root[data-theme="light"] .admin-refresh-button {
+  background-color: #f1f8fd;
+}
+
+:root[data-theme="light"] .admin-console-page .admin-stat-card,
+:root[data-theme="light"] .admin-console-page .admin-queue-row,
+:root[data-theme="light"] .admin-console-page .admin-setting-tile,
+:root[data-theme="light"] .admin-console-page .limit-row {
+  border-color: #dce5ee;
+  background: #f7f9fc;
+}
+
+:root[data-theme="light"] .admin-console-page button.admin-queue-row:hover {
+  border-color: #a8d4ef;
+  background: #edf7ff;
+}
+
+:root[data-theme="light"] .admin-panel-head,
+:root[data-theme="light"] .admin-operation-head {
+  background: #f7f9fc;
+  border-color: #dce5ee;
+}
+
+/* Keep media previews legible without pulling the whole page back into dark mode. */
+:root[data-theme="light"] .proof-preview-button span {
+  background: rgba(15, 23, 42, .78);
+  color: #fff;
+}
+
+@media (max-width: 760px) {
+  :root[data-theme="light"] body {
+    background: #f4f7fb;
+  }
+}

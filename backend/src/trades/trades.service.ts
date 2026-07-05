@@ -1,11 +1,12 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
-import { extname, join } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { extname, join, resolve, sep } from "node:path";
 import { PoolClient } from "pg";
 import { DatabaseService } from "../database/database.service";
 import { EmailService } from "../email/email.service";
 import { LedgerService } from "../ledger/ledger.service";
+import { NotificationsService } from "../notifications/notifications.service";
 
 interface OfferRow {
   id: string;
@@ -28,6 +29,7 @@ interface TradeRow {
   fiat: string;
   asset_amount: string;
   fiat_amount: string;
+  payment_method: string | null;
   status: string;
   payment_sent_at: Date | null;
   payment_reference: string | null;
@@ -52,6 +54,14 @@ interface TradeRow {
   seller_payment_methods?: unknown;
 }
 
+interface TradeMessageRow {
+  id: string;
+  trade_id: string;
+  sender_id: string;
+  body: string;
+  read_at: Date | null;
+  created_at: Date;
+}
 interface DisputeEvidenceInput {
   note?: string;
   file?: {
@@ -79,6 +89,7 @@ export class TradesService {
     private readonly db: DatabaseService,
     private readonly ledger: LedgerService,
     private readonly email: EmailService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async myTrades(userId: string) {
@@ -121,7 +132,9 @@ export class TradesService {
                   'isDefault', pm.is_default
                 ) ORDER BY pm.is_default DESC, pm.created_at DESC)
                 FROM payment_methods pm
-                WHERE pm.user_id = t.seller_id AND pm.status = 'active'
+                WHERE pm.user_id = t.seller_id
+                  AND pm.status = 'active'
+                  AND (t.payment_method IS NULL OR lower(pm.label) = lower(t.payment_method))
               ), '[]'::json) AS seller_payment_methods,
               COALESCE((
                 SELECT json_agg(json_build_object(
@@ -153,7 +166,42 @@ export class TradesService {
     return { trade: this.toTrade(trade, userId) };
   }
 
-  async open(userId: string, input: { offerId?: string; assetAmount?: string | number }) {
+  async paymentProof(userId: string, tradeId: string) {
+    const result = await this.db.query<Pick<TradeRow, "buyer_id" | "seller_id" | "payment_proof_url" | "payment_proof_name" | "payment_proof_mime_type">>(
+      `SELECT buyer_id, seller_id, payment_proof_url, payment_proof_name, payment_proof_mime_type
+       FROM trades
+       WHERE id = $1
+       LIMIT 1`,
+      [tradeId],
+    );
+    const trade = result.rows[0];
+    if (!trade) throw new NotFoundException("Trade was not found.");
+    if (trade.buyer_id !== userId && trade.seller_id !== userId) throw new ForbiddenException("Trade access denied.");
+    if (!trade.payment_proof_url || !trade.payment_proof_name || !trade.payment_proof_mime_type) {
+      throw new NotFoundException("No payment receipt is attached to this trade.");
+    }
+
+    const storedPath = trade.payment_proof_url.replace(/^backend[\\/]/, "");
+    const uploadsRoot = resolve(process.cwd(), "uploads", "trades");
+    const absolutePath = resolve(process.cwd(), storedPath);
+    if (!absolutePath.startsWith(`${uploadsRoot}${sep}`)) {
+      throw new BadRequestException("Invalid payment receipt path.");
+    }
+
+    try {
+      const data = await readFile(absolutePath);
+      return {
+        proof: {
+          fileName: trade.payment_proof_name,
+          mimeType: trade.payment_proof_mime_type,
+          dataUrl: `data:${trade.payment_proof_mime_type};base64,${data.toString("base64")}`,
+        },
+      };
+    } catch {
+      throw new NotFoundException("Payment receipt file was not found.");
+    }
+  }
+  async open(userId: string, input: { offerId?: string; assetAmount?: string | number; paymentMethod?: string }) {
     const offerId = String(input.offerId ?? "").trim();
     const assetAmount = this.positiveNumber(input.assetAmount, "Enter the USDT amount.");
     if (!offerId) throw new BadRequestException("Offer is required.");
@@ -171,14 +219,22 @@ export class TradesService {
         throw new BadRequestException("Trade amount is outside this offer limit.");
       }
 
+      const paymentMethod = String(input.paymentMethod ?? "").trim();
+      const offeredPaymentMethods = offer.payment_methods ?? [];
+      const normalizedPaymentMethod = this.normalizePaymentMethod(paymentMethod);
+      const linkedPaymentMethod = offeredPaymentMethods.find(
+        (method) => this.normalizePaymentMethod(method) === normalizedPaymentMethod,
+      ) ?? (offeredPaymentMethods.length === 1 ? offeredPaymentMethods[0] : undefined);
+      if (!linkedPaymentMethod) throw new BadRequestException("Select one of this ad's payment methods.");
+
       const buyerId = offer.side === "sell" ? userId : offer.user_id;
       const sellerId = offer.side === "sell" ? offer.user_id : userId;
 
       const tradeResult = await client.query<TradeRow>(
-        `INSERT INTO trades (offer_id, buyer_id, seller_id, asset, fiat, asset_amount, fiat_amount, expires_at)
-         VALUES ($1, $2, $3, 'USDT', 'ETB', $4, $5, now() + ($6::text || ' minutes')::interval)
+        `INSERT INTO trades (offer_id, buyer_id, seller_id, asset, fiat, asset_amount, fiat_amount, payment_method, expires_at)
+         VALUES ($1, $2, $3, 'USDT', 'ETB', $4, $5, $6, now() + ($7::text || ' minutes')::interval)
          RETURNING *`,
-        [offer.id, buyerId, sellerId, assetAmount.toFixed(8), fiatAmount.toFixed(2), this.paymentWindowMinutes],
+        [offer.id, buyerId, sellerId, assetAmount.toFixed(8), fiatAmount.toFixed(2), linkedPaymentMethod, this.paymentWindowMinutes],
       );
       const trade = tradeResult.rows[0];
 
@@ -204,7 +260,8 @@ export class TradesService {
         [Math.max(remaining, 0).toFixed(8), offer.id],
       );
 
-      await this.audit(client, userId, "trade.opened", "trade", trade.id, { offerId: offer.id, assetAmount, fiatAmount });
+      await this.audit(client, userId, "trade.opened", "trade", trade.id, { offerId: offer.id, assetAmount, fiatAmount, paymentMethod: linkedPaymentMethod });
+      await this.createTradeNotifications(client, "opened", trade);
       return { trade: this.toTrade(trade, userId) };
     });
 
@@ -212,6 +269,70 @@ export class TradesService {
     return response;
   }
 
+  async messages(userId: string, tradeId: string) {
+    await this.assertTradeParticipant(userId, tradeId);
+    await this.db.query(
+      `UPDATE trade_messages
+       SET read_at = COALESCE(read_at, now())
+       WHERE trade_id = $1 AND sender_id <> $2 AND read_at IS NULL`,
+      [tradeId, userId],
+    );
+    await this.db.query(
+      `UPDATE notifications
+       SET is_read = true, read_at = COALESCE(read_at, now())
+       WHERE user_id = $1 AND entity_type = 'trade' AND entity_id = $2 AND type = 'trade.message' AND is_read = false`,
+      [userId, tradeId],
+    );
+    const result = await this.db.query<TradeMessageRow>(
+      `SELECT id, trade_id, sender_id, body, read_at, created_at
+       FROM (
+         SELECT id, trade_id, sender_id, body, read_at, created_at
+         FROM trade_messages
+         WHERE trade_id = $1
+         ORDER BY created_at DESC
+         LIMIT 100
+       ) recent
+       ORDER BY created_at ASC`,
+      [tradeId],
+    );
+    return { messages: result.rows.map((row) => this.toMessage(row, userId)) };
+  }
+
+  async sendMessage(userId: string, tradeId: string, rawBody?: string) {
+    const body = String(rawBody ?? "").trim();
+    if (!body) throw new BadRequestException("Enter a message.");
+    if (body.length > 1000) throw new BadRequestException("Messages must be 1,000 characters or less.");
+
+    return this.db.transaction(async (client) => {
+      const trade = await this.lockTrade(client, tradeId);
+      if (!trade) throw new NotFoundException("Trade was not found.");
+      if (trade.buyer_id !== userId && trade.seller_id !== userId) throw new ForbiddenException("Trade access denied.");
+      if (!["opened", "payment_sent", "disputed"].includes(trade.status)) {
+        throw new BadRequestException("Chat is read-only after a trade closes.");
+      }
+
+      const inserted = await client.query<TradeMessageRow>(
+        `INSERT INTO trade_messages (trade_id, sender_id, body)
+         VALUES ($1, $2, $3)
+         RETURNING id, trade_id, sender_id, body, read_at, created_at`,
+        [trade.id, userId, body],
+      );
+      const message = inserted.rows[0];
+      const recipientId = trade.buyer_id === userId ? trade.seller_id : trade.buyer_id;
+      const senderRole = trade.buyer_id === userId ? "buyer" : "seller";
+      const preview = body.replace(/\s+/g, " ").slice(0, 140);
+      await this.notifications.create(recipientId, {
+        type: "trade.message",
+        title: `New message from ${senderRole}`,
+        message: preview,
+        entityType: "trade",
+        entityId: trade.id,
+        actionUrl: `#/trades?id=${encodeURIComponent(trade.id)}`,
+        idempotencyKey: `trade:${trade.id}:message:${message.id}`,
+      }, client);
+      return { message: this.toMessage(message, userId) };
+    });
+  }
   async markPaymentSent(userId: string, tradeId: string, input: PaymentProofInput = {}) {
     const reference = String(input.reference ?? "").trim().slice(0, 160);
     if (!reference && !input.file?.dataBase64) {
@@ -242,6 +363,7 @@ export class TradesService {
         [trade.id, reference || null, proof.fileUrl, proof.fileName, proof.mimeType],
       );
       await this.audit(client, userId, "trade.payment_sent", "trade", trade.id, { reference: reference || null, proof: proof.fileName });
+      await this.createTradeNotifications(client, "payment_sent", updated.rows[0]);
       return { trade: this.toTrade(updated.rows[0], userId) };
     });
 
@@ -258,6 +380,7 @@ export class TradesService {
 
       await this.releaseToBuyer(client, trade, userId, "p2p_trade_release", "trade.released");
       const updated = await this.lockTrade(client, trade.id);
+      await this.createTradeNotifications(client, "released", updated!);
       return { trade: this.toTrade(updated!, userId) };
     });
 
@@ -274,6 +397,7 @@ export class TradesService {
 
       await this.returnToSeller(client, trade, userId, "p2p_trade_cancel", "trade.cancelled", "cancelled by participant", "cancelled");
       const updated = await this.lockTrade(client, trade.id);
+      await this.createTradeNotifications(client, "cancelled", updated!);
       return { trade: this.toTrade(updated!, userId) };
     });
 
@@ -316,6 +440,7 @@ export class TradesService {
         [trade.id, reason],
       );
       await this.audit(client, userId, "trade.disputed", "trade", trade.id, { reason });
+      await this.createTradeNotifications(client, "disputed", updated.rows[0]);
       return { trade: this.toTrade(updated.rows[0], userId) };
     });
 
@@ -420,6 +545,7 @@ export class TradesService {
       );
 
       const updated = await this.lockTrade(client, trade.id);
+      await this.createTradeNotifications(client, "resolved", updated!);
       return { trade: this.toTrade(updated!, adminId) };
     });
 
@@ -480,6 +606,81 @@ export class TradesService {
     return { fileUrl, fileName, mimeType };
   }
 
+  private async assertTradeParticipant(userId: string, tradeId: string) {
+    const result = await this.db.query<Pick<TradeRow, "id" | "buyer_id" | "seller_id">>(
+      "SELECT id, buyer_id, seller_id FROM trades WHERE id = $1 LIMIT 1",
+      [tradeId],
+    );
+    const trade = result.rows[0];
+    if (!trade) throw new NotFoundException("Trade was not found.");
+    if (trade.buyer_id !== userId && trade.seller_id !== userId) throw new ForbiddenException("Trade access denied.");
+  }
+
+  private toMessage(row: TradeMessageRow, viewerId: string) {
+    return {
+      id: row.id,
+      tradeId: row.trade_id,
+      senderId: row.sender_id,
+      body: row.body,
+      isMine: row.sender_id === viewerId,
+      isRead: Boolean(row.read_at),
+      readAt: row.read_at,
+      createdAt: row.created_at,
+    };
+  }
+  private async createTradeNotifications(
+    client: PoolClient,
+    event: "opened" | "payment_sent" | "released" | "cancelled" | "disputed" | "resolved" | "expired",
+    trade: TradeRow,
+  ) {
+    const tradeLabel = `#${trade.id.slice(0, 8)}`;
+    const asset = `${Number(trade.asset_amount).toFixed(2)} USDT`;
+    const fiat = `${Number(trade.fiat_amount).toLocaleString("en-US", { maximumFractionDigits: 2 })} ETB`;
+    const method = trade.payment_method ? ` via ${trade.payment_method}` : "";
+    const actionUrl = `#/trades?id=${encodeURIComponent(trade.id)}`;
+    const base = { entityType: "trade", entityId: trade.id, actionUrl };
+    const entries: Array<{ userId: string; title: string; message: string }> = [];
+
+    if (event === "opened") {
+      entries.push(
+        { userId: trade.seller_id, title: "New P2P buy order", message: `A buyer opened trade ${tradeLabel} for ${asset} (${fiat})${method}. Open the trade and wait for payment.` },
+        { userId: trade.buyer_id, title: "Trade started", message: `Trade ${tradeLabel} is open. Send ${fiat} to the seller${method} before the payment timer expires.` },
+      );
+    } else if (event === "payment_sent") {
+      entries.push(
+        { userId: trade.seller_id, title: "Buyer marked payment sent", message: `The buyer marked ${fiat} as paid for trade ${tradeLabel}. Verify your account, then release ${asset}.` },
+        { userId: trade.buyer_id, title: "Payment submitted", message: `Your payment update for trade ${tradeLabel} was sent. Wait for the seller to verify and release ${asset}.` },
+      );
+    } else if (event === "released") {
+      entries.push(
+        { userId: trade.seller_id, title: "Trade completed", message: `You released ${asset} for trade ${tradeLabel}.` },
+        { userId: trade.buyer_id, title: "USDT released", message: `${asset} from trade ${tradeLabel} is now available in your BRX wallet.` },
+      );
+    } else {
+      const titles = { cancelled: "Trade cancelled", disputed: "Trade disputed", resolved: "Dispute resolved", expired: "Trade expired" } as const;
+      const messages = {
+        cancelled: `Trade ${tradeLabel} was cancelled and seller escrow was returned.`,
+        disputed: `A dispute was opened for trade ${tradeLabel}. Open the trade to review the case.`,
+        resolved: `The dispute for trade ${tradeLabel} was resolved. Open the trade for the final status.`,
+        expired: `Trade ${tradeLabel} expired because the payment window closed. Seller escrow was returned.`,
+      } as const;
+      const key = event as keyof typeof titles;
+      entries.push(
+        { userId: trade.seller_id, title: titles[key], message: messages[key] },
+        { userId: trade.buyer_id, title: titles[key], message: messages[key] },
+      );
+    }
+
+    for (const entry of entries) {
+      await this.notifications.create(entry.userId, {
+        ...base,
+        type: `trade.${event}`,
+        title: entry.title,
+        message: entry.message,
+        idempotencyKey: `trade:${trade.id}:${event}`,
+      }, client);
+    }
+  }
   private async notifyTradeParticipants(tradeId: string, subject: string, message: string) {
     try {
       const emails = await this.tradeEmails(tradeId);
@@ -580,6 +781,8 @@ export class TradesService {
 
   private async expireTrade(client: PoolClient, trade: TradeRow, reason: string) {
     await this.returnToSeller(client, trade, trade.buyer_id, "p2p_trade_expired", "trade.expired", reason, "expired");
+    const updated = await this.lockTrade(client, trade.id);
+    await this.createTradeNotifications(client, "expired", updated!);
   }
 
   private async lockTrade(client: PoolClient, tradeId: string) {
@@ -611,6 +814,7 @@ export class TradesService {
       fiat: row.fiat,
       assetAmount: row.asset_amount,
       fiatAmount: row.fiat_amount,
+      paymentMethod: row.payment_method,
       offerPrice: row.offer_price,
       status: row.status,
       role,
@@ -637,6 +841,9 @@ export class TradesService {
     };
   }
 
+  private normalizePaymentMethod(value: string) {
+    return String(value ?? "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+  }
   private positiveNumber(value: unknown, message: string) {
     const number = Number(value);
     if (!Number.isFinite(number) || number <= 0) throw new BadRequestException(message);
