@@ -159,8 +159,8 @@
     notificationPollTimer = null;
     refs.siteHeader.classList.remove("admin-header");
     refs.nav.innerHTML = `
-      <a href="#/features">Features</a>
-      <a href="#/how-it-works">How it works</a>
+      <a href="#/features">Security</a>
+      <a href="#/how-it-works">Trading guide</a>
     `;
 
     if (user) {
@@ -173,7 +173,7 @@
     }
 
     refs.headerActions.innerHTML = `
-      <a class="text-button" href="#/login">Sign in</a>
+      <a class="text-button" href="#/login">Login</a>
       <a class="primary-button small" href="#/register">Get started</a>
     `;
   }

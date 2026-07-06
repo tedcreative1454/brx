@@ -15,7 +15,7 @@ async function bootstrap() {
     allowedHeaders: ["content-type", "authorization"],
   });
   app.setGlobalPrefix("api");
-  await app.listen(env.port);
+  await app.listen(env.port, "0.0.0.0");
 }
 
 void bootstrap();

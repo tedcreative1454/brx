@@ -40,6 +40,7 @@ services:
         condition: service_healthy
     volumes:
       - brx-uploads:/app/uploads
+      - ./schema.sql:/schema.sql:ro
     expose:
       - "3000"
 

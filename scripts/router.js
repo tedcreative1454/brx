@@ -32,7 +32,7 @@
       notifications: "Notifications",
       referrals: "Refer & Earn",
       admin: "Admin Console",
-      login: "Sign In",
+      login: "Login",
       register: "Create Account",
     };
     return `${titles[route] || "Buy & Sell USDT with ETB"} · BRX`;

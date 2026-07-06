@@ -28,8 +28,8 @@
           <div class="form-error" id="formError"></div>
           <button class="primary-button full" type="submit">Create account -></button>
           <div class="oauth-divider"><span>or</span></div>
-          <button class="google-auth-button" type="button" id="googleRegister">Continue with Google</button>
-          <p class="auth-footer">Already have an account? <a class="text-link" href="#/login">Sign in</a></p>
+          <button class="google-auth-button" type="button" id="googleRegister">${googleLogo()}Continue with Google</button>
+          <p class="auth-footer">Already have an account? <a class="text-link" href="#/login">Login</a></p>
         </form>
       </section>
     `;
@@ -72,15 +72,15 @@
         <form class="auth-card" id="loginForm" novalidate>
           <div class="auth-title">
             <a class="auth-logo" href="#/"><img src="./assets/brx-logo-transparent.png" alt="BRX" /></a>
-            <h1>Sign in</h1>
+            <h1>Login</h1>
             <p class="muted">Continue to your BRX wallet and market.</p>
           </div>
           <label class="form-field"><span>Email</span><input id="loginEmail" type="email" autocomplete="email" placeholder="you@example.com" required /></label>
           <label class="form-field"><span>Password</span><input id="loginPassword" type="password" autocomplete="current-password" placeholder="Your password" required /></label>
           <div class="form-error" id="formError"></div>
-          <button class="primary-button full" type="submit">Sign in</button>
+          <button class="primary-button full" type="submit">Login</button>
           <div class="oauth-divider"><span>or</span></div>
-          <button class="google-auth-button" type="button" id="googleLogin">Continue with Google</button>
+          <button class="google-auth-button" type="button" id="googleLogin">${googleLogo()}Continue with Google</button>
           <p class="auth-footer">New to BRX? <a class="text-link" href="#/register">Create account</a></p>
         </form>
       </section>
@@ -106,7 +106,7 @@
           </div>
           <label class="form-field"><span>Authenticator code</span><input id="loginTwoFactor" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="123456" required autofocus /></label>
           <div class="form-error" id="formError"></div>
-          <button class="primary-button full" type="submit">Verify and sign in</button>
+          <button class="primary-button full" type="submit">Verify and login</button>
           <button class="secondary-button full" type="button" id="backToLogin">Back</button>
         </form>
       </section>
@@ -143,8 +143,8 @@
           </div>
           <label class="form-field"><span>Authenticator code</span><input id="googleTwoFactor" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="123456" required autofocus /></label>
           <div class="form-error" id="formError"></div>
-          <button class="primary-button full" type="submit">Verify and sign in</button>
-          <a class="secondary-button full" href="#/login">Back to sign in</a>
+          <button class="primary-button full" type="submit">Verify and login</button>
+          <a class="secondary-button full" href="#/login">Back to login</a>
         </form>
       </section>
     `;
@@ -169,7 +169,7 @@
     const nextUsers = users();
     const existingIndex = nextUsers.findIndex((user) => user.email === email);
     if (existingIndex >= 0 && nextUsers[existingIndex].emailVerified) {
-      return showError("An account with this email already exists. Sign in instead.");
+      return showError("An account with this email already exists. Login instead.");
     }
 
     try {
@@ -243,7 +243,7 @@
     event.preventDefault();
     showError("");
     if (!pendingLoginChallenge) {
-      showToast("Sign in again.");
+      showToast("Login again.");
       renderLogin();
       return;
     }
@@ -269,6 +269,19 @@
 
   function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[char]));
+  }
+
+  function googleLogo() {
+    return `
+      <span class="google-mark" aria-hidden="true">
+        <svg viewBox="0 0 18 18" focusable="false">
+          <path fill="#4285f4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84c-.21 1.12-.84 2.08-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"></path>
+          <path fill="#34a853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.81.54-1.84.86-3.04.86-2.34 0-4.33-1.58-5.04-3.7H.94v2.33A8.99 8.99 0 0 0 9 18z"></path>
+          <path fill="#fbbc05" d="M3.96 10.72A5.41 5.41 0 0 1 3.68 9c0-.6.1-1.18.28-1.72V4.95H.94A8.99 8.99 0 0 0 0 9c0 1.45.34 2.82.94 4.05l3.02-2.33z"></path>
+          <path fill="#ea4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58A8.65 8.65 0 0 0 9 0 8.99 8.99 0 0 0 .94 4.95l3.02 2.33C4.67 5.16 6.66 3.58 9 3.58z"></path>
+        </svg>
+      </span>
+    `;
   }
 
   async function handleGoogleAuth() {
