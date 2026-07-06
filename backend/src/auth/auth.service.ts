@@ -226,9 +226,12 @@ export class AuthService {
   }
 
   async googleCallback(code: string, stateToken: string, userAgent?: string) {
+    console.log("[google-oauth] callback:start", { hasCode: Boolean(code), hasState: Boolean(stateToken) });
     if (!code) throw new BadRequestException("Missing Google authorization code.");
     const state = this.verifyGoogleState(stateToken);
+    console.log("[google-oauth] state:verified", { returnTo: state.returnTo });
     const googleUser = await this.fetchGoogleUser(code);
+    console.log("[google-oauth] userinfo:loaded", { email: googleUser.email });
     const email = this.normalizeEmail(googleUser.email);
     this.assertEmail(email);
     if (!googleUser.sub || !googleUser.email_verified) {
@@ -236,8 +239,11 @@ export class AuthService {
     }
 
     const user = await this.upsertGoogleUser(email, googleUser.sub);
+    console.log("[google-oauth] user:upserted", { userId: user.id });
     await this.wallets.ensureDepositAddress(user.id);
+    console.log("[google-oauth] wallet:ready", { userId: user.id });
     await this.ledger.getOrCreateBalance(user.id);
+    console.log("[google-oauth] balance:ready", { userId: user.id });
     if (await this.userHasTwoFactor(user.id)) {
       const redirect = new URL(state.returnTo);
       redirect.hash = `/oauth?twoFactor=required&ticket=${encodeURIComponent(this.signGoogleTwoFactorChallenge(user.id, user.email))}`;
@@ -246,6 +252,21 @@ export class AuthService {
     const accessToken = await this.createSessionToken(user.id, user.email, userAgent);
     const redirect = new URL(state.returnTo);
     redirect.hash = `/oauth?token=${encodeURIComponent(accessToken)}`;
+    console.log("[google-oauth] callback:redirect", { redirectTo: redirect.origin + redirect.pathname + redirect.hash.slice(0, 20) });
+    return redirect.toString();
+  }
+
+  googleFailureRedirect(stateToken: string, error: unknown) {
+    console.error("[google-oauth] callback:failed", this.googleErrorMessage(error));
+    let returnTo = env.frontendUrl;
+    try {
+      returnTo = this.verifyGoogleState(stateToken).returnTo;
+    } catch {
+      // Fall back to the configured frontend when the OAuth state cannot be trusted.
+    }
+
+    const redirect = new URL(returnTo);
+    redirect.hash = `/login?googleError=${encodeURIComponent(this.googleErrorMessage(error))}`;
     return redirect.toString();
   }
 
@@ -602,6 +623,7 @@ export class AuthService {
   }
 
   private async fetchGoogleUser(code: string): Promise<GoogleUserInfo> {
+    console.log("[google-oauth] token:request");
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -612,14 +634,18 @@ export class AuthService {
         redirect_uri: env.googleCallbackUrl,
         grant_type: "authorization_code",
       }),
+      signal: AbortSignal.timeout(15000),
     });
-    const tokenPayload = (await tokenResponse.json().catch(() => null)) as { access_token?: string; error_description?: string } | null;
+    const tokenPayload = (await tokenResponse.json().catch(() => null)) as { access_token?: string; error?: string; error_description?: string } | null;
     if (!tokenResponse.ok || !tokenPayload?.access_token) {
-      throw new UnauthorizedException(tokenPayload?.error_description || "Google sign-in failed.");
+      const detail = [tokenPayload?.error, tokenPayload?.error_description].filter(Boolean).join(": ");
+      throw new UnauthorizedException(detail || "Google sign-in failed.");
     }
+    console.log("[google-oauth] token:received");
 
     const userResponse = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
       headers: { authorization: `Bearer ${tokenPayload.access_token}` },
+      signal: AbortSignal.timeout(15000),
     });
     const userPayload = (await userResponse.json().catch(() => null)) as GoogleUserInfo | null;
     if (!userResponse.ok || !userPayload?.email || !userPayload.sub) {
@@ -855,6 +881,14 @@ export class AuthService {
     if (password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) {
       throw new BadRequestException("Password must be at least 8 characters and include a letter and number.");
     }
+  }
+
+  private googleErrorMessage(error: unknown) {
+    if (error instanceof Error && error.message) return error.message;
+    if (typeof error === "object" && error !== null && "message" in error) {
+      return String((error as { message?: unknown }).message ?? "Google sign-in failed.");
+    }
+    return "Google sign-in failed.";
   }
 }
 

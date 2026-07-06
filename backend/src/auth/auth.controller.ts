@@ -54,8 +54,13 @@ export class AuthController {
     @Headers("user-agent") userAgent: string | undefined,
     @Res() reply: FastifyReply,
   ) {
-    const redirectUrl = await this.auth.googleCallback(code ?? "", state ?? "", userAgent);
-    return reply.redirect(redirectUrl);
+    let redirectUrl: string;
+    try {
+      redirectUrl = await this.auth.googleCallback(code ?? "", state ?? "", userAgent);
+    } catch (error) {
+      redirectUrl = this.auth.googleFailureRedirect(state ?? "", error);
+    }
+    return reply.status(302).header("location", redirectUrl).send();
   }
 
   @Post("google/2fa")

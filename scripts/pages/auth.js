@@ -87,6 +87,8 @@
     `;
     document.querySelector("#loginForm").addEventListener("submit", handleLogin);
     document.querySelector("#googleLogin").addEventListener("click", handleGoogleAuth);
+    const googleError = window.BRX.router.routeParams().get("googleError");
+    if (googleError) showError(googleError);
   }
 
   function renderTwoFactorLogin(email) {

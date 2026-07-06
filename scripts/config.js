@@ -1,8 +1,9 @@
 (function () {
   window.BRX = window.BRX || {};
 
-  const sameOriginApi = window.location.protocol.startsWith("http") ? [`${window.location.origin}/api`] : [];
   const localApiBases = ["http://127.0.0.1:3000/api", "http://localhost:3000/api"];
+  const isLocalHost = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+  const sameOriginApi = window.location.protocol.startsWith("http") && !isLocalHost ? [`${window.location.origin}/api`] : [];
 
   window.BRX.config = Object.freeze({
     RATE: 185,
