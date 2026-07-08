@@ -1,4 +1,4 @@
-﻿import { BadRequestException, Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { AuthenticatedUser, AuthService } from "../auth/auth.service";
 import { BscService } from "../blockchain/bsc.service";
 import { env } from "../config/env";
@@ -22,6 +22,7 @@ interface WithdrawalAddressRow {
   network: string;
   asset: string;
   status: string;
+  created_at: Date;
 }
 
 interface WithdrawalRow {
@@ -65,6 +66,7 @@ interface LimitRow {
 }
 
 const PASSWORD_WITHDRAWAL_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+const NEW_WITHDRAWAL_ADDRESS_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
@@ -384,7 +386,7 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
     if (!id) throw new BadRequestException("Choose a saved BEP20 withdrawal address first.");
 
     const result = await this.db.query<WithdrawalAddressRow>(
-      `SELECT id, label, address, network, asset, status
+      `SELECT id, label, address, network, asset, status, created_at
        FROM withdrawal_addresses
        WHERE id = $1 AND user_id = $2 AND status = 'active'
        LIMIT 1`,
@@ -394,6 +396,10 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
     if (!address) throw new BadRequestException("Saved withdrawal address was not found.");
     if (address.asset !== "USDT" || address.network !== "BEP20") throw new BadRequestException("Choose a USDT BEP20 withdrawal address.");
     if (!/^0x[a-fA-F0-9]{40}$/.test(address.address)) throw new BadRequestException("Saved withdrawal address is not a valid BEP20 address.");
+    const unlockAt = new Date(address.created_at).getTime() + NEW_WITHDRAWAL_ADDRESS_COOLDOWN_MS;
+    if (Date.now() < unlockAt) {
+      throw new BadRequestException(`New withdrawal addresses are locked for 24 hours. Try after ${new Date(unlockAt).toISOString()}.`);
+    }
     return address;
   }
 

@@ -8,18 +8,25 @@
     for (const base of API_BASES) {
       try {
         const { headers = {}, ...requestOptions } = options;
+        const authToken = window.BRX.state?.accessToken?.() || "";
         const response = await fetch(`${base}${path}`, {
           ...requestOptions,
+          credentials: "include",
           headers: {
             ...(requestOptions.body !== undefined && requestOptions.body !== null
               ? { "content-type": "application/json" }
               : {}),
-            ...(window.BRX.state.accessToken() ? { authorization: `Bearer ${window.BRX.state.accessToken()}` } : {}),
+            ...(authToken && !headers.authorization ? { authorization: `Bearer ${authToken}` } : {}),
             ...headers,
           },
         });
 
         const payload = await response.json().catch(() => null);
+        const isSameOriginApi = base === `${window.location.origin}/api`;
+        if (!response.ok && response.status === 404 && isSameOriginApi && API_BASES.length > 1) {
+          lastError = new Error("Local /api proxy is not available.");
+          continue;
+        }
         if (!response.ok) {
           const responseMessage = payload?.message;
           const message = Array.isArray(responseMessage)

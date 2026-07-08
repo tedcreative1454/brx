@@ -1,10 +1,12 @@
 import { Body, Controller, Get, Headers, Post, Query, Res } from "@nestjs/common";
 import type { FastifyReply } from "fastify";
+import { env } from "../config/env";
 import { AuthService } from "./auth.service";
 
 interface RegisterBody {
   email?: string;
   password?: string;
+  turnstileToken?: string;
 }
 
 interface VerifyEmailBody {
@@ -16,6 +18,7 @@ interface LoginBody {
   email?: string;
   password?: string;
   twoFactorCode?: string;
+  turnstileToken?: string;
 }
 
 interface GoogleTwoFactorBody {
@@ -28,23 +31,37 @@ export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
   @Post("register")
-  register(@Body() body: RegisterBody) {
-    return this.auth.register(body.email ?? "", body.password ?? "");
+  register(@Body() body: RegisterBody, @Headers("x-forwarded-for") forwardedFor?: string) {
+    return this.auth.register(body.email ?? "", body.password ?? "", this.clientKey(forwardedFor), body.turnstileToken);
   }
 
   @Post("verify-email")
-  verifyEmail(@Body() body: VerifyEmailBody, @Headers("user-agent") userAgent?: string) {
-    return this.auth.verifyEmail(body.email ?? "", body.code ?? "", userAgent);
+  async verifyEmail(
+    @Body() body: VerifyEmailBody,
+    @Headers("user-agent") userAgent: string | undefined,
+    @Headers("x-forwarded-for") forwardedFor: string | undefined,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    const result = await this.auth.verifyEmail(body.email ?? "", body.code ?? "", userAgent, this.clientKey(forwardedFor));
+    this.setSessionCookie(reply, result.accessToken);
+    return this.publicSessionResult(result);
   }
 
   @Post("login")
-  login(@Body() body: LoginBody, @Headers("user-agent") userAgent?: string) {
-    return this.auth.login(body.email ?? "", body.password ?? "", userAgent, body.twoFactorCode);
+  async login(
+    @Body() body: LoginBody,
+    @Headers("user-agent") userAgent: string | undefined,
+    @Headers("x-forwarded-for") forwardedFor: string | undefined,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    const result = await this.auth.login(body.email ?? "", body.password ?? "", userAgent, body.twoFactorCode, this.clientKey(forwardedFor), body.turnstileToken);
+    this.setSessionCookie(reply, result.accessToken);
+    return this.publicSessionResult(result);
   }
 
   @Get("google/start")
-  googleStart(@Query("returnTo") returnTo?: string) {
-    return { url: this.auth.googleStartUrl(returnTo) };
+  googleStart(@Query("returnTo") returnTo?: string, @Headers("x-forwarded-for") forwardedFor?: string) {
+    return { url: this.auth.googleStartUrl(returnTo, this.clientKey(forwardedFor)) };
   }
 
   @Get("google/callback")
@@ -56,7 +73,9 @@ export class AuthController {
   ) {
     let redirectUrl: string;
     try {
-      redirectUrl = await this.auth.googleCallback(code ?? "", state ?? "", userAgent);
+      const result = await this.auth.googleCallback(code ?? "", state ?? "", userAgent);
+      redirectUrl = result.redirectUrl;
+      if (result.accessToken) this.setSessionCookie(reply, result.accessToken);
     } catch (error) {
       redirectUrl = this.auth.googleFailureRedirect(state ?? "", error);
     }
@@ -64,17 +83,68 @@ export class AuthController {
   }
 
   @Post("google/2fa")
-  googleTwoFactor(@Body() body: GoogleTwoFactorBody, @Headers("user-agent") userAgent?: string) {
-    return this.auth.completeGoogleTwoFactor(body.ticket ?? "", body.twoFactorCode ?? "", userAgent);
+  async googleTwoFactor(
+    @Body() body: GoogleTwoFactorBody,
+    @Headers("user-agent") userAgent: string | undefined,
+    @Headers("x-forwarded-for") forwardedFor: string | undefined,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    const result = await this.auth.completeGoogleTwoFactor(body.ticket ?? "", body.twoFactorCode ?? "", userAgent, this.clientKey(forwardedFor));
+    this.setSessionCookie(reply, result.accessToken);
+    return this.publicSessionResult(result);
+  }
+
+  @Post("logout")
+  async logout(@Headers("authorization") authorization: string | undefined, @Res({ passthrough: true }) reply: FastifyReply) {
+    this.clearSessionCookie(reply);
+    try {
+      return await this.auth.logout(authorization);
+    } catch {
+      return { ok: true };
+    }
   }
 
   @Get("me")
-  me(@Headers("authorization") authorization?: string) {
-    return this.auth.me(authorization);
+  async me(@Headers("authorization") authorization: string | undefined, @Res({ passthrough: true }) reply: FastifyReply) {
+    const result = await this.auth.me(authorization);
+    if (authorization?.startsWith("Bearer ")) {
+      this.setSessionCookie(reply, authorization.slice("Bearer ".length));
+    }
+    return result;
   }
 
   @Post("resend-code")
-  resendCode(@Body() body: { email?: string }) {
-    return this.auth.resendCode(body.email ?? "");
+  resendCode(@Body() body: { email?: string }, @Headers("x-forwarded-for") forwardedFor?: string) {
+    return this.auth.resendCode(body.email ?? "", this.clientKey(forwardedFor));
+  }
+
+  private clientKey(forwardedFor?: string) {
+    return String(forwardedFor ?? "unknown").split(",")[0].trim() || "unknown";
+  }
+
+  private setSessionCookie(reply: FastifyReply, accessToken: string) {
+    this.writeCookie(reply, `${this.cookieName()}=${encodeURIComponent(accessToken)}; Max-Age=3600; Path=/; HttpOnly; SameSite=Lax${this.secureCookieFlag()}`);
+  }
+
+  private clearSessionCookie(reply: FastifyReply) {
+    this.writeCookie(reply, `${this.cookieName()}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax${this.secureCookieFlag()}`);
+  }
+
+  private writeCookie(reply: FastifyReply, cookie: string) {
+    reply.header("Set-Cookie", cookie);
+    reply.raw.setHeader("Set-Cookie", cookie);
+  }
+
+  private publicSessionResult<T extends { accessToken?: string }>(result: T) {
+    const { accessToken: _accessToken, ...publicResult } = result;
+    return publicResult;
+  }
+
+  private cookieName() {
+    return "brx_access";
+  }
+
+  private secureCookieFlag() {
+    return env.nodeEnv === "production" ? "; Secure" : "";
   }
 }

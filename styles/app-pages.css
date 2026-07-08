@@ -7698,3 +7698,22 @@ body[data-route="market"] .brx-p2p-market .market-trader-avatar.has-image img {
   line-height: 1.42;
   overflow-wrap: anywhere;
 }
+.turnstile-slot {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 65px;
+  margin: 20px auto 10px;
+}
+.turnstile-slot[data-turnstile-state="loading"]::before {
+  content: "Loading human check...";
+  color: rgba(177, 199, 229, .72);
+  font-size: 13px;
+}
+.turnstile-slot[data-turnstile-state="ready"]::before {
+  content: none;
+}
+.auth-card .turnstile-slot + .form-error:empty {
+  min-height: 0;
+  margin: 0;
+}

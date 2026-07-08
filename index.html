@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="./styles.css?v=20260706-phone10" />
     <link rel="stylesheet" href="./styles/design-system.css?v=20260703-1" />
     <link rel="stylesheet" href="./styles/features.css?v=20260705-chat2" />
-    <link rel="stylesheet" href="./styles/app-pages.css?v=20260706-tradelife1" />
+    <link rel="stylesheet" href="./styles/app-pages.css?v=20260707-turnstile-loading1" />
     <link rel="stylesheet" href="./styles/light-theme.css?v=20260703-1" />
     <link rel="stylesheet" href="./styles/mobile.css?v=20260706-tradelife1" />
   </head>
@@ -32,50 +32,31 @@
     <main id="app" tabindex="-1"></main>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="./scripts/config.js?v=20260706-local-api2"></script>
+    <script>window.brxTurnstileReady = function () { window.dispatchEvent(new Event("brx:turnstile-ready")); };</script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=brxTurnstileReady" async defer></script>
+    <script src="./scripts/config.js?v=20260708-local-proxy1"></script>
     <script src="./scripts/utils.js"></script>
-    <script src="./scripts/state.js"></script>
-    <script src="./scripts/api.js?v=20260703-2"></script>
+    <script src="./scripts/state.js?v=20260707-memory-token4"></script>
+    <script src="./scripts/api.js?v=20260708-proxy-fallback1"></script>
     <script src="./scripts/ui.js"></script>
     <script src="./scripts/icons.js?v=20260705-chat3"></script>
     <script src="./scripts/components.js?v=20260703-1"></script>
     <script src="./scripts/vendor/qrcode-generator.js"></script>
     <script src="./scripts/wallet-service.js"></script>
-    <script src="./scripts/profile-service.js"></script>
+    <script src="./scripts/profile-service.js?v=20260707-cookie-hydrate2"></script>
     <script src="./scripts/account-service.js?v=20260704-1"></script>
     <script src="./scripts/security-service.js"></script>
     <script src="./scripts/marketplace-service.js?v=20260703-2"></script>
     <script src="./scripts/admin-service.js?v=20260705-p2p2"></script>
     <script src="./scripts/notification-service.js"></script>
-    <script src="./scripts/header.js?v=20260706-nav1"></script>
+    <script src="./scripts/header.js?v=20260707-cookie-logout2"></script>
     <script src="./scripts/pages/landing.js?v=20260706-phone6"></script>
-    <script src="./scripts/pages/auth.js?v=20260706-google-logo1"></script>
+    <script src="./scripts/pages/auth.js?v=20260707-cookie-persist5"></script>
     <script src="./scripts/pages/dashboard.js?v=20260705-clean4"></script>
     <script src="./scripts/pages/market.js?v=20260706-avatar1"></script>
-    <script src="./scripts/pages/account-pages.js?v=20260706-tradelife1"></script>
+    <script src="./scripts/pages/account-pages.js?v=20260707-withdrawal-2fa1"></script>
     <script src="./scripts/pages/admin.js?v=20260705-p2p2"></script>
-    <script src="./scripts/router.js?v=20260705-chat3"></script>
+    <script src="./scripts/router.js?v=20260707-cookie-router3"></script>
     <script src="./app.js"></script>
   </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { Module, forwardRef } from "@nestjs/common";
 import { DatabaseModule } from "../database/database.module";
 import { EmailModule } from "../email/email.module";
 import { LedgerModule } from "../ledger/ledger.module";
@@ -7,7 +7,7 @@ import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 
 @Module({
-  imports: [DatabaseModule, EmailModule, LedgerModule, WalletsModule],
+  imports: [DatabaseModule, EmailModule, LedgerModule, forwardRef(() => WalletsModule)],
   controllers: [AuthController],
   providers: [AuthService],
   exports: [AuthService],

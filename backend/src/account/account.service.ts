@@ -89,6 +89,7 @@ export interface WithdrawalAddressBody {
   network?: string;
   asset?: string;
   isDefault?: boolean;
+  twoFactorCode?: string;
 }
 
 const DEFAULT_NOTIFICATIONS = {

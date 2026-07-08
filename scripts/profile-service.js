@@ -2,7 +2,7 @@
   window.BRX = window.BRX || {};
 
   const { requestJson } = window.BRX.api;
-  const { accessToken, clearSession, currentUser, setSession, upsertUser } = window.BRX.state;
+  const { clearSession, currentUser, setSession, upsertUser } = window.BRX.state;
 
   let hydrationPromise = null;
 
@@ -34,7 +34,6 @@
   }
 
   function hydrateSession() {
-    if (!accessToken()) return Promise.resolve(null);
     if (hydrationPromise) return hydrationPromise;
 
     hydrationPromise = requestJson("/auth/me")

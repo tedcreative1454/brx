@@ -1,4 +1,4 @@
-﻿import { BadRequestException, Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, HttpException, HttpStatus, Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
 import {
   createCipheriv,
   createDecipheriv,
@@ -88,8 +88,21 @@ export interface AuthenticatedUser {
   sessionId: string;
 }
 
+interface RateLimitBucket {
+  count: number;
+  resetAt: number;
+}
+interface TurnstileVerificationResponse {
+  success: boolean;
+  hostname?: string;
+  challenge_ts?: string;
+  "error-codes"?: string[];
+}
+
 @Injectable()
 export class AuthService {
+  private readonly rateLimits = new Map<string, RateLimitBucket>();
+
   constructor(
     private readonly db: DatabaseService,
     private readonly email: EmailService,
@@ -97,9 +110,12 @@ export class AuthService {
     private readonly wallets: WalletsService,
   ) {}
 
-  async register(rawEmail: string, password: string) {
+  async register(rawEmail: string, password: string, clientKey = "unknown", turnstileToken?: string) {
     const email = this.normalizeEmail(rawEmail);
     this.assertEmail(email);
+    this.assertRateLimit(`auth:register:ip:${clientKey}`, 10, 60 * 60 * 1000);
+    this.assertRateLimit(`auth:register:email:${email}`, 3, 60 * 60 * 1000);
+    await this.verifyTurnstile(turnstileToken, clientKey);
     this.assertPassword(password);
 
     const existing = await this.findUserByEmail(email);
@@ -113,9 +129,11 @@ export class AuthService {
     return { ok: true, email, expiresInMinutes: 15 };
   }
 
-  async resendCode(rawEmail: string) {
+  async resendCode(rawEmail: string, clientKey = "unknown") {
     const email = this.normalizeEmail(rawEmail);
     this.assertEmail(email);
+    this.assertRateLimit(`auth:resend:ip:${clientKey}`, 20, 60 * 60 * 1000);
+    this.assertRateLimit(`auth:resend:email:${email}`, 5, 60 * 60 * 1000);
 
     const user = await this.findUserByEmail(email);
     if (!user) throw new NotFoundException("No BRX account found for this email.");
@@ -125,10 +143,12 @@ export class AuthService {
     return { ok: true, email, expiresInMinutes: 15 };
   }
 
-  async verifyEmail(rawEmail: string, rawCode: string, userAgent?: string) {
+  async verifyEmail(rawEmail: string, rawCode: string, userAgent?: string, clientKey = "unknown") {
     const email = this.normalizeEmail(rawEmail);
     const code = rawCode.trim();
     this.assertEmail(email);
+    this.assertRateLimit(`auth:verify:ip:${clientKey}`, 30, 15 * 60 * 1000);
+    this.assertRateLimit(`auth:verify:email:${email}`, 8, 15 * 60 * 1000);
 
     if (!/^\d{6}$/.test(code)) throw new BadRequestException("Enter the six-digit verification code.");
 
@@ -171,9 +191,13 @@ export class AuthService {
     };
   }
 
-  async login(rawEmail: string, password: string, userAgent?: string, twoFactorCode?: string) {
+  async login(rawEmail: string, password: string, userAgent?: string, twoFactorCode?: string, clientKey = "unknown", turnstileToken?: string) {
     const email = this.normalizeEmail(rawEmail);
     this.assertEmail(email);
+    this.assertRateLimit(`auth:login:ip:${clientKey}`, 40, 15 * 60 * 1000);
+    this.assertRateLimit(`auth:login:email:${email}`, 10, 15 * 60 * 1000);
+
+    await this.verifyTurnstile(turnstileToken, clientKey);
 
     const user = await this.findUserWithPassword(email);
     if (!user || !user.password_hash || !this.verifyPassword(password, user.password_hash)) {
@@ -204,7 +228,8 @@ export class AuthService {
     };
   }
 
-  googleStartUrl(returnTo?: string) {
+  googleStartUrl(returnTo?: string, clientKey = "unknown") {
+    this.assertRateLimit(`auth:google-start:ip:${clientKey}`, 60, 15 * 60 * 1000);
     if (!env.googleClientId || !env.googleClientSecret) {
       throw new BadRequestException("Google sign-in is not configured yet.");
     }
@@ -247,13 +272,13 @@ export class AuthService {
     if (await this.userHasTwoFactor(user.id)) {
       const redirect = new URL(state.returnTo);
       redirect.hash = `/oauth?twoFactor=required&ticket=${encodeURIComponent(this.signGoogleTwoFactorChallenge(user.id, user.email))}`;
-      return redirect.toString();
+      return { redirectUrl: redirect.toString() };
     }
     const accessToken = await this.createSessionToken(user.id, user.email, userAgent);
     const redirect = new URL(state.returnTo);
-    redirect.hash = `/oauth?token=${encodeURIComponent(accessToken)}`;
+    redirect.hash = "/oauth?login=success";
     console.log("[google-oauth] callback:redirect", { redirectTo: redirect.origin + redirect.pathname + redirect.hash.slice(0, 20) });
-    return redirect.toString();
+    return { redirectUrl: redirect.toString(), accessToken };
   }
 
   googleFailureRedirect(stateToken: string, error: unknown) {
@@ -270,7 +295,8 @@ export class AuthService {
     return redirect.toString();
   }
 
-  async completeGoogleTwoFactor(ticket: string, twoFactorCode: string, userAgent?: string) {
+  async completeGoogleTwoFactor(ticket: string, twoFactorCode: string, userAgent?: string, clientKey = "unknown") {
+    this.assertRateLimit(`auth:google-2fa:ip:${clientKey}`, 20, 15 * 60 * 1000);
     const challenge = this.verifyGoogleTwoFactorChallenge(ticket);
     await this.assertTwoFactorIfEnabled(challenge.sub, twoFactorCode);
     const result = await this.db.query<UserRow>(
@@ -299,6 +325,15 @@ export class AuthService {
         balance,
       },
     };
+  }
+
+  async logout(authorization: string | undefined) {
+    const user = await this.authenticate(authorization);
+    await this.db.query("UPDATE user_sessions SET revoked_at = now() WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL", [
+      user.sessionId,
+      user.id,
+    ]);
+    return { ok: true };
   }
 
   async me(authorization: string | undefined) {
@@ -691,17 +726,22 @@ export class AuthService {
 
   private safeFrontendReturnTo(returnTo?: string) {
     const fallback = env.frontendUrl;
+    const allowedOrigins = new Set([new URL(env.frontendUrl).origin]);
+    if (env.nodeEnv !== "production") {
+      allowedOrigins.add("http://localhost:5173");
+      allowedOrigins.add("http://127.0.0.1:5173");
+    }
+
     const raw = String(returnTo || fallback).trim();
     try {
       const url = new URL(raw);
-      if (url.protocol === "file:") return raw;
-      if (["http:", "https:"].includes(url.protocol)) return `${url.origin}${url.pathname}`;
+      if (!["http:", "https:"].includes(url.protocol)) return fallback;
+      if (!allowedOrigins.has(url.origin)) return fallback;
+      return `${url.origin}${url.pathname}`;
     } catch {
       return fallback;
     }
-    return fallback;
   }
-
   private async latestActiveCode(userId: string) {
     const result = await this.db.query<VerificationCodeRow>(
       `SELECT id, code_hash, expires_at
@@ -869,6 +909,65 @@ export class AuthService {
     return trimmed ? trimmed.slice(0, 500) : null;
   }
 
+  private async verifyTurnstile(token: string | undefined, clientKey: string) {
+    if (!env.turnstileSecretKey) return;
+
+    const responseToken = String(token ?? "").trim();
+    if (!responseToken) throw new BadRequestException("Complete the human verification before continuing.");
+    if (responseToken.length > 2048) throw new BadRequestException("Human verification token is invalid.");
+
+    let result: TurnstileVerificationResponse | null = null;
+    try {
+      const body = new URLSearchParams({
+        secret: env.turnstileSecretKey,
+        response: responseToken,
+        idempotency_key: randomUUID(),
+      });
+      if (clientKey !== "unknown") body.set("remoteip", clientKey);
+
+      const response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body,
+        signal: AbortSignal.timeout(10000),
+      });
+      result = (await response.json().catch(() => null)) as TurnstileVerificationResponse | null;
+    } catch {
+      throw new HttpException("Human verification is unavailable. Try again in a moment.", HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
+    if (!result?.success) throw new BadRequestException("Human verification failed. Refresh and try again.");
+    if (env.nodeEnv === "production" && result.hostname && !this.validTurnstileHostname(result.hostname)) {
+      throw new BadRequestException("Human verification was issued for a different site.");
+    }
+  }
+
+  private validTurnstileHostname(hostname: string) {
+    const normalized = hostname.trim().toLowerCase();
+    const publicDomain = env.publicDomain.trim().toLowerCase();
+    return normalized === publicDomain || normalized === `www.${publicDomain}`;
+  }
+  private assertRateLimit(key: string, limit: number, windowMs: number) {
+    const now = Date.now();
+    this.cleanupRateLimits(now);
+    const bucket = this.rateLimits.get(key);
+    if (!bucket || bucket.resetAt <= now) {
+      this.rateLimits.set(key, { count: 1, resetAt: now + windowMs });
+      return;
+    }
+    bucket.count += 1;
+    if (bucket.count > limit) {
+      const retryAfterSeconds = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+      throw new HttpException(`Too many attempts. Try again in ${retryAfterSeconds} seconds.`, HttpStatus.TOO_MANY_REQUESTS);
+    }
+  }
+
+  private cleanupRateLimits(now: number) {
+    if (this.rateLimits.size < 1000) return;
+    for (const [key, bucket] of this.rateLimits.entries()) {
+      if (bucket.resetAt <= now) this.rateLimits.delete(key);
+    }
+  }
   private normalizeEmail(email: string) {
     return email.trim().toLowerCase();
   }

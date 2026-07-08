@@ -5,14 +5,10 @@
   const { showToast } = window.BRX.ui;
 
   async function syncBackendWallet(user) {
-    const backendUser = await requestJson("/wallets/local-user", {
-      method: "POST",
-      body: JSON.stringify({ email: user.email }),
-    });
-    const wallet = await requestJson(`/wallets/${backendUser.id}/deposit-address`, { method: "POST" });
+    const wallet = await requestJson("/wallets/me/deposit-address", { method: "POST" });
     const nextUser = {
       ...user,
-      backendUserId: backendUser.id,
+      backendUserId: user.backendUserId || user.id,
       depositAddress: wallet.deposit_address,
     };
     saveUser(nextUser);

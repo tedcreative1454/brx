@@ -27,6 +27,7 @@ export const env = {
   googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
   googleCallbackUrl: process.env.GOOGLE_CALLBACK_URL ?? `${process.env.APP_URL ?? "http://localhost:3000"}/api/auth/google/callback`,
+  turnstileSecretKey: process.env.TURNSTILE_SECRET_KEY ?? "",
   alchemyBnbRpcUrl: required("ALCHEMY_BNB_RPC_URL"),
   bscUsdtContractAddress: process.env.BSC_USDT_CONTRACT_ADDRESS ?? "0x55d398326f99059fF775485246999027B3197955",
   bscConfirmationsRequired: optionalNumber("BSC_CONFIRMATIONS_REQUIRED", 15),

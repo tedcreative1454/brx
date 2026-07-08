@@ -189,7 +189,7 @@ export class OffersService {
     return { offer: this.toOffer(result.rows[0]) };
   }
   private toOffer(row: OfferRow) {
-    const emailName = row.email?.split("@")[0] ?? "trader";
+    const anonymousName = `Trader#${row.id.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
     return {
       id: row.id,
       userId: row.user_id,
@@ -202,7 +202,7 @@ export class OffersService {
       maxFiat: row.max_fiat,
       paymentMethods: row.payment_methods ?? [],
       status: row.status,
-      advertiser: row.username || emailName,
+      advertiser: row.username || anonymousName,
       traderLabel: row.trader_label || "",
       avatarUrl: row.advertiser_avatar_url || "",
       completedTrades: Number(row.completed_trades ?? 0),

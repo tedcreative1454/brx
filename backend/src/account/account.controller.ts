@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, Param, Patch, Post } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Headers, Param, Patch, Post } from "@nestjs/common";
 import { AuthService } from "../auth/auth.service";
 import {
   AccountService,
@@ -93,6 +93,8 @@ export class AccountController {
     @Body() body: WithdrawalAddressBody,
   ) {
     const user = await this.auth.authenticate(authorization);
+    this.requireVerifiedEmail(user.emailVerified);
+    await this.auth.requireTwoFactor(user.id, body.twoFactorCode);
     return this.account.createWithdrawalAddress(user.id, body);
   }
 
@@ -103,6 +105,8 @@ export class AccountController {
     @Body() body: WithdrawalAddressBody,
   ) {
     const user = await this.auth.authenticate(authorization);
+    this.requireVerifiedEmail(user.emailVerified);
+    await this.auth.requireTwoFactor(user.id, body.twoFactorCode);
     return this.account.updateWithdrawalAddress(user.id, id, body);
   }
 
@@ -110,6 +114,10 @@ export class AccountController {
   async deleteWithdrawalAddress(@Headers("authorization") authorization: string | undefined, @Param("id") id: string) {
     const user = await this.auth.authenticate(authorization);
     return this.account.deleteWithdrawalAddress(user.id, id);
+  }
+
+  private requireVerifiedEmail(emailVerified: boolean) {
+    if (!emailVerified) throw new BadRequestException("Verify your email before changing withdrawal addresses.");
   }
 }
 

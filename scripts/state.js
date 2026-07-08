@@ -1,6 +1,7 @@
 (function () {
   window.BRX = window.BRX || {};
   const { SESSION_KEY, USERS_KEY } = window.BRX.config;
+  let transientAccessToken = "";
 
   function users() {
     return JSON.parse(localStorage.getItem(USERS_KEY) || "[]");
@@ -39,7 +40,7 @@
   }
 
   function accessToken() {
-    return session()?.accessToken || "";
+    return transientAccessToken;
   }
 
   function requireUser() {
@@ -52,17 +53,21 @@
   }
 
   function setSession(userId, token = "") {
-    const existing = session();
+    if (token) transientAccessToken = token;
     localStorage.setItem(SESSION_KEY, JSON.stringify({
       userId,
-      accessToken: token || existing?.accessToken || "",
       signedInAt: new Date().toISOString(),
     }));
   }
 
+  function setTransientAccessToken(token) {
+    transientAccessToken = String(token || "");
+  }
+
   function clearSession() {
+    transientAccessToken = "";
     localStorage.removeItem(SESSION_KEY);
   }
 
-  window.BRX.state = { users, saveUsers, saveUser, upsertUser, session, currentUser, requireUser, accessToken, setSession, clearSession };
+  window.BRX.state = { users, saveUsers, saveUser, upsertUser, session, currentUser, requireUser, accessToken, setSession, setTransientAccessToken, clearSession };
 })();

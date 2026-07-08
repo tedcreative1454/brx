@@ -1,4 +1,4 @@
-﻿import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
@@ -184,10 +184,11 @@ export class KycService {
       throw new BadRequestException(`${label} must be JPEG, PNG, or WEBP.`);
     }
 
-    const bytes = Buffer.from(file.dataBase64, "base64");
+    const bytes = this.decodeBase64(file.dataBase64, label);
     if (bytes.byteLength === 0 || bytes.byteLength > MAX_FILE_BYTES) {
       throw new BadRequestException(`${label} must be smaller than 8 MB.`);
     }
+    this.assertFileSignature(bytes, mimeType, label);
 
     const extension = this.extensionFor(fileName, mimeType);
     const relativeDir = `uploads/kyc/${userId}`;
@@ -208,6 +209,20 @@ export class KycService {
     const bytes = await readFile(absolutePath);
     const mimeType = this.mimeFor(absolutePath);
     return { dataUrl: `data:${mimeType};base64,${bytes.toString("base64")}`, mimeType, path: normalized };
+  }
+
+  private decodeBase64(value: string, label: string) {
+    const normalized = value.replace(/^data:[^,]+,/, "").replace(/\s/g, "");
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(normalized)) throw new BadRequestException(`${label} file data is invalid.`);
+    return Buffer.from(normalized, "base64");
+  }
+
+  private assertFileSignature(bytes: Buffer, mimeType: string, label: string) {
+    const isJpeg = bytes.length > 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+    const isPng = bytes.length > 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 && bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a;
+    const isWebp = bytes.length > 12 && bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WEBP";
+    const valid = (mimeType === "image/jpeg" && isJpeg) || (mimeType === "image/png" && isPng) || (mimeType === "image/webp" && isWebp);
+    if (!valid) throw new BadRequestException(`${label} file content does not match its file type.`);
   }
 
   private extensionFor(fileName: string, mimeType: string) {

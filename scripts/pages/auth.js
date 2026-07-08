@@ -2,12 +2,15 @@
   window.BRX = window.BRX || {};
   window.BRX.pages = window.BRX.pages || {};
 
-  const { PENDING_KEY } = window.BRX.config;
+  const { PENDING_KEY, TURNSTILE_SITE_KEY } = window.BRX.config;
   const { requestJson } = window.BRX.api;
   const { users, saveUsers, setSession } = window.BRX.state;
   const { refs, showError, showToast } = window.BRX.ui;
   const { hashPassword, normalizeEmail } = window.BRX.utils;
   let pendingLoginChallenge = null;
+  const turnstileWidgets = {};
+  const turnstileRenderAttempts = {};
+  window.addEventListener("brx:turnstile-ready", renderVisibleTurnstiles);
 
   function renderRegister() {
     refs.app.innerHTML = `
@@ -25,6 +28,7 @@
           <label class="form-field"><span>Referral code</span><input id="registerReferral" placeholder="Optional" /></label>
 
           <label class="check-row"><input id="registerTerms" type="checkbox" /><span>I am at least <strong>18 years old</strong> and agree to BRX escrow terms.</span></label>
+          ${turnstileMarkup("registerTurnstile")}
           <div class="form-error" id="formError"></div>
           <button class="primary-button full" type="submit">Create account -></button>
           <div class="oauth-divider"><span>or</span></div>
@@ -35,6 +39,7 @@
     `;
     document.querySelector("#registerForm").addEventListener("submit", handleRegister);
     document.querySelector("#googleRegister").addEventListener("click", handleGoogleAuth);
+    renderTurnstile("registerTurnstile");
   }
 
   function renderVerify() {
@@ -77,6 +82,7 @@
           </div>
           <label class="form-field"><span>Email</span><input id="loginEmail" type="email" autocomplete="email" placeholder="you@example.com" required /></label>
           <label class="form-field"><span>Password</span><input id="loginPassword" type="password" autocomplete="current-password" placeholder="Your password" required /></label>
+          ${turnstileMarkup("loginTurnstile")}
           <div class="form-error" id="formError"></div>
           <button class="primary-button full" type="submit">Login</button>
           <div class="oauth-divider"><span>or</span></div>
@@ -87,6 +93,7 @@
     `;
     document.querySelector("#loginForm").addEventListener("submit", handleLogin);
     document.querySelector("#googleLogin").addEventListener("click", handleGoogleAuth);
+    renderTurnstile("loginTurnstile");
     const googleError = window.BRX.router.routeParams().get("googleError");
     if (googleError) showError(googleError);
   }
@@ -105,6 +112,7 @@
             <p class="muted">Your password is correct. BRX needs your authenticator code to finish sign-in.</p>
           </div>
           <label class="form-field"><span>Authenticator code</span><input id="loginTwoFactor" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="123456" required autofocus /></label>
+          ${turnstileMarkup("loginTwoFactorTurnstile")}
           <div class="form-error" id="formError"></div>
           <button class="primary-button full" type="submit">Verify and login</button>
           <button class="secondary-button full" type="button" id="backToLogin">Back</button>
@@ -114,6 +122,7 @@
     document.querySelector("#loginTwoFactorForm").addEventListener("submit", handleLoginTwoFactor);
     document.querySelector("#backToLogin").addEventListener("click", renderLogin);
     document.querySelector("#loginTwoFactor")?.focus();
+    renderTurnstile("loginTwoFactorTurnstile");
   }
 
   function renderOAuthCallback() {
@@ -165,6 +174,8 @@
     if (password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) return showError("Password must be at least 8 characters and include a letter and number.");
     if (password !== confirm) return showError("Passwords do not match.");
     if (!terms) return showError("You must accept the BRX escrow terms.");
+    const turnstileToken = turnstileTokenFor("registerTurnstile");
+    if (turnstileToken === null) return;
 
     const nextUsers = users();
     const existingIndex = nextUsers.findIndex((user) => user.email === email);
@@ -175,9 +186,10 @@
     try {
       await requestJson("/auth/register", {
         method: "POST",
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, turnstileToken }),
       });
     } catch (error) {
+      resetTurnstile("registerTurnstile");
       return showError(error.message || "Could not send verification email.");
     }
 
@@ -204,12 +216,14 @@
     showError("");
     const email = normalizeEmail(document.querySelector("#loginEmail").value);
     const password = document.querySelector("#loginPassword").value;
+    const turnstileToken = turnstileTokenFor("loginTurnstile");
+    if (turnstileToken === null) return;
 
     let loginResult;
     try {
       loginResult = await requestJson("/auth/login", {
         method: "POST",
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, turnstileToken }),
       });
     } catch (error) {
       if (error.code === "two_factor_required") {
@@ -223,6 +237,7 @@
         location.hash = "#/verify";
         return;
       }
+      resetTurnstile("loginTurnstile");
       return showError(error.message || "Incorrect email or password.");
     }
 
@@ -234,7 +249,7 @@
       return;
     }
 
-    setSession(localUser.id, loginResult.accessToken);
+    await persistSession(localUser, loginResult.accessToken || "");
     showToast("Signed in");
     location.hash = "#/dashboard";
   }
@@ -249,22 +264,82 @@
     }
     const twoFactorCode = document.querySelector("#loginTwoFactor").value.trim();
     if (!/^\d{6}$/.test(twoFactorCode)) return showError("Enter the six-digit authenticator code.");
+    const turnstileToken = turnstileTokenFor("loginTwoFactorTurnstile");
+    if (turnstileToken === null) return;
 
     let loginResult;
     try {
       loginResult = await requestJson("/auth/login", {
         method: "POST",
-        body: JSON.stringify({ ...pendingLoginChallenge, twoFactorCode }),
+        body: JSON.stringify({ ...pendingLoginChallenge, twoFactorCode, turnstileToken }),
       });
     } catch (error) {
+      resetTurnstile("loginTwoFactorTurnstile");
       return showError(error.message || "Invalid authenticator code.");
     }
 
     const localUser = await cacheAuthenticatedUser(loginResult.user, pendingLoginChallenge.password);
     pendingLoginChallenge = null;
-    setSession(localUser.id, loginResult.accessToken);
+    await persistSession(localUser, loginResult.accessToken || "");
     showToast("Signed in");
     location.hash = "#/dashboard";
+  }
+
+  function turnstileMarkup(containerId) {
+    if (!TURNSTILE_SITE_KEY) return "";
+    return `<div class="turnstile-slot" id="${escapeHtml(containerId)}" data-turnstile-state="loading" aria-live="polite"></div>`;
+  }
+
+  function renderVisibleTurnstiles() {
+    document.querySelectorAll(".turnstile-slot[id]").forEach((container) => renderTurnstile(container.id));
+  }
+
+  function renderTurnstile(containerId) {
+    if (!TURNSTILE_SITE_KEY) return;
+    const container = document.querySelector(`#${containerId}`);
+    if (!container || container.dataset.turnstileRendered === "true") return;
+    if (!window.turnstile?.render) {
+      turnstileRenderAttempts[containerId] = (turnstileRenderAttempts[containerId] || 0) + 1;
+      const delay = turnstileRenderAttempts[containerId] < 20 ? 150 : 500;
+      setTimeout(() => renderTurnstile(containerId), delay);
+      return;
+    }
+    turnstileWidgets[containerId] = window.turnstile.render(container, {
+      sitekey: TURNSTILE_SITE_KEY,
+      theme: document.documentElement.dataset.theme === "light" ? "light" : "dark",
+      size: "normal",
+    });
+    container.dataset.turnstileRendered = "true";
+    container.dataset.turnstileState = "ready";
+  }
+
+  function turnstileTokenFor(containerId) {
+    if (!TURNSTILE_SITE_KEY) return "";
+    const widgetId = turnstileWidgets[containerId];
+    if (!window.turnstile || widgetId === undefined) {
+      showError("Human verification is still loading. Try again in a moment.");
+      return null;
+    }
+    const token = window.turnstile.getResponse(widgetId);
+    if (!token) {
+      showError("Complete the human verification before continuing.");
+      return null;
+    }
+    return token;
+  }
+
+  function resetTurnstile(containerId) {
+    const widgetId = turnstileWidgets[containerId];
+    if (TURNSTILE_SITE_KEY && window.turnstile && widgetId !== undefined) window.turnstile.reset(widgetId);
+  }
+  async function persistSession(localUser, token = "") {
+    setSession(localUser.id, token || "");
+    if (!token) return;
+    try {
+      await requestJson("/auth/me", { headers: { authorization: `Bearer ${token}` } });
+    } catch (error) {
+      console.warn(error);
+    }
   }
 
   function escapeHtml(value) {
@@ -297,26 +372,20 @@
 
   async function finishGoogleAuth() {
     const query = window.BRX.router.routeParams();
-    const accessToken = query.get("token");
+    const legacyToken = query.get("token");
     const twoFactorRequired = query.get("twoFactor") === "required";
     const ticket = query.get("ticket");
     if (twoFactorRequired && ticket) {
       renderGoogleTwoFactor(ticket);
       return;
     }
-    if (!accessToken) {
-      showError("Google sign-in did not return a session.");
-      return;
-    }
 
     try {
-      const result = await requestJson("/auth/me", {
-        headers: { authorization: `Bearer ${accessToken}` },
-      });
+      const result = await requestJson("/auth/me", legacyToken ? { headers: { authorization: `Bearer ${legacyToken}` } } : undefined);
       const localUser = await cacheAuthenticatedUser(result.user, "");
-      setSession(localUser.id, accessToken);
+      await persistSession(localUser, legacyToken || "");
       showToast("Signed in with Google");
-      location.hash = "#/dashboard";
+      location.replace(`${location.pathname}${location.search}#/dashboard`);
     } catch (error) {
       showError(error.message || "Could not finish Google sign-in.");
     }
@@ -334,7 +403,7 @@
         body: JSON.stringify({ ticket, twoFactorCode }),
       });
       const localUser = await cacheAuthenticatedUser(result.user, "");
-      setSession(localUser.id, result.accessToken);
+      await persistSession(localUser, result.accessToken || "");
       showToast("Signed in with Google");
       location.hash = "#/dashboard";
     } catch (error) {
@@ -372,7 +441,7 @@
     nextUsers[userIndex].balance = backendUser.balance || window.BRX.profileService.emptyBalance();
   saveUsers(nextUsers);
   localStorage.removeItem(PENDING_KEY);
-  setSession(nextUsers[userIndex].id, verifyResult.accessToken);
+  await persistSession(nextUsers[userIndex], verifyResult.accessToken || "");
   showToast("Email verified. Welcome to BRX.");
   location.hash = "#/dashboard";
 }

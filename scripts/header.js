@@ -9,10 +9,15 @@
   const notificationService = window.BRX.notificationService;
   let notificationPollTimer = null;
 
-  function signOut() {
+  async function signOut() {
     document.removeEventListener("click", closeFloatingMenusOnOutsideClick);
     if (notificationPollTimer) clearInterval(notificationPollTimer);
     notificationPollTimer = null;
+    try {
+      await window.BRX.api.requestJson("/auth/logout", { method: "POST" });
+    } catch (error) {
+      console.error(error);
+    }
     clearSession();
     showToast("Signed out");
     location.hash = "#/";

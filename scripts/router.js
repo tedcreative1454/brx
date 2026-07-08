@@ -45,7 +45,7 @@
     document.title = routeTitle(route);
     refs.app.setAttribute("aria-busy", "true");
 
-    if (requiresAppSession && window.BRX.state.accessToken()) {
+    if (requiresAppSession) {
       const hydratedUser = await window.BRX.profileService.hydrateSession();
       if (!hydratedUser) {
         refs.app.setAttribute("aria-busy", "false");

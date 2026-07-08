@@ -2135,6 +2135,7 @@
             <label class="form-field"><span>Network</span><select id="withdrawalNetwork"><option value="BEP20">BNB Smart Chain - BEP20</option></select></label>
             <label class="form-field"><span>Label</span><input id="withdrawalLabel" placeholder="My Binance wallet" required /></label>
             <label class="form-field wide"><span>BEP20 address</span><input id="withdrawalAddress" placeholder="0x..." required /></label>
+            <label class="form-field"><span>Authenticator code</span><input id="withdrawalAddressTwoFactor" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="123456" required /></label>
           </div>
           <label class="check-row settings-default-check"><input id="withdrawalDefault" type="checkbox" ${addresses.length ? "" : "checked"} /><span>Make this my default withdrawal address</span></label>
           <div class="settings-form-actions"><button class="app-button" type="submit">Save address</button></div>
@@ -2588,6 +2589,7 @@
         network: document.querySelector("#withdrawalNetwork").value,
         label: document.querySelector("#withdrawalLabel").value,
         address: document.querySelector("#withdrawalAddress").value,
+        twoFactorCode: document.querySelector("#withdrawalAddressTwoFactor").value.trim(),
         asset: "USDT",
         isDefault: document.querySelector("#withdrawalDefault").checked,
       });
@@ -2611,8 +2613,10 @@
 
   async function handleWithdrawalDefault(addressId) {
     if (!addressId) return;
+    const twoFactorCode = prompt("Enter your six-digit authenticator code to change the default withdrawal address.");
+    if (!twoFactorCode) return;
     try {
-      await accountService.updateWithdrawalAddress(addressId, { isDefault: true });
+      await accountService.updateWithdrawalAddress(addressId, { isDefault: true, twoFactorCode: twoFactorCode.trim() });
       showToast("Default withdrawal address updated.");
       renderSettings();
     } catch (error) {

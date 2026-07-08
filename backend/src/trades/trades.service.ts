@@ -572,8 +572,9 @@ export class TradesService {
       if (!["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(mimeType)) {
         throw new BadRequestException("Dispute evidence must be a JPG, PNG, WEBP, or PDF file.");
       }
-      const data = Buffer.from(input.file.dataBase64, "base64");
+      const data = this.decodeUploadBase64(input.file.dataBase64, "Dispute evidence");
       if (data.length > 8 * 1024 * 1024) throw new BadRequestException("Dispute evidence file must be under 8 MB.");
+      this.assertUploadSignature(data, mimeType, "Dispute evidence");
       const original = String(input.file.fileName ?? "evidence").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
       const extension = extname(original) || (mimeType === "application/pdf" ? ".pdf" : ".png");
       fileName = `${randomUUID()}${extension}`;
@@ -600,8 +601,9 @@ export class TradesService {
       if (!["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(mimeType)) {
         throw new BadRequestException("Payment receipt must be a JPG, PNG, WEBP, or PDF file.");
       }
-      const data = Buffer.from(file.dataBase64, "base64");
+      const data = this.decodeUploadBase64(file.dataBase64, "Payment receipt");
       if (data.length > 8 * 1024 * 1024) throw new BadRequestException("Payment receipt file must be under 8 MB.");
+      this.assertUploadSignature(data, mimeType, "Payment receipt");
       const original = String(file.fileName ?? "receipt").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
       const extension = extname(original) || (mimeType === "application/pdf" ? ".pdf" : ".png");
       fileName = `${randomUUID()}${extension}`;
@@ -612,6 +614,21 @@ export class TradesService {
     }
 
     return { fileUrl, fileName, mimeType };
+  }
+
+  private decodeUploadBase64(value: string, label: string) {
+    const normalized = String(value ?? "").replace(/^data:[^,]+,/, "").replace(/\s/g, "");
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(normalized)) throw new BadRequestException(`${label} file data is invalid.`);
+    return Buffer.from(normalized, "base64");
+  }
+
+  private assertUploadSignature(bytes: Buffer, mimeType: string, label: string) {
+    const isJpeg = bytes.length > 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+    const isPng = bytes.length > 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 && bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a;
+    const isWebp = bytes.length > 12 && bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WEBP";
+    const isPdf = bytes.length > 5 && bytes.subarray(0, 5).toString("ascii") === "%PDF-";
+    const valid = (mimeType === "image/jpeg" && isJpeg) || (mimeType === "image/png" && isPng) || (mimeType === "image/webp" && isWebp) || (mimeType === "application/pdf" && isPdf);
+    if (!valid) throw new BadRequestException(`${label} file content does not match its file type.`);
   }
 
   private async assertTradeParticipant(userId: string, tradeId: string) {
