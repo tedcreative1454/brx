@@ -7947,3 +7947,216 @@ body[data-route="market"] .brx-p2p-market .market-trader-avatar.has-image img {
   from { opacity: .58; }
   to { opacity: 1; }
 }
+
+/* Mobile Settings readability pass. */
+@media (max-width: 760px) {
+  .professional-settings-page {
+    padding-top: 14px !important;
+  }
+
+  .professional-settings-head {
+    align-items: flex-start !important;
+  }
+
+  .professional-settings-person {
+    min-width: 0 !important;
+  }
+
+  .professional-settings-person h1 {
+    font-size: 24px !important;
+    line-height: 1.05 !important;
+  }
+
+  .professional-settings-person small {
+    display: block !important;
+    max-width: 100% !important;
+    font-size: 12px !important;
+    line-height: 1.35 !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .professional-settings-state {
+    padding: 12px 14px !important;
+  }
+
+  .professional-settings-state strong {
+    font-size: 13px !important;
+  }
+
+  .professional-settings-state small {
+    font-size: 11px !important;
+    line-height: 1.3 !important;
+  }
+
+  .professional-settings-page .professional-settings-nav {
+    gap: 8px !important;
+    padding: 8px !important;
+  }
+
+  .settings-nav-label {
+    display: none !important;
+  }
+
+  .professional-settings-page .settings-tab {
+    min-width: 132px !important;
+    min-height: 56px !important;
+    grid-template-columns: 20px minmax(0, 1fr) !important;
+    gap: 10px !important;
+    padding: 10px 12px !important;
+    border-radius: 12px !important;
+  }
+
+  .professional-settings-page .settings-tab > svg:first-child {
+    width: 20px !important;
+    height: 20px !important;
+  }
+
+  .professional-settings-page .settings-tab strong {
+    font-size: 13px !important;
+    line-height: 1.15 !important;
+  }
+
+  .settings-content-head {
+    min-height: 64px !important;
+    padding: 14px 16px !important;
+  }
+
+  .settings-content-head h2 {
+    font-size: 23px !important;
+    line-height: 1.05 !important;
+  }
+
+  .settings-content-head .app-label {
+    font-size: 11px !important;
+  }
+
+  .settings-content-head > a {
+    font-size: 12px !important;
+    line-height: 1.2 !important;
+  }
+
+  .professional-settings-page .settings-card-head h3 {
+    font-size: 17px !important;
+    line-height: 1.2 !important;
+  }
+
+  .professional-settings-page .settings-card-head h3 svg {
+    width: 19px !important;
+    height: 19px !important;
+  }
+
+  .professional-settings-page .settings-card-head p,
+  .professional-settings-page .settings-security-block .app-muted {
+    font-size: 13px !important;
+    line-height: 1.45 !important;
+  }
+
+  .professional-settings-page .settings-note {
+    min-height: 54px !important;
+    gap: 10px !important;
+    padding: 13px 14px !important;
+    border-radius: 13px !important;
+    font-size: 13px !important;
+    line-height: 1.4 !important;
+  }
+
+  .professional-settings-page .settings-note svg {
+    width: 20px !important;
+    height: 20px !important;
+    flex: 0 0 20px !important;
+  }
+
+  .professional-settings-page .settings-row {
+    min-height: 74px !important;
+    grid-template-columns: 44px minmax(0, 1fr) !important;
+    gap: 13px !important;
+    padding: 14px 0 !important;
+  }
+
+  .professional-settings-page .settings-row-icon {
+    width: 42px !important;
+    height: 42px !important;
+    border-radius: 12px !important;
+  }
+
+  .professional-settings-page .settings-row-icon svg {
+    width: 20px !important;
+    height: 20px !important;
+  }
+
+  .professional-settings-page .settings-row-main strong {
+    font-size: 14px !important;
+    line-height: 1.25 !important;
+  }
+
+  .professional-settings-page .settings-row-main small {
+    margin-top: 4px !important;
+    font-size: 12px !important;
+    line-height: 1.35 !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .professional-settings-page .settings-row-aside {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  .professional-settings-page .settings-action,
+  .professional-settings-page .settings-badge {
+    min-height: 44px !important;
+    padding: 0 16px !important;
+    font-size: 13px !important;
+    line-height: 1.1 !important;
+  }
+
+  .professional-settings-page .settings-badge svg {
+    width: 16px !important;
+    height: 16px !important;
+  }
+
+  .professional-settings-page .form-field {
+    gap: 7px !important;
+    font-size: 13px !important;
+  }
+
+  .professional-settings-page .form-field > span,
+  .professional-settings-page .trader-name-field > span {
+    font-size: 13px !important;
+    line-height: 1.2 !important;
+  }
+
+  .professional-settings-page .form-field input,
+  .professional-settings-page .form-field select,
+  .professional-settings-page textarea,
+  .professional-settings-page .trader-name-field input {
+    min-height: 48px !important;
+    border-radius: 12px !important;
+    font-size: 14px !important;
+  }
+
+  .professional-settings-page .settings-form-actions .app-button,
+  .professional-settings-page .payment-editor-actions .app-button,
+  .professional-settings-page .payment-cancel-button,
+  .professional-settings-page .payment-add-button {
+    min-height: 46px !important;
+    font-size: 14px !important;
+  }
+
+  .professional-settings-page .settings-id-main h3 {
+    font-size: 22px !important;
+    line-height: 1.15 !important;
+  }
+
+  .professional-settings-page .settings-id-main small,
+  .professional-settings-page .settings-muted,
+  .professional-settings-page .settings-avatar-help {
+    font-size: 12px !important;
+    line-height: 1.35 !important;
+  }
+
+  .professional-settings-page .secret-code {
+    font-size: 16px !important;
+    line-height: 1.45 !important;
+    overflow-wrap: anywhere !important;
+  }
+}

@@ -3163,12 +3163,31 @@
   }
 
   .professional-wallet-page .deposit-address-detail {
-    grid-template-columns: 74px minmax(0, 1fr) !important;
-    gap: 10px !important;
+    grid-template-columns: 1fr !important;
+    justify-items: stretch !important;
+    gap: 14px !important;
+  }
+
+  .professional-wallet-page .deposit-qr-card {
+    width: min(164px, 52vw) !important;
+    height: min(164px, 52vw) !important;
+    justify-self: center !important;
+  }
+
+  .professional-wallet-page .deposit-address-main {
+    width: 100% !important;
+    min-width: 0 !important;
+    text-align: left !important;
+  }
+
+  .professional-wallet-page .deposit-address-main strong {
+    display: block !important;
+    max-width: 100% !important;
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
   }
 
   .professional-wallet-page .deposit-address-detail .app-button {
-    grid-column: 1 / -1 !important;
     width: 100% !important;
   }
 

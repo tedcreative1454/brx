@@ -59,7 +59,7 @@
             <p class="muted">Enter the six-digit code for ${user.email}.</p>
           </div>
           <div class="verify-code"><span>Email verification</span><p class="muted">We sent a six-digit verification code to your email. BRX uses this step before wallet access.</p></div>
-          <label class="form-field"><span>Verification code</span><input id="verificationCode" inputmode="numeric" maxlength="6" placeholder="123456" required /></label>
+          <label class="form-field"><span>Verification code</span><input id="verificationCode" inputmode="numeric" maxlength="6" placeholder="code" required /></label>
           <div class="form-error" id="formError"></div>
           <button class="primary-button full" type="submit">Verify email</button>
           <button class="secondary-button full" type="button" id="resendCode">Resend code</button>
@@ -111,7 +111,7 @@
             <span>${escapeHtml(email)}</span>
             <p class="muted">Your password is correct. BRX needs your authenticator code to finish sign-in.</p>
           </div>
-          <label class="form-field"><span>Authenticator code</span><input id="loginTwoFactor" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="123456" required autofocus /></label>
+          <label class="form-field"><span>Authenticator code</span><input id="loginTwoFactor" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="code" required autofocus /></label>
           ${turnstileMarkup("loginTwoFactorTurnstile")}
           <div class="form-error" id="formError"></div>
           <button class="primary-button full" type="submit">Verify and login</button>
@@ -150,7 +150,7 @@
             <h1>Two-step verification</h1>
             <p class="muted">Google verified your account. Enter your authenticator code to finish sign-in.</p>
           </div>
-          <label class="form-field"><span>Authenticator code</span><input id="googleTwoFactor" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="123456" required autofocus /></label>
+          <label class="form-field"><span>Authenticator code</span><input id="googleTwoFactor" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="code" required autofocus /></label>
           <div class="form-error" id="formError"></div>
           <button class="primary-button full" type="submit">Verify and login</button>
           <a class="secondary-button full" href="#/login">Back to login</a>

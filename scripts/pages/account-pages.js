@@ -1699,7 +1699,7 @@
               <section class="deposit-address-card pending"><div><span>No saved withdrawal address</span><strong>Add a BEP20 address first</strong><small>Open Settings > Addresses and save a wallet you control.</small></div><a class="app-button small" href="#/settings?tab=addresses">Add address</a></section>
             `}
             <label class="form-field"><span>Amount</span><input id="withdrawAmount" inputmode="decimal" placeholder="0.00" required /></label>
-            <label class="form-field"><span>Authenticator code</span><input id="withdrawTwoFactor" inputmode="numeric" maxlength="6" placeholder="123456" required /></label>
+            <label class="form-field"><span>Authenticator code</span><input id="withdrawTwoFactor" inputmode="numeric" maxlength="6" placeholder="code" required /></label>
             <p class="deposit-note">Only available balance can be withdrawn. Escrow-locked funds stay locked. Withdrawals require 2FA and are paused for 24 hours after a password change.</p>
             <button class="app-button" type="submit" ${addresses.length ? "" : "disabled"}>Request withdrawal</button>
           </form>
@@ -2156,7 +2156,7 @@
             <label class="form-field"><span>Network</span><select id="withdrawalNetwork"><option value="BEP20">BNB Smart Chain - BEP20</option></select></label>
             <label class="form-field"><span>Label</span><input id="withdrawalLabel" placeholder="My Binance wallet" required /></label>
             <label class="form-field wide"><span>BEP20 address</span><input id="withdrawalAddress" placeholder="0x..." required /></label>
-            <label class="form-field"><span>Authenticator code</span><input id="withdrawalAddressTwoFactor" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="123456" required /></label>
+            <label class="form-field"><span>Authenticator code</span><input id="withdrawalAddressTwoFactor" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="code" required /></label>
           </div>
           <label class="check-row settings-default-check"><input id="withdrawalDefault" type="checkbox" ${addresses.length ? "" : "checked"} /><span>Make this my default withdrawal address</span></label>
           <div class="settings-form-actions"><button class="app-button" type="submit">Save address</button></div>
@@ -2545,7 +2545,7 @@
     return `
       <div class="settings-security-block">
         <p class="app-muted">2FA is active on this account. New sign-ins require a six-digit authenticator code.</p>
-        <label class="form-field compact"><span>Authenticator code</span><input id="disableTwoFactorCode" inputmode="numeric" maxlength="6" placeholder="123456" /></label>
+        <label class="form-field compact"><span>Authenticator code</span><input id="disableTwoFactorCode" inputmode="numeric" maxlength="6" placeholder="code" /></label>
         <button class="settings-action danger" type="button" id="disableTwoFactor">Disable 2FA</button>
       </div>
     `;
@@ -2556,9 +2556,8 @@
       <div class="settings-security-block">
         <p class="app-muted">Add this secret to your authenticator app, then enter the six-digit code it shows.</p>
         <code class="secret-code">${escapeHtml(setup.secret || "")}</code>
-        <small class="app-muted">Manual setup URI: ${escapeHtml(setup.otpauthUri || "")}</small>
         <div class="settings-form-grid compact-grid">
-          <label class="form-field"><span>Authenticator code</span><input id="confirmTwoFactorCode" inputmode="numeric" maxlength="6" placeholder="123456" /></label>
+          <label class="form-field"><span>Authenticator code</span><input id="confirmTwoFactorCode" inputmode="numeric" maxlength="6" placeholder="code" /></label>
           <div class="settings-form-actions"><button class="app-button" type="button" id="confirmTwoFactor">Enable 2FA</button></div>
         </div>
       </div>
