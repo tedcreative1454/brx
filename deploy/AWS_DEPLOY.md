@@ -96,7 +96,84 @@ Open:
 http://YOUR_SERVER_IP
 ```
 
-## 6. Useful Commands
+## 6. Deploy Updates To An Existing Lightsail Server
+
+The production server runs the whole app with Docker Compose from `~/BRX`. Do not run host-level `npm install`, `npm run build`, or `systemctl restart brx-backend` for this deployment. The API is rebuilt inside the `api` Docker container, and the frontend is served by the `web` Nginx container.
+
+### Local Computer
+
+Commit and push the update first:
+
+```bash
+cd C:\projects\BRX
+git status
+git add .
+git commit -m "Describe the update"
+git push origin main
+```
+
+### Lightsail Server
+
+SSH into Lightsail, then pull the new commit:
+
+```bash
+cd ~/BRX
+git status --short
+git pull origin main
+git rev-parse --short HEAD
+```
+
+If `git pull` aborts because server config files would be overwritten, preserve those server-only edits first:
+
+```bash
+cd ~/BRX
+git stash push -m "server deploy config before update" -- deploy/nginx.conf deploy/nginx.conf.backup docker-compose.prod.yml docker-compose.prod.yml.backup
+git pull origin main
+git rev-parse --short HEAD
+```
+
+Only use `git stash pop` later if you intentionally need to restore the server-local config changes.
+
+### Restart Or Rebuild
+
+For frontend-only updates such as `index.html`, `scripts/`, `styles/`, `assets/`, `manifest.webmanifest`, or `sw.js`:
+
+```bash
+docker compose -f docker-compose.prod.yml restart web
+docker compose -f docker-compose.prod.yml exec web nginx -s reload
+```
+
+For backend, Dockerfile, dependency, environment, or compose changes:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml ps
+```
+
+If a database schema changed, run migrations after the rebuild:
+
+```bash
+docker compose -f docker-compose.prod.yml exec api node scripts/run-schema.mjs
+```
+
+### Verify The Live Files
+
+Check that the server is on the expected commit and that the public site is serving updated assets:
+
+```bash
+git rev-parse --short HEAD
+curl -I https://YOUR_DOMAIN_OR_IP/manifest.webmanifest
+curl -I https://YOUR_DOMAIN_OR_IP/sw.js
+curl -s https://YOUR_DOMAIN_OR_IP/index.html | grep "mobile.css"
+```
+
+If the server has the new files but the browser still shows old UI, hard refresh the browser. For PWA/service-worker cache issues, open the site with a cache-busting query once, for example:
+
+```text
+https://YOUR_DOMAIN_OR_IP/?fresh=1
+```
+
+## 7. Useful Commands
 
 ```bash
 docker compose -f docker-compose.prod.yml ps
@@ -105,7 +182,7 @@ docker compose -f docker-compose.prod.yml restart api
 docker compose -f docker-compose.prod.yml down
 ```
 
-## 7. Before Real Users
+## 8. Before Real Users
 
 Do not process real user funds until these are done:
 

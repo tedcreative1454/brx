@@ -3277,3 +3277,14 @@
     min-height: 82px !important;
   }
 }
+
+/* Mobile dashboard balance breakdown without escrow item. */
+@media (max-width: 760px) {
+  .dashboard-balance-breakdown {
+    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)) !important;
+  }
+
+  .dashboard-balance-breakdown > div:only-child {
+    grid-column: 1 / -1 !important;
+  }
+}

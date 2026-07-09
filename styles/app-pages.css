@@ -8160,3 +8160,12 @@ body[data-route="market"] .brx-p2p-market .market-trader-avatar.has-image img {
     overflow-wrap: anywhere !important;
   }
 }
+
+/* Dashboard balance breakdown without escrow item. */
+.dashboard-balance-breakdown {
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+}
+
+.dashboard-balance-breakdown > div:only-child {
+  grid-column: 1 / -1;
+}

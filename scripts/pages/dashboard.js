@@ -82,7 +82,6 @@
 
         <div class="dashboard-balance-breakdown">
           ${balanceItem("Available", available, "available", hidden)}
-          ${balanceItem("In escrow", locked, "escrow", hidden)}
           ${pending > 0 ? balanceItem("Pending", pending, "pending", hidden) : ""}
         </div>
 
