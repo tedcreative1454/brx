@@ -56,6 +56,8 @@ services:
       - ./index.html:/usr/share/nginx/html/index.html:ro
       - ./app.js:/usr/share/nginx/html/app.js:ro
       - ./styles.css:/usr/share/nginx/html/styles.css:ro
+      - ./manifest.webmanifest:/usr/share/nginx/html/manifest.webmanifest:ro
+      - ./sw.js:/usr/share/nginx/html/sw.js:ro
       - ./assets:/usr/share/nginx/html/assets:ro
       - ./scripts:/usr/share/nginx/html/scripts:ro
       - ./styles:/usr/share/nginx/html/styles:ro

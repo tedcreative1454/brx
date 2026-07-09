@@ -15,3 +15,5 @@ backend/uploads/
 *.key
 *.p12
 *.pfx
+
+*.backup
