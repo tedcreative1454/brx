@@ -308,6 +308,7 @@
       sitekey: TURNSTILE_SITE_KEY,
       theme: document.documentElement.dataset.theme === "light" ? "light" : "dark",
       size: "normal",
+      "error-callback": (code) => handleTurnstileError(containerId, code),
     });
     container.dataset.turnstileRendered = "true";
     container.dataset.turnstileState = "ready";
@@ -331,6 +332,26 @@
   function resetTurnstile(containerId) {
     const widgetId = turnstileWidgets[containerId];
     if (TURNSTILE_SITE_KEY && window.turnstile && widgetId !== undefined) window.turnstile.reset(widgetId);
+  }
+
+  function handleTurnstileError(containerId, code) {
+    const normalizedCode = String(code || "unknown");
+    const container = document.querySelector(`#${containerId}`);
+    if (container) container.dataset.turnstileState = "error";
+    console.error("Turnstile failed", { containerId, code: normalizedCode });
+    if (normalizedCode === "110200") {
+      showError("Cloudflare Turnstile is not authorized for this domain. Add brxp2p.com in Cloudflare Hostname Management.");
+      return;
+    }
+    if (normalizedCode === "110100" || normalizedCode === "110110" || normalizedCode === "400020") {
+      showError("Cloudflare Turnstile site key is invalid. Check the production site key.");
+      return;
+    }
+    if (normalizedCode === "400070") {
+      showError("Cloudflare Turnstile site key is disabled in Cloudflare.");
+      return;
+    }
+    showError(`Cloudflare Turnstile could not load. Refresh and try again. Code: ${escapeHtml(normalizedCode)}`);
   }
   async function persistSession(localUser, token = "") {
     setSession(localUser.id, token || "");
@@ -362,7 +383,7 @@
   async function handleGoogleAuth() {
     showError("");
     try {
-      const baseUrl = window.location.href.split("#")[0];
+      const baseUrl = localOauthBaseUrl();
       const { url } = await requestJson(`/auth/google/start?returnTo=${encodeURIComponent(baseUrl)}`);
       window.location.href = url;
     } catch (error) {
@@ -370,7 +391,22 @@
     }
   }
 
+
+  function localOauthBaseUrl() {
+    const url = new URL(window.location.href.split("#")[0]);
+    if (["localhost", "127.0.0.1"].includes(url.hostname)) url.hostname = "localhost";
+    return url.toString();
+  }
+
+  function normalizeLocalOauthHost() {
+    if (window.location.hostname !== "127.0.0.1") return false;
+    const url = new URL(window.location.href);
+    url.hostname = "localhost";
+    window.location.replace(url.toString());
+    return true;
+  }
   async function finishGoogleAuth() {
+    if (normalizeLocalOauthHost()) return;
     const query = window.BRX.router.routeParams();
     const legacyToken = query.get("token");
     const twoFactorRequired = query.get("twoFactor") === "required";

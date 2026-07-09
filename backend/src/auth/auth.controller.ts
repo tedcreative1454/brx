@@ -3,6 +3,8 @@ import type { FastifyReply } from "fastify";
 import { env } from "../config/env";
 import { AuthService } from "./auth.service";
 
+const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
+
 interface RegisterBody {
   email?: string;
   password?: string;
@@ -123,7 +125,7 @@ export class AuthController {
   }
 
   private setSessionCookie(reply: FastifyReply, accessToken: string) {
-    this.writeCookie(reply, `${this.cookieName()}=${encodeURIComponent(accessToken)}; Max-Age=3600; Path=/; HttpOnly; SameSite=Lax${this.secureCookieFlag()}`);
+    this.writeCookie(reply, `${this.cookieName()}=${encodeURIComponent(accessToken)}; Max-Age=${SESSION_MAX_AGE_SECONDS}; Path=/; HttpOnly; SameSite=Lax${this.secureCookieFlag()}`);
   }
 
   private clearSessionCookie(reply: FastifyReply) {

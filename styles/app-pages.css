@@ -7717,3 +7717,233 @@ body[data-route="market"] .brx-p2p-market .market-trader-avatar.has-image img {
   min-height: 0;
   margin: 0;
 }
+/* Balance privacy and wallet readability polish. */
+.dashboard-card-head {
+  align-items: center;
+}
+
+.dashboard-balance-toggle {
+  width: 38px;
+  height: 38px;
+  display: inline-grid;
+  place-items: center;
+  position: relative;
+  z-index: 2;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 10px;
+  background: rgba(3, 10, 20, .55);
+  color: var(--text);
+}
+
+.dashboard-balance-toggle:hover {
+  border-color: rgba(0, 153, 255, .38);
+  color: var(--blue-2);
+}
+
+.dashboard-balance-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+.dashboard-balance-card.is-hidden .dashboard-balance-value > strong,
+.dashboard-balance-card.is-hidden .dashboard-balance-breakdown strong {
+  letter-spacing: .08em;
+}
+
+.dashboard-balance-value > span,
+.dashboard-balance-breakdown .available strong,
+.dashboard-balance-breakdown .escrow strong,
+.dashboard-balance-breakdown strong small,
+.wallet-total-block h2 span,
+.professional-balance-grid .available strong,
+.professional-balance-grid .locked strong,
+.professional-balance-grid strong small {
+  color: #fff;
+}
+
+.wallet-network-inset {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.wallet-network-inset .deposit-address-card {
+  margin: 0;
+}
+
+/* Mobile settings actions should be easy to tap. */
+@media (max-width: 760px) {
+  .professional-settings-page .settings-row {
+    grid-template-columns: 40px minmax(0, 1fr) !important;
+    gap: 12px !important;
+  }
+
+  .professional-settings-page .settings-row-aside {
+    grid-column: 2 !important;
+    width: 100% !important;
+    display: flex !important;
+    justify-content: flex-start !important;
+    margin-top: 8px !important;
+  }
+
+  .professional-settings-page .settings-action,
+  .professional-settings-page .settings-badge {
+    min-width: 104px !important;
+    min-height: 42px !important;
+    padding: 0 16px !important;
+    border-radius: 12px !important;
+    justify-content: center !important;
+    font-size: 12px !important;
+    line-height: 1 !important;
+  }
+
+  .professional-settings-page .settings-avatar-actions {
+    width: 100% !important;
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .professional-settings-page .settings-avatar-upload,
+  .professional-settings-page .settings-avatar-remove {
+    width: 100% !important;
+    min-height: 46px !important;
+    padding: 0 16px !important;
+    border-radius: 12px !important;
+    font-size: 13px !important;
+  }
+
+  .professional-settings-page .settings-avatar-upload svg {
+    width: 18px !important;
+    height: 18px !important;
+  }
+}
+
+/* Trader identity and smoother Trades loading. */
+.trader-name-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.trader-name-line h1,
+.trader-name-line h3 {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.trader-name-edit {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(0, 184, 255, .28);
+  border-radius: 10px;
+  background: rgba(0, 153, 255, .1);
+  color: var(--blue-2);
+}
+
+.trader-name-edit:hover {
+  border-color: rgba(0, 184, 255, .5);
+  background: rgba(0, 153, 255, .16);
+}
+
+.trader-name-edit svg {
+  width: 17px;
+  height: 17px;
+}
+
+
+.settings-trader-editor {
+  width: min(100%, 560px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  margin: 10px 0 8px;
+}
+
+.trader-name-field {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.trader-name-field span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.trader-name-field input {
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid rgba(0, 184, 255, .24);
+  border-radius: 12px;
+  background: rgba(3, 10, 20, .72);
+  color: #fff;
+  padding: 0 14px;
+  font: inherit;
+  font-weight: 800;
+  outline: none;
+}
+
+.trader-name-field input:focus {
+  border-color: rgba(0, 184, 255, .72);
+  box-shadow: 0 0 0 3px rgba(0, 184, 255, .12);
+}
+
+.trader-name-save {
+  min-height: 46px;
+  min-width: 88px;
+}
+
+.settings-trader-name {
+  margin: 2px 0 8px;
+}
+
+.trade-list-smooth-shell {
+  min-height: 320px;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.smooth-placeholder,
+.smooth-placeholder-list {
+  animation: smooth-shell-pulse 1s ease-in-out infinite alternate;
+}
+
+.smooth-placeholder span,
+.smooth-placeholder-list span {
+  display: block;
+  border-radius: 12px;
+  background: linear-gradient(90deg, rgba(166, 190, 226, .08), rgba(166, 190, 226, .16), rgba(166, 190, 226, .08));
+}
+
+.smooth-placeholder {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.smooth-placeholder span {
+  min-height: 40px;
+}
+
+.smooth-placeholder-list {
+  display: grid;
+  gap: 10px;
+}
+
+.smooth-placeholder-list span {
+  min-height: 72px;
+}
+
+@keyframes smooth-shell-pulse {
+  from { opacity: .58; }
+  to { opacity: 1; }
+}

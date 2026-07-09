@@ -1,0 +1,27 @@
+{
+  "name": "BRX P2P Exchange",
+  "short_name": "BRX",
+  "description": "Trade USDT/ETB with BRX P2P escrow from your home screen.",
+  "id": "/?source=pwa",
+  "start_url": "/#/dashboard?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#00050d",
+  "theme_color": "#00050d",
+  "categories": ["finance", "business"],
+  "icons": [
+    {
+      "src": "/assets/brx-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/brx-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

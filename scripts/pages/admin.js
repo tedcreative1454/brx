@@ -80,8 +80,8 @@
 
         <div class="admin-console-bottom-grid">
           <section id="adminLimits" class="admin-console-section admin-limits-card">
-            <div class="admin-console-section-head"><div><p class="app-label blue">Risk controls</p><h2>Tier limits</h2><small>Enforced by PostgreSQL risk checks.</small></div>${icon("lock")}</div>
-            <div id="limitEditor">${loadingBlock("Loading tier limits")}</div>
+            <div class="admin-console-section-head"><div><p class="app-label blue">Risk controls</p><h2>Level limits</h2><small>Enforced by PostgreSQL risk checks.</small></div>${icon("lock")}</div>
+            <div id="limitEditor">${loadingBlock("Loading level limits")}</div>
           </section>
 
           <section id="adminSettings" class="admin-console-section admin-settings-card">
@@ -166,7 +166,7 @@
     if (!result.users.ok) document.querySelector("#adminUsersBody").innerHTML = errorBlock(adminError(result.users.error, "Could not load users."));
     if (!result.kyc.ok) document.querySelector("#kycQueue").innerHTML = errorBlock(adminError(result.kyc.error, "Could not load KYC submissions."));
     if (!result.disputes.ok) document.querySelector("#disputeQueue").innerHTML = errorBlock(adminError(result.disputes.error, "Could not load disputes."));
-    if (!result.limits.ok) document.querySelector("#limitEditor").innerHTML = errorBlock(adminError(result.limits.error, "Could not load tier limits."));
+    if (!result.limits.ok) document.querySelector("#limitEditor").innerHTML = errorBlock(adminError(result.limits.error, "Could not load level limits."));
     if (![result.users, result.deposits, result.withdrawals, result.trades, result.auditLogs].every((item) => item.ok)) {
       const failed = [result.users, result.deposits, result.withdrawals, result.trades, result.auditLogs].find((item) => !item.ok);
       document.querySelector("#adminOpsBody").innerHTML = errorBlock(adminError(failed?.error, "Could not load operations."));
@@ -547,7 +547,7 @@
         withdrawalLimitUsd: document.querySelector(`#withdrawal-${limit.tier}`).value,
       }));
       await Promise.all(updates);
-      showToast("Tier limits saved.");
+      showToast("Level limits saved.");
       const limits = await adminService.limits();
       adminState.limits = limits.limits || [];
       renderLimitEditor();

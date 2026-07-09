@@ -15,6 +15,8 @@ import { LedgerService } from "../ledger/ledger.service";
 import { WalletsService } from "../wallets/wallets.service";
 import { env } from "../config/env";
 
+const SESSION_LIFETIME_MS = 1000 * 60 * 60 * 24 * 30;
+
 interface UserRow {
   id: string;
   email: string;
@@ -559,7 +561,7 @@ export class AuthService {
 
   private async createSessionToken(userId: string, email: string, userAgent?: string) {
     const sessionId = randomUUID();
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + SESSION_LIFETIME_MS);
     await this.db.query(
       `INSERT INTO user_sessions (id, user_id, user_agent, expires_at)
        VALUES ($1, $2, $3, $4)`,

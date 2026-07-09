@@ -3,7 +3,7 @@
 
   const isLocalHost = ["localhost", "127.0.0.1"].includes(window.location.hostname);
   const sameOriginApi = window.location.protocol.startsWith("http") ? [`${window.location.origin}/api`] : [];
-  const localDirectApi = isLocalHost ? [`${window.location.protocol}//${window.location.hostname}:3000/api`] : [];
+  const localDirectApi = isLocalHost ? [`${window.location.protocol}//localhost:3000/api`, `${window.location.protocol}//127.0.0.1:3000/api`] : [];
   const localTurnstileSiteKey = "1x00000000000000000000AA";
   const productionTurnstileSiteKey = "0x4AAAAAADxQ6xyoUkEdZUyL";
 
@@ -14,7 +14,7 @@
     SESSION_KEY: "brx_session_v1",
     PENDING_KEY: "brx_pending_email_v1",
     THEME_KEY: "brx_theme_v1",
-    API_BASES: [...sameOriginApi, ...localDirectApi],
+    API_BASES: [...new Set(isLocalHost ? [...localDirectApi, ...sameOriginApi] : [...sameOriginApi])],
     // Use Cloudflare test keys locally; use the real widget on brxp2p.com.
     TURNSTILE_SITE_KEY: isLocalHost ? localTurnstileSiteKey : productionTurnstileSiteKey,
     APP_ROUTES: ["dashboard", "market", "p2p-chat", "ads", "trades", "wallet", "kyc", "profile", "settings", "notifications", "referrals", "admin"],

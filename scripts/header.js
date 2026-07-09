@@ -261,7 +261,7 @@
       <a href="#/admin" data-admin-scroll="adminKyc">${icon("shield")}KYC queue</a>
       <a href="#/admin" data-admin-scroll="adminDisputes">${icon("trades")}Disputes</a>
       <a href="#/admin" data-admin-scroll="adminOps">${icon("activity")}Operations</a>
-      <a href="#/admin" data-admin-scroll="adminLimits">${icon("lock")}Tier limits</a>
+      <a href="#/admin" data-admin-scroll="adminLimits">${icon("lock")}Level limits</a>
       <a href="#/admin" data-admin-scroll="adminSettings">${icon("settings")}Admin settings</a>
     `;
   }

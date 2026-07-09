@@ -18,6 +18,7 @@
   const selectedWalletNetwork = { deposit: "", withdraw: "" };
   let showOfferForm = false;
   let showPaymentMethodForm = false;
+  let showTraderNameEditor = false;
   let offerRequirementsLoading = false;
   let adStatusFilter = "all";
   let lastMyOffers = [];
@@ -83,11 +84,23 @@
     }
     refs.app.innerHTML = `
       <section class="exchange-app app-page-narrow professional-trades-page ${tradeId ? "trade-detail-page" : "trade-list-page"}">
-        <div id="tradesContent"><section class="professional-loading-card"><span></span><div><strong>Loading ${tradeId ? "trade room" : "your trades"}</strong><small>Syncing with BRX escrow...</small></div></section></div>
+        <div id="tradesContent">${tradeId ? `<section class="professional-loading-card"><span></span><div><strong>Loading trade room</strong><small>Syncing with BRX escrow...</small></div></section>` : tradeListShell()}</div>
       </section>
     `;
     if (tradeId) void loadTradeDetail(tradeId);
     else void loadMyTrades();
+  }
+  function tradeListShell() {
+    return `
+      <section class="trade-list-smooth-shell" aria-busy="true">
+        <nav class="trade-list-filters smooth-placeholder" aria-hidden="true">
+          <span></span><span></span><span></span><span></span>
+        </nav>
+        <div class="professional-trade-list smooth-placeholder-list" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+      </section>
+    `;
   }
   function offerForm(user) {
     const methods = user.paymentMethods || [];
@@ -562,7 +575,7 @@
       <article class="professional-trade-row ${tone}">
         <button class="trade-row-main" type="button" data-trade-open="${escapeAttr(trade.id)}">
           <span class="trade-direction ${isBuyer ? "buy" : "sell"}">${icon(isBuyer ? "buyArrow" : "sellArrow")}</span>
-          <span class="trade-counterparty"><small>${roleText} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· #${shortTradeId(trade.id)}</small><strong>${counterparty}</strong><em>${dateTime(trade.createdAt)}</em></span>
+          <span class="trade-counterparty"><small>${roleText} - #${shortTradeId(trade.id)}</small><strong>${counterparty}</strong><em>${dateTime(trade.createdAt)}</em></span>
           <span class="trade-row-amount"><strong>${format(Number(trade.assetAmount))} USDT</strong><small>${format(Number(trade.fiatAmount))} ETB</small></span>
           <span class="trade-row-state"><b class="${tone}">${escapeHtml(nextStep)}</b><small>${format(Number(trade.offerPrice || Number(trade.fiatAmount) / Number(trade.assetAmount)))} ETB/USDT</small></span>
           <span class="trade-row-open">${icon("external")}</span>
@@ -588,7 +601,7 @@
             <div>
               <p class="app-label blue">${trade.role === "buyer" ? "Buy USDT" : "Sell USDT"}</p>
               <h3>${format(Number(trade.assetAmount))} USDT</h3>
-              <p class="app-muted">${format(Number(trade.fiatAmount))} ETB ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ${format(Number(trade.offerPrice || Number(trade.fiatAmount) / Number(trade.assetAmount)))} ETB/USDT</p>
+              <p class="app-muted">${format(Number(trade.fiatAmount))} ETB - ${format(Number(trade.offerPrice || Number(trade.fiatAmount) / Number(trade.assetAmount)))} ETB/USDT</p>
             </div>
             <span class="status-pill ${trade.status === "disputed" ? "warning" : ""}">${statusLabel(trade.status)}</span>
           </div>
@@ -1178,7 +1191,7 @@
     return `
       <div class="trade-chat-message ${message.isMine ? "mine" : "theirs"}">
         <div class="trade-chat-bubble"><p>${body}</p></div>
-        <small>${chatTime(message.createdAt)}${message.isMine && message.isRead ? " ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· Read" : ""}</small>
+        <small>${chatTime(message.createdAt)}${message.isMine && message.isRead ? " - Read" : ""}</small>
       </div>
     `;
   }
@@ -1628,6 +1641,19 @@
     const selectedNetwork = selectedWalletNetwork.deposit;
     const selected = NETWORKS.find((network) => network.id === selectedNetwork);
     const addressLabel = depositAddress || "Address assigned by wallet service";
+    const depositAddressMarkup = selectedNetwork === "BEP20" ? `
+      <section class="deposit-address-card deposit-address-detail ${depositAddress ? "" : "pending"}">
+        <div class="deposit-qr-card" aria-label="BEP20 deposit address QR code">
+          ${depositAddress ? qrCodeSvg(depositAddress) : `<span class="qr-placeholder">QR</span>`}
+        </div>
+        <div class="deposit-address-main">
+          <span>BNB Smart Chain deposit address</span>
+          <strong>${escapeHtml(addressLabel)}</strong>
+          <small>Network: USDT BEP20. Do not send TRC20, ERC20, or any other network to this address.</small>
+        </div>
+        <button class="app-button small" id="copyDepositAddress" type="button" ${depositAddress ? "" : "disabled"}>${depositAddress ? "Copy" : "Pending"}</button>
+      </section>
+    ` : "";
     return `
       <section class="wallet-panel deposit-network-sheet">
           <div class="sheet-head">
@@ -1638,27 +1664,12 @@
             <span class="sheet-badge">USDT</span>
           </div>
 
-          ${networkSelector("deposit", selectedNetwork)}
+          ${networkSelector("deposit", selectedNetwork, "BEP20", depositAddressMarkup)}
           ${selected && selected.status !== "available" ? `<p class="deposit-note">${escapeHtml(selected.name)} deposits are not enabled yet. Choose BNB Smart Chain for live deposits.</p>` : ""}
-          ${selectedNetwork === "BEP20" ? `
-            <section class="deposit-address-card deposit-address-detail ${depositAddress ? "" : "pending"}">
-              <div class="deposit-qr-card" aria-label="BEP20 deposit address QR code">
-                ${depositAddress ? qrCodeSvg(depositAddress) : `<span class="qr-placeholder">QR</span>`}
-              </div>
-              <div class="deposit-address-main">
-                <span>BNB Smart Chain deposit address</span>
-                <strong>${escapeHtml(addressLabel)}</strong>
-                <small>Network: USDT BEP20. Do not send TRC20, ERC20, or any other network to this address.</small>
-              </div>
-              <button class="app-button small" id="copyDepositAddress" type="button" ${depositAddress ? "" : "disabled"}>${depositAddress ? "Copy" : "Pending"}</button>
-            </section>
-
-            <p class="deposit-note">Send USDT on BNB Smart Chain BEP20 to your assigned address. Deposits are credited to your internal BRX balance after confirmations.</p>
-          ` : ""}
+          ${selectedNetwork === "BEP20" ? `<p class="deposit-note">Send USDT on BNB Smart Chain BEP20 to your assigned address. Deposits are credited to your internal BRX balance after confirmations.</p>` : ""}
       </section>
     `;
   }
-
   function withdrawPanel(user) {
     const selectedNetwork = selectedWalletNetwork.withdraw;
     const selected = NETWORKS.find((network) => network.id === selectedNetwork);
@@ -1719,7 +1730,7 @@
     `;
   }
 
-  function networkSelector(mode, selectedNetwork) {
+  function networkSelector(mode, selectedNetwork, insertAfterNetworkId = "", insertMarkup = "") {
     return `
       <div class="network-choice-list wallet-network-grid">
         ${NETWORKS.map((network) => `
@@ -1735,11 +1746,11 @@
             </div>
             <span class="network-status ${network.status === "available" ? "live" : "soon"}">${selectedNetwork === network.id ? "Selected" : network.status === "available" ? "Choose BNB" : "Coming soon"}</span>
           </button>
+          ${insertMarkup && insertAfterNetworkId === network.id ? `<div class="wallet-network-inset">${insertMarkup}</div>` : ""}
         `).join("")}
       </div>
     `;
   }
-
   function qrCodeSvg(value) {
     if (!value || typeof qrcode !== "function") return `<span class="qr-placeholder">QR</span>`;
     try {
@@ -1908,6 +1919,7 @@
   function renderProfile() {
     const user = requireUser();
     if (!user) return;
+    const traderName = traderDisplayName(user);
     refs.app.innerHTML = `
       <section class="exchange-app app-page-wide profile-page professional-profile-page">
         <section class="profile-summary-card settings-identity profile-view-identity">
@@ -1915,20 +1927,20 @@
             ${profileAvatarMarkup(user, "settings-avatar", user.email)}
           </div>
           <div class="profile-summary-main">
-            <p class="app-label blue">Profile</p>
-            <h1>${escapeHtml(accountDisplayName(user))}</h1>
+            <p class="app-label blue">Trader profile</p>
+            <div class="trader-name-line"><h1>${escapeHtml(traderName)}</h1><a class="trader-name-edit" href="#/settings?tab=profile&edit=trader-name" aria-label="Edit trader name">${icon("edit")}</a></div>
             <div class="profile-summary-meta">
               <span>${escapeHtml(user.email)}</span>
               <span>${brxId(user)}</span>
               <span>${kycLabel(user.kycStatus)}</span>
             </div>
           </div>
-          <a class="app-button" href="#/settings?tab=profile">Edit profile ${icon("external")}</a>
+          <a class="app-button" href="#/settings?tab=profile&edit=trader-name">Edit profile ${icon("external")}</a>
         </section>
 
         <section class="settings-card settings-card-flat profile-view-card">
           ${settingsRow("mail", "Email", escapeHtml(user.email), user.emailVerified ? statusBadge("Verified", "success") : statusBadge("Not verified", "warning"))}
-          ${settingsRow("user", "Trader username", escapeHtml(user.username || displayName(user)), "")}
+          ${settingsRow("user", "Trader name", escapeHtml(traderName), `<a class="settings-action" href="#/settings?tab=profile&edit=trader-name">Edit</a>`)}
           ${settingsRow("phone", "Phone number", escapeHtml(user.phone || "Not added"), "")}
           ${settingsRow("shield", "KYC status", kycLabel(user.kycStatus), statusBadge(kycTier(user), "neutral"))}
           ${settingsRow("calendar", "Member since", memberSince(user), "")}
@@ -1940,13 +1952,15 @@
     const user = requireUser();
     if (!user) return;
     const activeTab = validSettingsTab(window.BRX.router.routeParams().get("tab"));
+    if (activeTab !== "profile") showTraderNameEditor = false;
+    if (activeTab === "profile" && window.BRX.router.routeParams().get("edit") === "trader-name") showTraderNameEditor = true;
     const tabTitle = activeTab.charAt(0).toUpperCase() + activeTab.slice(1);
     refs.app.innerHTML = `
       <section class="exchange-app app-page-wide settings-page professional-settings-page">
         <header class="professional-settings-head">
           <div class="professional-settings-person">
             ${profileAvatarMarkup(user, "settings-head-avatar", user.email)}
-            <div><p class="app-label blue">Account center</p><h1>Settings</h1><small>${escapeHtml(accountDisplayName(user))} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ${escapeHtml(user.email)}</small></div>
+            <div><p class="app-label blue">Account center</p><h1>Settings</h1><small>${escapeHtml(user.email)}</small></div>
           </div>
           <div class="professional-settings-state">${icon("shield")}<span><strong>${kycTier(user)}</strong><small>${kycLabel(user.kycStatus)}</small></span></div>
         </header>
@@ -1979,7 +1993,7 @@
   }
 
   function validSettingsTab(tab) {
-    return ["profile", "security", "payments", "addresses", "account", "notifications", "trades"].includes(tab) ? tab : "profile";
+    return ["profile", "security", "payments", "addresses", "account", "notifications"].includes(tab) ? tab : "profile";
   }
 
   function settingsTabs(activeTab) {
@@ -1990,7 +2004,6 @@
       ["addresses", "mapPin", "Addresses", "Withdrawal destinations"],
       ["account", "settings", "Account", "Status and access"],
       ["notifications", "bell", "Notifications", "Alert preferences"],
-      ["trades", "trades", "Trading", "P2P preferences"],
     ];
 
     return `
@@ -2011,7 +2024,6 @@
     if (tab === "addresses") return settingsAddresses(user);
     if (tab === "account") return settingsAccount(user);
     if (tab === "notifications") return settingsNotifications(user);
-    if (tab === "trades") return settingsTrades(user);
     return settingsProfile(user);
   }
 
@@ -2023,7 +2035,15 @@
         </div>
         <div class="settings-id-main settings-profile-main">
           <p class="app-label blue">Profile</p>
-          <h3>${escapeHtml(accountDisplayName(user))}</h3>
+          <div class="trader-name-line settings-trader-name"><h3>${escapeHtml(traderDisplayName(user))}</h3><button class="trader-name-edit" type="button" data-edit-trader-name aria-label="Edit trader name">${icon("edit")}</button></div>
+          ${showTraderNameEditor ? `
+            <form id="settingsProfileForm" class="settings-trader-editor">
+              <input id="settingsFullName" type="hidden" value="${escapeAttr(user.fullName || "")}" />
+              <input id="settingsPhone" type="hidden" value="${escapeAttr(user.phone || "")}" />
+              <label class="trader-name-field"><span>Trader name</span><input id="settingsUsername" value="${escapeAttr(traderDisplayName(user))}" autocomplete="nickname" placeholder="habeshatic1454" required /></label>
+              <button class="settings-action trader-name-save" type="submit">Save</button>
+            </form>
+          ` : ""}
           <small>${escapeHtml(user.email)}</small>
           <span class="settings-muted">${brxId(user)} <button class="inline-icon-button settings-copy-id" type="button" title="Copy BRX ID">${icon("copy")}</button></span>
           <input id="settingsAvatarUrl" type="hidden" value="${escapeAttr(user.avatarUrl || "")}" />
@@ -2037,11 +2057,12 @@
 
       <section class="settings-card settings-card-flat settings-profile-facts">
         ${settingsRow("mail", "Email", escapeHtml(user.email), user.emailVerified ? statusBadge("Verified", "success") : statusBadge("Not verified", "warning"))}
-        ${settingsRow("user", "Trader username", escapeHtml(user.username || displayName(user)), "")}
+        ${settingsRow("user", "Trader name", escapeHtml(traderDisplayName(user)), `<button class="settings-action" type="button" data-edit-trader-name>Edit</button>`)}
         ${settingsRow("phone", "Phone number", escapeHtml(user.phone || "Not added"), "")}
         ${settingsRow("shield", "KYC Status", kycLabel(user.kycStatus), statusBadge(kycTier(user), "neutral"))}
         ${settingsRow("calendar", "Member Since", memberSince(user), "")}
       </section>
+
     `;
   }
   function settingsSecurity(user) {
@@ -2172,7 +2193,6 @@
         ${settingsRow("card", "Payment methods", `${methodCount} saved`, `<a class="settings-action" href="#/settings?tab=payments">Manage</a>`)}
         ${settingsRow("mapPin", "Withdrawal addresses", `${(user.withdrawalAddresses || []).length} saved`, `<a class="settings-action" href="#/settings?tab=addresses">Manage</a>`)}
         ${settingsRow("info", "Current trade limit", user.kycStatus === "approved" ? "5,000 USDT" : "1,000 USDT", "")}
-        ${settingsRow("trades", "Escrow network", "BRX internal ledger ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· BEP20 wallet settlement", "")}
       </section>
 
       <section class="settings-card settings-card-flat account-session-card">
@@ -2303,6 +2323,16 @@
       input.addEventListener("change", handleNotificationChange);
     });
 
+    document.querySelectorAll("[data-edit-trader-name]").forEach((button) => {
+      button.addEventListener("click", () => {
+        showTraderNameEditor = true;
+        renderSettings();
+        setTimeout(focusTraderNameField, 0);
+      });
+    });
+
+    if (showTraderNameEditor) setTimeout(focusTraderNameField, 0);
+
     document.querySelector(".settings-copy-id")?.addEventListener("click", async () => {
       const user = currentUser();
       if (!user) return;
@@ -2311,6 +2341,13 @@
     });
   }
 
+  function focusTraderNameField() {
+    const field = document.querySelector("#settingsUsername");
+    if (!field) return;
+    field.scrollIntoView({ behavior: "smooth", block: "center" });
+    field.focus({ preventScroll: true });
+    field.select?.();
+  }
   async function handleSettingsProfileSubmit(event) {
     event.preventDefault();
     try {
@@ -2320,8 +2357,10 @@
         username: document.querySelector("#settingsUsername").value,
         avatarUrl: document.querySelector("#settingsAvatarUrl")?.value || "",
       });
+      showTraderNameEditor = false;
       showToast("Profile saved.");
-      renderSettings();
+      if (window.BRX.router.routeParams().get("edit") === "trader-name") location.hash = "#/settings?tab=profile";
+      else renderSettings();
     } catch (error) {
       showToast(error.message || "Could not save profile.");
     }
@@ -2532,7 +2571,7 @@
     return `
       <div class="settings-row session-row">
         <span class="settings-row-icon">${icon("activity")}</span>
-        <span class="settings-row-main"><strong>${escapeHtml(title)}</strong><small>Last seen ${dateTime(session.lastSeenAt)} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· Created ${dateTime(session.createdAt)}</small></span>
+        <span class="settings-row-main"><strong>${escapeHtml(title)}</strong><small>Last seen ${dateTime(session.lastSeenAt)} - Created ${dateTime(session.createdAt)}</small></span>
         <span class="settings-row-aside session-actions">
           ${statusBadge(state, session.active ? "success" : "neutral")}
           ${!session.current && session.active ? `<button class="settings-action danger" type="button" data-session-revoke="${escapeAttr(session.id)}">Revoke</button>` : ""}
@@ -2545,7 +2584,7 @@
     return `
       <div class="settings-row withdrawal-address-row">
         <span class="settings-row-icon">${icon("wallet")}</span>
-        <span class="settings-row-main"><strong>${escapeHtml(address.label)}</strong><small>${escapeHtml(address.network)} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ${escapeHtml(shortAddress(address.address))}</small></span>
+        <span class="settings-row-main"><strong>${escapeHtml(address.label)}</strong><small>${escapeHtml(address.network)} - ${escapeHtml(shortAddress(address.address))}</small></span>
         <span class="settings-row-aside payment-actions">
           ${address.isDefault ? statusBadge("Default", "success") : `<button class="settings-action" type="button" data-withdrawal-default="${escapeAttr(address.id)}">Make default</button>`}
           <button class="settings-action danger" type="button" data-withdrawal-delete="${escapeAttr(address.id)}">Remove</button>
@@ -2711,6 +2750,10 @@
     return user.fullName || user.username || displayName(user);
   }
 
+  function traderDisplayName(user) {
+    return user.username || displayName(user);
+  }
+
 
   function profileAvatarMarkup(user, className, fallbackValue) {
     const initial = displayInitial(fallbackValue || accountDisplayName(user) || user?.email);
@@ -2722,7 +2765,10 @@
     return `<span class="${className}" ${baseAttrs}>${escapeHtml(initial)}</span>`;
   }
   function brxId(user) {
-    return `BRX-${String(user.backendUserId || user.id || "000000").replace(/-/g, "").slice(0, 6).toUpperCase().padEnd(6, "0")}`;
+    const raw = String(user.backendUserId || user.id || user.email || "000000");
+    let hash = 0;
+    for (let index = 0; index < raw.length; index += 1) hash = ((hash * 31) + raw.charCodeAt(index)) >>> 0;
+    return `Trader #${String(hash % 1000000).padStart(6, "0")}`;
   }
 
   function kycLabel(status) {
@@ -2733,7 +2779,7 @@
   }
 
   function kycTier(user) {
-    return user.kycStatus === "approved" ? "Tier 1" : "Tier 0";
+    return user.kycStatus === "approved" ? "Level 1" : "Level 0";
   }
 
   function memberSince(user) {

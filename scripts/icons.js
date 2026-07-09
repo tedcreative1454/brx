@@ -12,6 +12,7 @@
     p2p: '<img class="p2p-nav-icon" src="./assets/noun-p2p-8026013-clean.svg?v=20260705-p2p5" alt="" onerror="this.style.display=&quot;none&quot;" />',
     ads: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 18-6-6 18-4-8-8-4Z"/></svg>',
     trades: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h14l-4-4M21 7l-4 4M17 17H3l4-4M3 17l4 4"/></svg>',
+    back: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>',
     wallet: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18v14H3z"/><path d="M16 12h5v4h-5a2 2 0 0 1 0-4ZM3 7l3-4h12l3 4"/></svg>',
     copy: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8h12v12H8z"/><path d="M4 16V4h12"/></svg>',
     download: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>',
@@ -42,6 +43,8 @@
     camera: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h4l2-3h4l2 3h4v13H4z"/><circle cx="12" cy="13" r="4"/></svg>',
     lock: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>',
     logOut: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg>',
+    eye: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>',
+    eyeOff: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 4.3A10.5 10.5 0 0 1 12 4c6.5 0 10 8 10 8a18 18 0 0 1-4.1 5.1"/><path d="M6.1 6.6C3.5 8.4 2 12 2 12s3.5 8 10 8a10.7 10.7 0 0 0 5-1.2"/></svg>',
   };
 
   function icon(name) {

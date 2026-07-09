@@ -2,7 +2,6 @@
   window.BRX = window.BRX || {};
   window.BRX.pages = window.BRX.pages || {};
 
-  const { RATE } = window.BRX.config;
   const { requireUser } = window.BRX.state;
   const { refs, showError, showToast } = window.BRX.ui;
   const { format } = window.BRX.utils;
@@ -41,10 +40,7 @@
             <button class="${marketMode === "buy" ? "active" : ""}" type="button" data-market-mode="buy"><span>Buy</span><small>Buy USDT with ETB</small></button>
             <button class="${marketMode === "sell" ? "active" : ""}" type="button" data-market-mode="sell"><span>Sell</span><small>Sell USDT for ETB</small></button>
           </div>
-          <div class="market-mobile-index p2p-rate-pill" aria-label="ETB per USDT market index">
-            <div><strong>${format(RATE)}</strong><button type="button" id="mobileRefreshMarket" aria-label="Refresh market">&#8635;</button></div>
-            <span>ETB / USDT reference</span>
-          </div>
+
         </div>
 
         <div id="marketContent">
@@ -533,7 +529,7 @@
     const selectedId = window.BRX.router.routeParams().get("id") || "";
     refs.app.innerHTML = `
       <section class="exchange-app app-page-wide p2p-chat-page">
-        <div class="p2p-chat-shell">
+        <div class="p2p-chat-shell ${selectedId ? "has-selected" : ""}">
           <aside class="p2p-chat-sidebar">
             ${p2pChatProfile(user)}
           </aside>
@@ -555,8 +551,10 @@
       renderP2pChatContacts(trades, selectedId);
       const selected = trades.find((trade) => trade.id === selectedId);
       if (selected) await renderP2pChatRoom(selected);
+      else document.querySelector(".p2p-chat-shell")?.classList.remove("has-selected");
       bindP2pChatSearch(trades, selectedId);
     } catch (error) {
+      document.querySelector(".p2p-chat-shell")?.classList.remove("has-selected");
       document.querySelector("#p2pChatContacts").innerHTML = `<div class="p2p-chat-loading error">${escapeHtml(error.message || "Could not load chats.")}</div>`;
     }
   }
@@ -570,7 +568,7 @@
       const name = p2pCounterparty(trade);
       const active = trade.id === selectedId;
       const presence = presenceMeta(trade.counterpartyLastSeenAt);
-      return `<a class="p2p-chat-contact ${active ? "active" : ""}" href="#/p2p-chat?id=${encodeURIComponent(trade.id)}"><span class="presence-avatar ${presence.tone}">${displayInitial(name)}<i></i></span><div><strong>${escapeHtml(name)}</strong><small><span class="presence-inline ${presence.tone}"><i></i>${presence.label}</span> · ${escapeHtml(chatPreview(trade))}</small></div><em>${chatDate(trade.updatedAt || trade.createdAt)}</em></a>`;
+      return `<a class="p2p-chat-contact ${active ? "active" : ""}" href="#/p2p-chat?id=${encodeURIComponent(trade.id)}"><span class="presence-avatar ${presence.tone}">${displayInitial(name)}<i></i></span><div><strong>${escapeHtml(name)}</strong><small><span class="presence-inline ${presence.tone}"><i></i>${presence.label}</span> &middot; ${escapeHtml(chatPreview(trade))}</small></div><em>${chatDate(trade.updatedAt || trade.createdAt)}</em></a>`;
     }).join("") : `<div class="p2p-chat-loading">No chats yet.</div>`;
   }
 
@@ -589,7 +587,7 @@
     }
     const presence = presenceMeta(trade.counterpartyLastSeenAt);
     room.innerHTML = `
-      <header class="p2p-chat-room-head"><div><span class="presence-avatar ${presence.tone}">${displayInitial(p2pCounterparty(trade))}<i></i></span><div><strong>${escapeHtml(p2pCounterparty(trade))}</strong><small>#${shortId(trade.id)} · ${escapeHtml(statusText(trade.status))} · ${presence.label}</small></div></div><a href="#/trades?id=${encodeURIComponent(trade.id)}">Open order</a></header>
+      <header class="p2p-chat-room-head"><div><a class="p2p-chat-back" href="#/p2p-chat" aria-label="Back to chats">${icon("back")}</a><span class="presence-avatar ${presence.tone}">${displayInitial(p2pCounterparty(trade))}<i></i></span><div><strong>${escapeHtml(p2pCounterparty(trade))}</strong><small>#${shortId(trade.id)} &middot; ${escapeHtml(statusText(trade.status))} &middot; ${presence.label}</small></div></div><a href="#/trades?id=${encodeURIComponent(trade.id)}">Open order</a></header>
       <div class="p2p-chat-room-messages" id="p2pChatRoomMessages">${messages.length ? messages.map(p2pChatMessage).join("") : `<div class="p2p-chat-welcome compact">${icon("mail")}<strong>No messages yet</strong><span>Use this chat to coordinate payment safely.</span></div>`}</div>
       ${canSend ? `<form class="p2p-chat-compose" id="p2pChatCompose"><textarea id="p2pChatInput" rows="2" maxlength="1000" placeholder="Message ${escapeHtml(p2pCounterparty(trade))}..." required></textarea><button class="app-button" type="submit">Send</button><div id="p2pChatError"></div></form>` : `<p class="p2p-chat-closed">This order is closed. Chat history remains available.</p>`}
     `;
@@ -624,7 +622,7 @@
 
   function p2pChatMessage(message) {
     const body = escapeHtml(message.body).replace(/\n/g, "<br>");
-    return `<div class="p2p-chat-message ${message.isMine ? "mine" : "theirs"}"><p>${body}</p><small>${chatDate(message.createdAt, true)}${message.isMine && message.isRead ? " · Read" : ""}</small></div>`;
+    return `<div class="p2p-chat-message ${message.isMine ? "mine" : "theirs"}"><p>${body}</p><small>${chatDate(message.createdAt, true)}${message.isMine && message.isRead ? " &middot; Read" : ""}</small></div>`;
   }
 
 
@@ -641,7 +639,7 @@
   }
 
   function chatPreview(trade) {
-    if (trade.paymentMethod) return `${trade.paymentMethod} · ${statusText(trade.status)}`;
+    if (trade.paymentMethod) return `${trade.paymentMethod} &middot; ${statusText(trade.status)}`;
     return statusText(trade.status);
   }
 
@@ -710,14 +708,3 @@
   window.BRX.pages.renderMarket = renderMarket;
   window.BRX.pages.renderP2pChat = renderP2pChat;
 })();
-
-
-
-
-
-
-
-
-
-
-

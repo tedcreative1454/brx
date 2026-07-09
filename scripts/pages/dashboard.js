@@ -7,6 +7,7 @@
   const { refs } = window.BRX.ui;
   const { displayName, format, greeting } = window.BRX.utils;
   const { icon } = window.BRX.icons;
+  const BALANCE_VISIBILITY_KEY = "brx.balanceHidden";
 
   function renderDashboard() {
     const user = requireUser();
@@ -54,6 +55,7 @@
         </div>
       </section>
     `;
+    bindDashboardEvents();
   }
 
   function walletSummaryCard() {
@@ -64,21 +66,24 @@
     const pendingWithdrawal = Number(balance.pendingWithdrawal) || 0;
     const pending = pendingDeposit + pendingWithdrawal;
     const total = available + locked + pending;
+    const hidden = isBalanceHidden();
 
     return `
-      <section class="dashboard-balance-card">
+      <section class="dashboard-balance-card ${hidden ? "is-hidden" : ""}">
         <div class="dashboard-card-head">
           <div><span class="dashboard-card-icon">${icon("wallet")}</span><div><h2>Total balance</h2></div></div>
+          <button class="dashboard-balance-toggle" id="dashboardBalanceToggle" type="button" aria-pressed="${hidden}" aria-label="${hidden ? "Show balance" : "Hide balance"}" title="${hidden ? "Show balance" : "Hide balance"}">${icon(hidden ? "eye" : "eyeOff")}</button>
         </div>
 
         <div class="dashboard-balance-value">
-          <strong>${format(total)}</strong><span>USDT</span>
-          <small>&asymp; ${format(total * RATE)} ETB at the reference rate</small>
+          <strong>${hidden ? hiddenAmount() : format(total)}</strong><span>USDT</span>
+          <small>${hidden ? "Balance hidden" : `&asymp; ${format(total * RATE)} ETB at the reference rate`}</small>
         </div>
 
         <div class="dashboard-balance-breakdown">
-          ${balanceItem("Available", available, "available")}
-          ${pending > 0 ? balanceItem("Pending", pending, "pending") : ""}
+          ${balanceItem("Available", available, "available", hidden)}
+          ${balanceItem("In escrow", locked, "escrow", hidden)}
+          ${pending > 0 ? balanceItem("Pending", pending, "pending", hidden) : ""}
         </div>
 
         <div class="dashboard-wallet-actions">
@@ -96,7 +101,7 @@
       <section class="dashboard-market-card">
         <div class="dashboard-card-head">
           <div><span class="dashboard-card-icon market">${icon("activity")}</span><div><p class="dashboard-eyebrow">P2P market</p><h2>Reference rate</h2></div></div>
-          <span class="dashboard-live"><i></i>Online</span>
+          <span class="dashboard-live"><i></i>Live</span>
         </div>
 
         <div class="dashboard-rate-value"><strong>${format(RATE)}</strong><span>ETB / USDT</span></div>
@@ -116,10 +121,37 @@
     return `<a class="dashboard-wallet-action ${tone}" href="${href}"><span>${icon(iconName)}</span><strong>${label}</strong></a>`;
   }
 
-  function balanceItem(label, value, tone) {
-    return `<div class="${tone}"><span>${label}</span><strong>${format(value)} <small>USDT</small></strong></div>`;
+  function balanceItem(label, value, tone, hidden = false) {
+    return `<div class="${tone}"><span>${label}</span><strong>${hidden ? hiddenAmount() : format(value)} <small>USDT</small></strong></div>`;
   }
 
+
+  function bindDashboardEvents() {
+    document.querySelector("#dashboardBalanceToggle")?.addEventListener("click", () => {
+      setBalanceHidden(!isBalanceHidden());
+      renderDashboard();
+    });
+  }
+
+  function isBalanceHidden() {
+    try {
+      return localStorage.getItem(BALANCE_VISIBILITY_KEY) === "1";
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function setBalanceHidden(hidden) {
+    try {
+      localStorage.setItem(BALANCE_VISIBILITY_KEY, hidden ? "1" : "0");
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  function hiddenAmount() {
+    return "****";
+  }
   function kycBanner() {
     const meta = kycMeta(currentUser());
     return `

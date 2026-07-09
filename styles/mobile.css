@@ -2894,3 +2894,367 @@
     padding: 9px;
   }
 }
+
+.p2p-chat-back {
+  display: none;
+}
+
+/* P2P chat mobile: use a single-pane messenger flow. */
+@media (max-width: 760px) {
+  body[data-route="p2p-chat"] {
+    overflow: hidden !important;
+  }
+
+  body[data-route="p2p-chat"] #app {
+    height: calc(100dvh - var(--header-h)) !important;
+    min-height: 0 !important;
+    padding-bottom: calc(var(--mobile-nav-h) + 14px + env(safe-area-inset-bottom)) !important;
+    overflow: hidden !important;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-page {
+    height: 100% !important;
+    padding: 10px 10px 0 !important;
+    overflow: hidden !important;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-shell {
+    height: 100% !important;
+    min-height: 0 !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: minmax(0, 1fr) !important;
+    border-radius: 14px !important;
+    background: #111821 !important;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-sidebar {
+    display: none !important;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-list-panel,
+  body[data-route="p2p-chat"] .p2p-chat-room {
+    min-height: 0 !important;
+    min-width: 0 !important;
+    border: 0 !important;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-shell:not(.has-selected) .p2p-chat-room,
+  body[data-route="p2p-chat"] .p2p-chat-shell.has-selected .p2p-chat-list-panel {
+    display: none !important;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-list-panel {
+    display: grid !important;
+    grid-template-rows: auto auto auto minmax(0, 1fr) !important;
+    background: #121821 !important;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-list-panel header {
+    padding: 16px 14px 12px !important;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-list-panel h2 {
+    font-size: 20px !important;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-list-panel p {
+    font-size: 13px !important;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-search {
+    height: 44px !important;
+    margin: 0 14px 12px !important;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-tabs {
+    padding: 0 14px 8px !important;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-contacts {
+    max-height: none !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-contact {
+    grid-template-columns: 44px minmax(0, 1fr) auto !important;
+    gap: 10px !important;
+    padding: 13px 14px !important;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-contact > span,
+  body[data-route="p2p-chat"] .p2p-chat-room-head > div > span {
+    width: 44px !important;
+    height: 44px !important;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-contact em {
+    align-self: start;
+    padding-top: 3px;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-room {
+    display: grid !important;
+    grid-template-rows: auto minmax(0, 1fr) auto !important;
+    background: #15191f !important;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-room-head {
+    padding: 10px 12px !important;
+    gap: 8px !important;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-room-head > div {
+    gap: 9px !important;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-room-head strong,
+  body[data-route="p2p-chat"] .p2p-chat-room-head small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-room-head a:not(.p2p-chat-back) {
+    flex: 0 0 auto;
+    min-height: 34px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 10px;
+    border: 1px solid rgba(0, 184, 255, .26);
+    border-radius: 8px;
+    background: rgba(0, 153, 255, .08);
+    font-size: 11px !important;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-back {
+    flex: 0 0 36px;
+    width: 36px;
+    height: 36px;
+    display: inline-grid;
+    place-items: center;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    color: var(--muted);
+    background: #101721;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-back svg {
+    width: 19px;
+    height: 19px;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-room-messages {
+    padding: 12px !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-message {
+    max-width: 88% !important;
+    margin-bottom: 10px !important;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-message p {
+    padding: 9px 11px !important;
+    border-radius: 12px 12px 12px 4px !important;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-message.mine p {
+    border-radius: 12px 12px 4px 12px !important;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-compose {
+    grid-template-columns: minmax(0, 1fr) 48px !important;
+    gap: 8px !important;
+    padding: 10px !important;
+    background: #121821;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-compose textarea {
+    min-height: 46px !important;
+    max-height: 96px !important;
+    resize: none !important;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-compose .app-button {
+    min-width: 48px !important;
+    width: 48px !important;
+    min-height: 46px !important;
+    padding: 0 !important;
+    font-size: 11px !important;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-welcome,
+  body[data-route="p2p-chat"] .p2p-chat-room-loading,
+  body[data-route="p2p-chat"] .p2p-chat-loading {
+    min-height: 0 !important;
+    padding: 22px 16px !important;
+  }
+
+  body[data-route="p2p-chat"] .p2p-chat-welcome.compact {
+    min-height: 100% !important;
+  }
+}
+
+/* Final requested mobile polish: stable nav, readable P2P status, tighter dashboard, wallet address order. */
+@media (max-width: 760px) {
+  body[data-route="dashboard"] #app {
+    padding-bottom: calc(var(--mobile-nav-h) + 8px + env(safe-area-inset-bottom)) !important;
+  }
+
+  body[data-route="dashboard"] .dashboard-page {
+    padding-bottom: calc(var(--mobile-nav-h) + 14px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .mobile-bottom-nav {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    overflow: hidden !important;
+  }
+
+  .mobile-bottom-nav a {
+    width: 100% !important;
+    height: 62px !important;
+    min-height: 62px !important;
+    max-height: 62px !important;
+    padding: 0 !important;
+    transform: none !important;
+  }
+
+  .mobile-bottom-nav a:active,
+  .mobile-bottom-nav a.active {
+    transform: none !important;
+  }
+
+  .mobile-bottom-nav a svg,
+  .mobile-bottom-nav .p2p-nav-icon {
+    width: 21px !important;
+    height: 21px !important;
+  }
+
+  .presence-avatar > i {
+    right: -1px !important;
+    bottom: -1px !important;
+    width: 12px !important;
+    height: 12px !important;
+    border-width: 2px !important;
+  }
+
+  body[data-route="market"] .brx-p2p-market .presence-avatar > i {
+    right: -1px !important;
+    bottom: -1px !important;
+    width: 12px !important;
+    height: 12px !important;
+  }
+
+  .presence-inline > i {
+    width: 8px !important;
+    height: 8px !important;
+    min-width: 8px !important;
+  }
+
+  .professional-wallet-page .wallet-network-inset {
+    grid-column: 1 / -1 !important;
+  }
+
+  .professional-wallet-page .wallet-network-inset .deposit-address-detail {
+    margin: 2px 0 4px !important;
+  }
+
+  .professional-wallet-page .deposit-address-detail {
+    grid-template-columns: 74px minmax(0, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  .professional-wallet-page .deposit-address-detail .app-button {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+  }
+
+  .dashboard-balance-toggle {
+    width: 34px !important;
+    height: 34px !important;
+    border-radius: 10px !important;
+  }
+
+  .dashboard-balance-toggle svg {
+    width: 17px !important;
+    height: 17px !important;
+  }
+}
+
+/* Final trader profile and trades transition mobile polish. */
+@media (max-width: 760px) {
+  .professional-profile-page .profile-summary-card,
+  .professional-settings-page .settings-profile-card {
+    align-items: start !important;
+  }
+
+  .trader-name-line {
+    width: 100% !important;
+    align-items: center !important;
+  }
+
+  .trader-name-line h1,
+  .trader-name-line h3 {
+    flex: 1 1 auto !important;
+    font-size: clamp(28px, 8vw, 38px) !important;
+  }
+
+  .trader-name-edit {
+    width: 42px !important;
+    height: 42px !important;
+    min-width: 42px !important;
+    border-radius: 12px !important;
+  }
+
+  .settings-trader-editor {
+    width: 100% !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 10px !important;
+    margin: 12px 0 10px !important;
+  }
+
+  .trader-name-field input {
+    min-height: 48px !important;
+    font-size: 16px !important;
+  }
+
+  .trader-name-save {
+    width: 100% !important;
+    min-height: 46px !important;
+  }
+
+  .profile-summary-meta {
+    gap: 7px !important;
+  }
+
+  .profile-summary-meta span {
+    min-height: 30px !important;
+    padding: 0 10px !important;
+    font-size: 11px !important;
+  }
+
+  .professional-trades-page.trade-list-page {
+    min-height: calc(100dvh - var(--header-h) - var(--mobile-nav-h) - 20px) !important;
+    padding-bottom: calc(var(--mobile-nav-h) + 18px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .trade-list-smooth-shell {
+    min-height: 360px !important;
+    padding-top: 8px !important;
+  }
+
+  .smooth-placeholder {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .smooth-placeholder span {
+    min-height: 38px !important;
+  }
+
+  .smooth-placeholder-list span {
+    min-height: 82px !important;
+  }
+}

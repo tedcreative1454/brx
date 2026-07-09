@@ -22,18 +22,24 @@
         });
 
         const payload = await response.json().catch(() => null);
+        const responseMessage = payload?.message;
+        const message = Array.isArray(responseMessage)
+          ? responseMessage.join(" ")
+          : typeof responseMessage === "object"
+            ? responseMessage.message
+            : responseMessage;
         const isSameOriginApi = base === `${window.location.origin}/api`;
-        if (!response.ok && response.status === 404 && isSameOriginApi && API_BASES.length > 1) {
+        const isLocalDirectApi = /^https?:\/\/(localhost|127\.0\.0\.1):3000\/api$/.test(base);
+
+        if (!response.ok && isSameOriginApi && API_BASES.length > 1 && [404, 405, 501].includes(response.status)) {
           lastError = new Error("Local /api proxy is not available.");
           continue;
         }
+        if (!response.ok && path === "/auth/me" && response.status === 401 && isLocalDirectApi && API_BASES.length > 1 && String(message || "").toLowerCase().includes("missing access token")) {
+          lastError = new Error(message || "Missing access token.");
+          continue;
+        }
         if (!response.ok) {
-          const responseMessage = payload?.message;
-          const message = Array.isArray(responseMessage)
-            ? responseMessage.join(" ")
-            : typeof responseMessage === "object"
-              ? responseMessage.message
-              : responseMessage;
           const fallbackMessage =
             response.status >= 500
               ? "BRX backend is running, but the database service is not responding. Start Docker Desktop, then run docker compose up -d from the BRX folder."
@@ -60,4 +66,3 @@
 
   window.BRX.api = { requestJson };
 })();
-
