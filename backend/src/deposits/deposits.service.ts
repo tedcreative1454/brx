@@ -7,6 +7,7 @@ import { BscService, UsdtTransferLog } from "../blockchain/bsc.service";
 import { env } from "../config/env";
 import { DatabaseService } from "../database/database.service";
 import { LedgerService } from "../ledger/ledger.service";
+import { NotificationsService } from "../notifications/notifications.service";
 
 interface WalletScanRow {
   user_id: string;
@@ -41,6 +42,7 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
     private readonly bsc: BscService,
     private readonly ledger: LedgerService,
     private readonly alerts: AlertsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   onModuleInit() {
@@ -244,6 +246,16 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
          WHERE id = $2`,
         [confirmations, row.id],
       );
+
+      await this.notifications.create(row.user_id, {
+        type: "deposit",
+        title: "USDT deposit credited",
+        message: `${row.amount} USDT was confirmed on BEP20 and added to your available balance.`,
+        entityType: "deposit",
+        entityId: row.id,
+        actionUrl: "#/wallet?mode=deposit",
+        idempotencyKey: `deposit:${row.tx_hash}:${row.log_index}:notification`,
+      }, client);
 
       return true;
     });
