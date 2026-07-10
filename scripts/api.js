@@ -42,7 +42,9 @@
         if (!response.ok) {
           const fallbackMessage =
             response.status >= 500
-              ? "BRX backend is running, but the database service is not responding. Start Docker Desktop, then run docker compose up -d from the BRX folder."
+              ? (location.hostname === "localhost" || location.hostname === "127.0.0.1"
+                ? "BRX backend is running, but the database service is not responding. Start Docker Desktop, then run docker compose up -d from the BRX folder."
+                : "BRX could not complete this request. Please try again or contact support if it continues.")
               : `BRX API request failed: ${response.status}`;
           const error = new Error(message === "Internal server error" ? fallbackMessage : message || fallbackMessage);
           error.code = typeof responseMessage === "object" ? responseMessage.code : payload?.code;

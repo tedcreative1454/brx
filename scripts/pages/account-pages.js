@@ -1735,21 +1735,22 @@
   async function loadWalletActivity() {
     if (!accountService || walletActivityState.loading) return;
     walletActivityState = { ...walletActivityState, loading: true, error: "" };
-    try {
-      const [depositResult, withdrawalResult] = await Promise.all([
-        accountService.listDeposits(),
-        accountService.listWithdrawals(),
-      ]);
-      walletActivityState = {
-        loaded: true,
-        loading: false,
-        deposits: depositResult.deposits || [],
-        withdrawals: withdrawalResult.withdrawals || [],
-        error: "",
-      };
-    } catch (error) {
-      walletActivityState = { ...walletActivityState, loaded: true, loading: false, error: error.message || "Could not load wallet activity." };
-    }
+    const [depositResult, withdrawalResult] = await Promise.allSettled([
+      accountService.listDeposits(),
+      accountService.listWithdrawals(),
+    ]);
+    const deposits = depositResult.status === "fulfilled" ? (depositResult.value.deposits || []) : walletActivityState.deposits;
+    const withdrawals = withdrawalResult.status === "fulfilled" ? (withdrawalResult.value.withdrawals || []) : walletActivityState.withdrawals;
+    const errors = [depositResult, withdrawalResult]
+      .filter((result) => result.status === "rejected")
+      .map((result) => result.reason?.message || "Wallet history request failed.");
+    walletActivityState = {
+      loaded: true,
+      loading: false,
+      deposits,
+      withdrawals,
+      error: errors.length ? errors.join(" ") : "",
+    };
     if (window.BRX.router.routeName() === "wallet") renderWallet();
   }
 
