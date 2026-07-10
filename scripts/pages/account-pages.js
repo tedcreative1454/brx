@@ -1701,8 +1701,7 @@
               <section class="deposit-address-card pending"><div><span>No saved withdrawal address</span><strong>Add a BEP20 address first</strong><small>Open Settings > Addresses and save a wallet you control.</small></div><a class="app-button small" href="#/settings?tab=addresses">Add address</a></section>
             `}
             <label class="form-field"><span>Amount</span><input id="withdrawAmount" inputmode="decimal" placeholder="0.00" required /></label>
-            <label class="form-field"><span>Authenticator code</span><input id="withdrawTwoFactor" inputmode="numeric" maxlength="6" placeholder="code" required /></label>
-            <p class="deposit-note">Only available balance can be withdrawn. Escrow-locked funds stay locked. Withdrawals require 2FA and are paused for 24 hours after a password change.</p>
+            <p class="deposit-note">Withdrawals are sent on BNB Smart Chain. Confirm the saved address carefully; approved withdrawals cannot be reversed on-chain.</p>
             <button class="app-button" type="submit" ${addresses.length ? "" : "disabled"}>Request withdrawal</button>
           </form>
         ` : ""}
@@ -1791,12 +1790,24 @@
     }
   }
 
+
+  function requestAuthenticatorCode(message) {
+    const code = prompt(message || "Enter your six-digit authenticator code.");
+    if (code === null) return "";
+    const normalized = code.trim().replace(/\s+/g, "");
+    if (!/^\d{6}$/.test(normalized)) {
+      showToast("Enter the current six-digit authenticator code.");
+      return "";
+    }
+    return normalized;
+  }
   async function handleWithdrawalSubmit(event) {
     event.preventDefault();
     const withdrawalAddressId = document.querySelector("#withdrawAddressId")?.value;
     const amount = document.querySelector("#withdrawAmount")?.value;
-    const twoFactorCode = document.querySelector("#withdrawTwoFactor")?.value;
     if (!withdrawalAddressId) return showToast("Save a BEP20 withdrawal address first.");
+    const twoFactorCode = requestAuthenticatorCode("Enter your authenticator code to request this withdrawal.");
+    if (!twoFactorCode) return;
     try {
       const result = await accountService.requestWithdrawal({ withdrawalAddressId, amount, twoFactorCode, network: "BEP20", asset: "USDT" });
       const user = currentUser();
@@ -2161,7 +2172,6 @@
             <label class="form-field"><span>Network</span><select id="withdrawalNetwork"><option value="BEP20">BNB Smart Chain - BEP20</option></select></label>
             <label class="form-field"><span>Label</span><input id="withdrawalLabel" placeholder="My Binance wallet" required /></label>
             <label class="form-field wide"><span>BEP20 address</span><input id="withdrawalAddress" placeholder="0x..." required /></label>
-            <label class="form-field"><span>Authenticator code</span><input id="withdrawalAddressTwoFactor" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="code" required /></label>
           </div>
           <label class="check-row settings-default-check"><input id="withdrawalDefault" type="checkbox" ${addresses.length ? "" : "checked"} /><span>Make this my default withdrawal address</span></label>
           <div class="settings-form-actions"><button class="app-button" type="submit">Save address</button></div>
@@ -2670,12 +2680,14 @@
 
   async function handleWithdrawalAddressSubmit(event) {
     event.preventDefault();
+    const twoFactorCode = requestAuthenticatorCode("Enter your authenticator code to save this withdrawal address.");
+    if (!twoFactorCode) return;
     try {
       await accountService.createWithdrawalAddress({
         network: document.querySelector("#withdrawalNetwork").value,
         label: document.querySelector("#withdrawalLabel").value,
         address: document.querySelector("#withdrawalAddress").value,
-        twoFactorCode: document.querySelector("#withdrawalAddressTwoFactor").value.trim(),
+        twoFactorCode,
         asset: "USDT",
         isDefault: document.querySelector("#withdrawalDefault").checked,
       });
@@ -2699,10 +2711,10 @@
 
   async function handleWithdrawalDefault(addressId) {
     if (!addressId) return;
-    const twoFactorCode = prompt("Enter your six-digit authenticator code to change the default withdrawal address.");
+    const twoFactorCode = requestAuthenticatorCode("Enter your authenticator code to change the default withdrawal address.");
     if (!twoFactorCode) return;
     try {
-      await accountService.updateWithdrawalAddress(addressId, { isDefault: true, twoFactorCode: twoFactorCode.trim() });
+      await accountService.updateWithdrawalAddress(addressId, { isDefault: true, twoFactorCode });
       showToast("Default withdrawal address updated.");
       renderSettings();
     } catch (error) {

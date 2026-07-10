@@ -496,7 +496,7 @@ export class AuthService {
     const settings = await this.ensureSecuritySettings(userId);
     if (!settings.pending_two_factor_secret) throw new BadRequestException("Start 2FA setup first.");
     const secret = this.decryptSecret(settings.pending_two_factor_secret);
-    if (!this.verifyTotp(secret, String(code ?? ""))) throw new UnauthorizedException("Invalid 2FA code.");
+    if (!this.verifyTotp(secret, String(code ?? ""))) throw new UnauthorizedException("Invalid 2FA code. Use the current code and make sure your phone time is set automatically.");
     await this.db.query(
       `UPDATE user_security_settings
        SET two_factor_enabled = true, two_factor_secret = pending_two_factor_secret, pending_two_factor_secret = NULL, updated_at = now()
@@ -510,7 +510,7 @@ export class AuthService {
     const settings = await this.ensureSecuritySettings(userId);
     if (settings.two_factor_enabled && settings.two_factor_secret) {
       const secret = this.decryptSecret(settings.two_factor_secret);
-      if (!this.verifyTotp(secret, String(code ?? ""))) throw new UnauthorizedException("Invalid 2FA code.");
+      if (!this.verifyTotp(secret, String(code ?? ""))) throw new UnauthorizedException("Invalid 2FA code. Use the current code and make sure your phone time is set automatically.");
     }
     await this.db.query(
       `UPDATE user_security_settings
@@ -527,7 +527,7 @@ export class AuthService {
       throw new BadRequestException("Enable 2FA before withdrawing.");
     }
     if (!this.verifyTotp(this.decryptSecret(settings.two_factor_secret), String(code ?? ""))) {
-      throw new UnauthorizedException("Enter a valid 2FA code.");
+      throw new UnauthorizedException("Enter the current six-digit authenticator code. If it keeps failing, set your phone time to automatic.");
     }
     return { ok: true };
   }
@@ -539,7 +539,7 @@ export class AuthService {
       throw new UnauthorizedException({ code: "two_factor_required", message: "Enter your authenticator code." });
     }
     if (!this.verifyTotp(this.decryptSecret(settings.two_factor_secret), String(code ?? ""))) {
-      throw new UnauthorizedException("Enter a valid 2FA code.");
+      throw new UnauthorizedException("Enter the current six-digit authenticator code. If it keeps failing, set your phone time to automatic.");
     }
   }
 
@@ -835,7 +835,7 @@ export class AuthService {
     if (!/^\d{6}$/.test(code)) return false;
     const key = this.base32Decode(secret);
     const counter = Math.floor(Date.now() / 30000);
-    for (let drift = -1; drift <= 1; drift += 1) {
+    for (let drift = -2; drift <= 2; drift += 1) {
       if (this.totpCode(key, counter + drift) === code) return true;
     }
     return false;
