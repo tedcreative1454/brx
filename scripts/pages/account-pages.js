@@ -151,7 +151,7 @@
                     </label>
                   `).join("")}
                 </div>
-              ` : `<div class="offer-missing-method">${icon("info")}<div><strong>Payment method required</strong><span>Add Telebirr, M-Pesa, or CBE Birr before publishing an ad.</span></div><a href="#/settings?tab=payments">Add method</a></div>`}
+              ` : `<div class="offer-missing-method">${icon("info")}<div><strong>Payment method required</strong><span>Add Telebirr, M-Pesa, CBE, Bank of Abyssinia, or Awash Bank before publishing an ad.</span></div><a href="#/settings?tab=payments">Add method</a></div>`}
             </section>
           </div>
 
@@ -2053,7 +2053,7 @@
             <label class="settings-avatar-upload" for="settingsAvatarInput">${icon("camera")}<span>Upload photo</span><input id="settingsAvatarInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" /></label>
             ${user.avatarUrl ? `<button class="settings-avatar-remove" id="settingsAvatarRemove" type="button">Remove</button>` : ""}
           </div>
-          <small class="settings-avatar-help">PNG, JPG, WebP, or GIF up to 512 KB. Uploads save automatically.</small>
+          <small class="settings-avatar-help">PNG, JPG, WebP, or GIF up to 2 MB. Uploads save automatically.</small>
         </div>
       </section>
 
@@ -2119,10 +2119,13 @@
             <h4>Add New Payment Method</h4>
             <label class="form-field wide"><span>Payment Type</span>
               <select id="paymentType" required>
-                <option value="">Select mobile money method</option>
+                <option value="">Select payment method</option>
                 <option value="telebirr">Telebirr</option>
                 <option value="mpesa">M-Pesa</option>
                 <option value="cbe_birr">CBE Birr</option>
+                <option value="cbe_bank">CBE</option>
+                <option value="bank_of_abyssinia">Bank of Abyssinia</option>
+                <option value="awash_bank">Awash Bank</option>
               </select>
             </label>
             <label class="form-field wide"><span>Account Holder Name</span><input id="paymentAccountName" autocomplete="name" placeholder="Full name on the account" required /></label>
@@ -2139,7 +2142,7 @@
             <div class="payment-method-empty">
               ${icon("card")}
               <strong>No payment methods yet</strong>
-              <span>Add a mobile money account (Telebirr, M-Pesa, or CBE Birr) to start trading.</span>
+              <span>Add Telebirr, M-Pesa, CBE, Bank of Abyssinia, or Awash Bank to start trading.</span>
             </div>
           `}
         </div>
@@ -2237,7 +2240,7 @@
         <form id="tradePreferencesForm">
           <div class="settings-form-grid">
             <label class="form-field"><span>Market</span><input value="ETB / USDT" disabled /></label>
-            <label class="form-field"><span>Preferred payment rails</span><input id="preferredPaymentRails" value="${escapeAttr(rails.join(", "))}" placeholder="Telebirr, M-Pesa, CBE Birr" /></label>
+            <label class="form-field"><span>Preferred payment rails</span><input id="preferredPaymentRails" value="${escapeAttr(rails.join(", "))}" placeholder="Telebirr, M-Pesa, CBE, Bank of Abyssinia, Awash Bank" /></label>
           </div>
           <div class="settings-form-actions"><button class="app-button" type="submit">Save trade preferences</button></div>
         </form>
@@ -2418,7 +2421,7 @@
   function readAvatarDataUrl(file) {
     const allowedTypes = ["image/png", "image/jpeg", "image/webp", "image/gif"];
     if (!allowedTypes.includes(file.type)) return Promise.reject(new Error("Upload a PNG, JPG, WebP, or GIF image."));
-    if (file.size > 512 * 1024) return Promise.reject(new Error("Profile image must be 512 KB or smaller."));
+    if (file.size > 2 * 1024 * 1024) return Promise.reject(new Error("Profile image must be 2 MB or smaller."));
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result || ""));
@@ -2446,19 +2449,25 @@
     if (!phoneField || !phoneInput) return;
     phoneField.hidden = !type;
     phoneInput.required = Boolean(type);
+    const bankTypes = ["cbe_bank", "bank_of_abyssinia", "awash_bank"];
     const placeholders = {
       telebirr: "+251 9XX XXX XXX",
       mpesa: "+251 7XX XXX XXX",
       cbe_birr: "+251 9XX XXX XXX",
+      cbe_bank: "CBE account number",
+      bank_of_abyssinia: "Abyssinia account number",
+      awash_bank: "Awash account number",
     };
     phoneInput.placeholder = placeholders[type] || "+251 9XX XXX XXX";
+    const label = document.querySelector("#paymentPhoneField span");
+    if (label) label.textContent = bankTypes.includes(type) ? "Account Number" : "Phone Number";
   }
 
   async function handlePaymentMethodSubmit(event) {
     event.preventDefault();
     const submit = event.currentTarget.querySelector('button[type="submit"]');
     const type = document.querySelector("#paymentType")?.value || "";
-    if (!type) return showToast("Select Telebirr, M-Pesa, or CBE Birr.");
+    if (!type) return showToast("Select a payment method.");
     const originalText = submit?.textContent;
     if (submit) {
       submit.disabled = true;
@@ -2469,7 +2478,9 @@
         type,
         label: paymentTypeLabel(type),
         accountName: document.querySelector("#paymentAccountName").value,
-        phoneNumber: document.querySelector("#paymentPhone").value,
+        phoneNumber: ["cbe_bank", "bank_of_abyssinia", "awash_bank"].includes(type) ? "" : document.querySelector("#paymentPhone").value,
+        accountNumber: ["cbe_bank", "bank_of_abyssinia", "awash_bank"].includes(type) ? document.querySelector("#paymentPhone").value : "",
+        bankName: bankNameForPaymentType(type),
         isDefault: !(currentUser()?.paymentMethods || []).length,
       });
       showPaymentMethodForm = false;
@@ -2802,7 +2813,7 @@
 
   function paymentMethodRow(method) {
     const typeLabel = paymentTypeLabel(method.type);
-    const providerMark = method.type === "cbe_birr" ? "CBE" : typeLabel.slice(0, 1).toUpperCase();
+    const providerMark = ["cbe_birr", "cbe_bank"].includes(method.type) ? "CBE" : typeLabel.slice(0, 1).toUpperCase();
     return `
       <div class="payment-method-entry">
         <span class="payment-provider-mark ${escapeAttr(method.type)}">${escapeHtml(providerMark)}</span>
@@ -2818,13 +2829,23 @@
     if (type === "telebirr") return "Telebirr";
     if (type === "mpesa") return "M-Pesa";
     if (type === "cbe_birr") return "CBE Birr";
+    if (type === "cbe_bank") return "CBE";
+    if (type === "bank_of_abyssinia") return "Bank of Abyssinia";
+    if (type === "awash_bank") return "Awash Bank";
     if (type === "airtel_money") return "Airtel Money";
     if (type === "bank") return "Bank transfer";
     return "Other";
   }
   function paymentMethodDetail(method) {
-    if (method.type === "bank") return `${method.bankName || "Bank"} - ${method.accountNumber || "account"} - ${method.accountName}`;
+    if (["bank", "cbe_bank", "bank_of_abyssinia", "awash_bank"].includes(method.type)) return `${method.bankName || paymentTypeLabel(method.type)} - ${method.accountNumber || "account"} - ${method.accountName}`;
     return `${paymentTypeLabel(method.type)} - ${method.phoneNumber || "phone not set"} - ${method.accountName}`;
+  }
+
+  function bankNameForPaymentType(type) {
+    if (type === "cbe_bank") return "CBE";
+    if (type === "bank_of_abyssinia") return "Bank of Abyssinia";
+    if (type === "awash_bank") return "Awash Bank";
+    return "";
   }
 
   function accountDisplayName(user) {

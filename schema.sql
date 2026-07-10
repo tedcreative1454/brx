@@ -130,7 +130,7 @@ CREATE TABLE user_settings (
 CREATE TABLE payment_methods (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  type TEXT NOT NULL CHECK (type IN ('telebirr', 'mpesa', 'cbe_birr', 'airtel_money', 'bank', 'other')),
+  type TEXT NOT NULL CHECK (type IN ('telebirr', 'mpesa', 'cbe_birr', 'cbe_bank', 'bank_of_abyssinia', 'awash_bank', 'airtel_money', 'bank', 'other')),
   label TEXT NOT NULL,
   account_name TEXT NOT NULL,
   phone_number TEXT,

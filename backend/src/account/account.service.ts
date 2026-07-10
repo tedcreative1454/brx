@@ -102,7 +102,7 @@ const DEFAULT_NOTIFICATIONS = {
 
 const DEFAULT_TRADE_PREFERENCES = {
   market: "ETB/USDT",
-  preferredPaymentRails: ["Telebirr", "M-Pesa", "CBE Birr"],
+  preferredPaymentRails: ["Telebirr", "M-Pesa", "CBE Birr", "CBE", "Bank of Abyssinia", "Awash Bank"],
 };
 
 @Injectable()
@@ -549,8 +549,8 @@ export class AccountService {
     if (["telebirr", "mpesa", "cbe_birr", "airtel_money"].includes(type) && !phoneNumber) {
       throw new BadRequestException("Mobile money payment methods require a phone number.");
     }
-    if (type === "bank" && (!bankName || !accountNumber)) {
-      throw new BadRequestException("Bank payment methods require bank name and account number.");
+    if (["bank", "cbe_bank", "bank_of_abyssinia", "awash_bank"].includes(type) && !accountNumber) {
+      throw new BadRequestException("Bank payment methods require an account number.");
     }
 
     return {
@@ -625,8 +625,8 @@ export class AccountService {
 
   private paymentType(type: string | undefined) {
     const normalized = String(type ?? "").trim().toLowerCase();
-    if (["telebirr", "mpesa", "cbe_birr", "airtel_money", "bank", "other"].includes(normalized)) return normalized;
-    throw new BadRequestException("Payment method type must be Telebirr, M-Pesa, or CBE Birr.");
+    if (["telebirr", "mpesa", "cbe_birr", "cbe_bank", "bank_of_abyssinia", "awash_bank", "airtel_money", "bank", "other"].includes(normalized)) return normalized;
+    throw new BadRequestException("Payment method type must be Telebirr, M-Pesa, CBE, Bank of Abyssinia, or Awash Bank.");
   }
 
   private withdrawalNetwork(network: string | undefined) {
@@ -653,6 +653,9 @@ export class AccountService {
     if (type === "telebirr") return "Telebirr";
     if (type === "mpesa") return "M-Pesa";
     if (type === "cbe_birr") return "CBE Birr";
+    if (type === "cbe_bank") return "CBE";
+    if (type === "bank_of_abyssinia") return "Bank of Abyssinia";
+    if (type === "awash_bank") return "Awash Bank";
     if (type === "airtel_money") return "Airtel Money";
     if (type === "bank") return "Bank Transfer";
     return "Payment Method";
@@ -711,7 +714,7 @@ export class AccountService {
     if (value === undefined || value === null) return "";
     const trimmed = String(value).trim();
     if (!trimmed) return "";
-    if (trimmed.length > 800_000) throw new BadRequestException("Profile image must be 512 KB or smaller.");
+    if (trimmed.length > 2_900_000) throw new BadRequestException("Profile image must be 2 MB or smaller.");
     if (!/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/i.test(trimmed)) {
       throw new BadRequestException("Upload a PNG, JPG, WebP, or GIF profile image.");
     }

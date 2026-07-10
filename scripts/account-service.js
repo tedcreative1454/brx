@@ -139,7 +139,7 @@
   function defaultTradePreferences() {
     return {
       market: "ETB/USDT",
-      preferredPaymentRails: ["Telebirr", "M-Pesa", "CBE Birr"],
+      preferredPaymentRails: ["Telebirr", "M-Pesa", "CBE Birr", "CBE", "Bank of Abyssinia", "Awash Bank"],
     };
   }
 
