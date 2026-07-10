@@ -1,4 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BscService } from "../blockchain/bsc.service";
+import { env } from "../config/env";
 import { DatabaseService } from "../database/database.service";
 
 interface LimitRow {
@@ -30,7 +32,7 @@ interface StatsRow {
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(private readonly db: DatabaseService, private readonly bsc: BscService) {}
 
   async stats() {
     const result = await this.db.query<StatsRow>(
@@ -85,6 +87,53 @@ export class AdminService {
     };
   }
 
+  async treasury() {
+    const liabilities = await this.db.query<{
+      available_usdt: string;
+      locked_usdt: string;
+      pending_deposit_usdt: string;
+      pending_withdrawal_usdt: string;
+    }>(
+      `SELECT
+        COALESCE(SUM(available_balance), 0)::text AS available_usdt,
+        COALESCE(SUM(locked_balance), 0)::text AS locked_usdt,
+        COALESCE(SUM(pending_deposit), 0)::text AS pending_deposit_usdt,
+        COALESCE(SUM(pending_withdrawal), 0)::text AS pending_withdrawal_usdt
+       FROM balances`,
+    );
+    const liability = liabilities.rows[0];
+    const wallets = await Promise.all([
+      this.treasuryWallet("hot", env.bscHotWalletAddress),
+      this.treasuryWallet("gas", env.bscGasWalletAddress),
+      this.treasuryWallet("cold", env.bscColdWalletAddress),
+    ]);
+    const sweeps = await this.recentSweeps();
+
+    return {
+      treasury: {
+        network: "BEP20",
+        asset: "USDT",
+        hotWalletSignerConfigured: this.bsc.withdrawalSignerConfigured(),
+        gasWalletSignerConfigured: this.bsc.gasSignerConfigured(),
+        sweepEnabled: env.bscSweepEnabled,
+        sweepMinUsdt: env.bscSweepMinUsdt,
+        autoApproveLimitUsdt: env.withdrawalAutoApproveLimitUsdt,
+        manualReviewAboveUsdt: env.withdrawalAutoApproveLimitUsdt,
+        dailyPlatformLimitUsdt: env.withdrawalDailyPlatformLimitUsdt,
+        liabilities: {
+          availableUsdt: liability.available_usdt,
+          lockedUsdt: liability.locked_usdt,
+          pendingDepositUsdt: liability.pending_deposit_usdt,
+          pendingWithdrawalUsdt: liability.pending_withdrawal_usdt,
+          confirmedUserLiabilityUsdt: (
+            Number(liability.available_usdt) + Number(liability.locked_usdt) + Number(liability.pending_withdrawal_usdt)
+          ).toFixed(8),
+        },
+        wallets,
+        recentSweeps: sweeps.rows.map((row) => this.keysToCamel(row)),
+      },
+    };
+  }
   async users() {
     const result = await this.db.query(
       `SELECT u.id, u.email, u.username, u.kyc_status, u.status, u.role, u.trader_label, u.email_verified_at, u.created_at,
@@ -216,6 +265,47 @@ export class AdminService {
     return { limit: this.limitToApi(result.rows[0]) };
   }
 
+
+  private async recentSweeps() {
+    const exists = await this.db.query<{ wallet_sweeps: string | null }>("SELECT to_regclass('public.wallet_sweeps') AS wallet_sweeps");
+    if (!exists.rows[0]?.wallet_sweeps) return { rows: [] };
+    return this.db.query(
+      `SELECT ws.id, ws.user_id, u.email, ws.from_address, ws.to_address, ws.amount, ws.status,
+              ws.gas_funded_bnb, ws.gas_funding_tx_hash, ws.sweep_tx_hash, ws.error, ws.created_at, ws.updated_at
+       FROM wallet_sweeps ws
+       LEFT JOIN users u ON u.id = ws.user_id
+       ORDER BY ws.created_at DESC
+       LIMIT 10`,
+    );
+  }
+  private async treasuryWallet(role: "hot" | "gas" | "cold", address: string) {
+    const configured = Boolean(address);
+    if (!configured) {
+      return { role, configured: false, address: "", valid: false, bnbBalance: "0", usdtBalance: "0" };
+    }
+    if (!this.bsc.isAddress(address)) {
+      return { role, configured: true, address, valid: false, bnbBalance: "0", usdtBalance: "0", error: "Invalid BEP20 address." };
+    }
+
+    const normalized = this.bsc.normalizeAddress(address);
+    try {
+      const [bnbBalance, usdtBalance] = await Promise.all([
+        this.bsc.nativeBalance(normalized),
+        this.bsc.usdtBalance(normalized),
+      ]);
+      return { role, configured: true, address: normalized, valid: true, bnbBalance, usdtBalance };
+    } catch (error) {
+      return {
+        role,
+        configured: true,
+        address: normalized,
+        valid: true,
+        bnbBalance: "0",
+        usdtBalance: "0",
+        error: error instanceof Error ? error.message : "Could not load on-chain balances.",
+      };
+    }
+  }
   private tier(value: string) {
     const tier = value.trim().toLowerCase();
     if (["unverified", "verified", "merchant"].includes(tier)) return tier;

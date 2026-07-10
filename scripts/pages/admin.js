@@ -9,7 +9,7 @@
   const adminService = window.BRX.adminService;
   const components = window.BRX.components;
 
-  let adminState = { stats: null, submissions: [], selected: null, limits: [], disputes: [], users: [], deposits: [], withdrawals: [], trades: [], auditLogs: [] };
+  let adminState = { stats: null, treasury: null, submissions: [], selected: null, limits: [], disputes: [], users: [], deposits: [], withdrawals: [], trades: [], auditLogs: [] };
   let adminUserSearch = "";
   let adminUserStatusFilter = "all";
 
@@ -86,14 +86,7 @@
 
           <section id="adminSettings" class="admin-console-section admin-settings-card">
             <div class="admin-console-section-head"><div><p class="app-label blue">System profile</p><h2>Launch configuration</h2><small>Read-only summary of production services.</small></div>${icon("settings")}</div>
-            <div class="admin-settings-grid">
-              ${settingTile("Domain", "brxp2p.com", "Production domain reserved for launch.")}
-              ${settingTile("Custody", "Platform controlled", "Deposits and withdrawals use platform wallets.")}
-              ${settingTile("Network", "USDT BEP20", "BNB Smart Chain wallet settlement.")}
-              ${settingTile("Email", "Resend", "Verification and security messages.")}
-              ${settingTile("KYC", "Manual review", "Admin approval raises account limits.")}
-              ${settingTile("Escrow", "Internal ledger", "P2P trades remain off-chain.")}
-            </div>
+            <div class="admin-settings-grid">${adminSettingsTiles()}</div>
           </section>
         </div>
       </section>
@@ -124,6 +117,7 @@
   async function loadAdminData() {
     const jobs = {
       stats: adminService.stats(),
+      treasury: adminService.treasury(),
       kyc: adminService.listKyc(),
       limits: adminService.limits(),
       disputes: adminService.listDisputes(),
@@ -146,6 +140,7 @@
     const result = Object.fromEntries(entries);
 
     adminState.stats = result.stats.ok ? result.stats.value.stats || null : null;
+    adminState.treasury = result.treasury.ok ? result.treasury.value.treasury || null : null;
     adminState.submissions = result.kyc.ok ? result.kyc.value.submissions || [] : [];
     adminState.limits = result.limits.ok ? result.limits.value.limits || [] : [];
     adminState.disputes = result.disputes.ok ? result.disputes.value.disputes || [] : [];
@@ -161,6 +156,7 @@
     renderDisputes();
     renderLimitEditor();
     renderOperations();
+    renderAdminSettings();
 
     if (!result.stats.ok) document.querySelector("#adminStats").innerHTML = errorBlock(adminError(result.stats.error, "Could not load platform statistics."));
     if (!result.users.ok) document.querySelector("#adminUsersBody").innerHTML = errorBlock(adminError(result.users.error, "Could not load users."));
@@ -453,6 +449,7 @@
 
     bindUserStatusButtons();
     bindUserLabelButtons();
+    bindWithdrawalReviewButtons();
     const processButton = document.querySelector("#processWithdrawals");
     if (processButton) processButton.onclick = processWithdrawals;
   }
@@ -480,7 +477,8 @@
   }
 
   function withdrawalRow(item) {
-    return `<div class="admin-mini-row"><span><strong>${money(item.amount)} USDT</strong><small>${escapeHtml(item.email)} - ${escapeHtml(item.status)}${item.txHash ? ` - ${escapeHtml(item.txHash.slice(0, 12))}...` : ""}</small></span></div>`;
+    const needsReview = item.status === "requested";
+    return `<div class="admin-mini-row"><span><strong>${money(item.amount)} USDT</strong><small>${escapeHtml(item.email)} - ${escapeHtml(item.status)}${item.txHash ? ` - ${escapeHtml(item.txHash.slice(0, 12))}...` : ""}</small></span>${needsReview ? `<span class="admin-actions inline"><button class="outline-button tiny" type="button" data-withdrawal-approve="${escapeAttr(item.id)}">Approve</button><button class="danger-button tiny" type="button" data-withdrawal-reject="${escapeAttr(item.id)}">Reject</button></span>` : ""}</div>`;
   }
 
   function depositRow(item) {
@@ -516,6 +514,31 @@
     }
   }
 
+  function bindWithdrawalReviewButtons() {
+    document.querySelectorAll("[data-withdrawal-approve]").forEach((button) => {
+      button.addEventListener("click", () => reviewWithdrawal(button.dataset.withdrawalApprove, "approve"));
+    });
+    document.querySelectorAll("[data-withdrawal-reject]").forEach((button) => {
+      button.addEventListener("click", () => reviewWithdrawal(button.dataset.withdrawalReject, "reject"));
+    });
+  }
+
+  async function reviewWithdrawal(withdrawalId, action) {
+    const note = prompt(action === "approve" ? "Approval note?" : "Reject reason?") || (action === "approve" ? "Approved for broadcast." : "Rejected by admin.");
+    try {
+      if (action === "approve") await adminService.approveWithdrawal(withdrawalId, note);
+      else await adminService.rejectWithdrawal(withdrawalId, note);
+      showToast(action === "approve" ? "Withdrawal approved." : "Withdrawal rejected and balance returned.");
+      const [stats, withdrawals, auditLogs] = await Promise.all([adminService.stats(), adminService.listWithdrawals(), adminService.listAuditLogs()]);
+      adminState.stats = stats.stats || null;
+      adminState.withdrawals = withdrawals.withdrawals || [];
+      adminState.auditLogs = auditLogs.auditLogs || [];
+      renderStats();
+      renderOperations();
+    } catch (error) {
+      showToast(error.message || "Could not review withdrawal.");
+    }
+  }
   async function processWithdrawals() {
     try {
       const result = await adminService.processWithdrawals();
@@ -595,6 +618,41 @@
     return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   }
 
+
+  function renderAdminSettings() {
+    const grid = document.querySelector("#adminSettings .admin-settings-grid");
+    if (grid) grid.innerHTML = adminSettingsTiles();
+  }
+
+  function adminSettingsTiles() {
+    return `
+      ${settingTile("Domain", "brxp2p.com", "Production domain reserved for launch.")}
+      ${treasurySummaryTile()}
+      ${settingTile("Network", "USDT BEP20", "BNB Smart Chain wallet settlement.")}
+      ${settingTile("Email", "Resend", "Verification and security messages.")}
+      ${settingTile("KYC", "Manual review", "Admin approval raises account limits.")}
+      ${settingTile("Escrow", "Internal ledger", "P2P trades remain off-chain.")}
+    `;
+  }
+  function treasurySummaryTile() {
+    const treasury = adminState.treasury;
+    if (!treasury) return settingTile("Custody", "Loading", "Treasury balances are loading.");
+    const hot = (treasury.wallets || []).find((wallet) => wallet.role === "hot") || {};
+    const gas = (treasury.wallets || []).find((wallet) => wallet.role === "gas") || {};
+    const hotSigner = treasury.hotWalletSignerConfigured ? "hot signer ready" : "hot signer missing";
+    const gasSigner = treasury.gasWalletSignerConfigured ? "gas signer ready" : "gas signer missing";
+    const sweep = treasury.sweepEnabled ? "auto sweep on" : "auto sweep off";
+    return `
+      <div class="admin-setting-tile treasury-tile">
+        <span>Custody</span>
+        <strong>${escapeHtml(sweep)}</strong>
+        <small>Hot: ${money(hot.usdtBalance)} USDT / ${money(hot.bnbBalance)} BNB</small>
+        <small>Gas: ${money(gas.bnbBalance)} BNB</small>
+        <small>${escapeHtml(hotSigner)} / ${escapeHtml(gasSigner)}</small>
+        <small>Liability: ${money(treasury.liabilities?.confirmedUserLiabilityUsdt)} USDT</small>
+      </div>
+    `;
+  }
   function settingTile(label, value, detail) {
     return `
       <div class="admin-setting-tile">

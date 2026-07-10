@@ -4,6 +4,10 @@
   const { requestJson } = window.BRX.api;
 
 
+  function treasury() {
+    return requestJson("/admin/treasury");
+  }
+
   function listUsers() {
     return requestJson("/admin/users");
   }
@@ -34,6 +38,19 @@
     return requestJson("/withdrawals/process", { method: "POST" });
   }
 
+  function approveWithdrawal(id, note) {
+    return requestJson(`/admin/withdrawals/${id}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ note }),
+    });
+  }
+
+  function rejectWithdrawal(id, reason) {
+    return requestJson(`/admin/withdrawals/${id}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    });
+  }
   function listTrades() {
     return requestJson("/admin/trades");
   }
@@ -86,6 +103,6 @@
     });
   }
 
-  window.BRX.adminService = { stats, listUsers, updateUserStatus, updateUserLabel, listDeposits, listWithdrawals, processWithdrawals, listTrades, listAuditLogs, listKyc, getKyc, approveKyc, rejectKyc, listDisputes, resolveDispute, limits, updateLimit };
+  window.BRX.adminService = { stats, treasury, listUsers, updateUserStatus, updateUserLabel, listDeposits, listWithdrawals, processWithdrawals, approveWithdrawal, rejectWithdrawal, listTrades, listAuditLogs, listKyc, getKyc, approveKyc, rejectKyc, listDisputes, resolveDispute, limits, updateLimit };
 })();
 

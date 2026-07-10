@@ -1,5 +1,8 @@
-﻿import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { createDecipheriv, createHash } from "node:crypto";
+import { ethers } from "ethers";
 import { PoolClient } from "pg";
+import { AlertsService } from "../alerts/alerts.service";
 import { BscService, UsdtTransferLog } from "../blockchain/bsc.service";
 import { env } from "../config/env";
 import { DatabaseService } from "../database/database.service";
@@ -8,6 +11,13 @@ import { LedgerService } from "../ledger/ledger.service";
 interface WalletScanRow {
   user_id: string;
   deposit_address: string;
+}
+
+interface SweepWalletRow {
+  id: string;
+  user_id: string;
+  deposit_address: string;
+  encrypted_private_key: string;
 }
 
 interface PendingDepositRow {
@@ -30,6 +40,7 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
     private readonly db: DatabaseService,
     private readonly bsc: BscService,
     private readonly ledger: LedgerService,
+    private readonly alerts: AlertsService,
   ) {}
 
   onModuleInit() {
@@ -168,6 +179,7 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
 
     let updated = 0;
     let credited = 0;
+    let sweepQueued = 0;
 
     for (const deposit of pending.rows) {
       const confirmations = this.confirmationsFor(Number(deposit.block_number), latestBlock);
@@ -187,10 +199,17 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
       if (!ready) continue;
 
       const wasCredited = await this.creditConfirmedDeposit(deposit, confirmations);
-      if (wasCredited) credited += 1;
+      if (wasCredited) {
+        credited += 1;
+        const sweep = await this.sweepUserWallet(deposit.user_id, deposit.id).catch((error) => {
+          this.logger.warn(error instanceof Error ? error.message : error);
+          return null;
+        });
+        if (sweep?.status) sweepQueued += 1;
+      }
     }
 
-    return { pendingUpdated: updated, credited };
+    return { pendingUpdated: updated, credited, sweepQueued };
   }
 
   private async creditConfirmedDeposit(deposit: PendingDepositRow, confirmations: number) {
@@ -228,6 +247,134 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
 
       return true;
     });
+  }
+
+  private async sweepUserWallet(userId: string, depositId: string) {
+    if (!env.bscSweepEnabled) return null;
+    if (!env.bscHotWalletAddress || !this.bsc.isAddress(env.bscHotWalletAddress)) return null;
+
+    const walletResult = await this.db.query<SweepWalletRow>(
+      `SELECT id, user_id, deposit_address, encrypted_private_key
+       FROM wallet_accounts
+       WHERE user_id = $1 AND asset = 'USDT' AND network = 'BEP20' AND status = 'active'
+       LIMIT 1`,
+      [userId],
+    );
+    const wallet = walletResult.rows[0];
+    if (!wallet) return null;
+
+    const activeSweep = await this.db.query<{ id: string }>(
+      `SELECT id
+       FROM wallet_sweeps
+       WHERE wallet_account_id = $1
+         AND status IN ('pending', 'gas_funded', 'broadcast')
+         AND created_at >= now() - interval '45 minutes'
+       LIMIT 1`,
+      [wallet.id],
+    );
+    if (activeSweep.rows[0]) return null;
+
+    const amount = await this.bsc.usdtBalance(wallet.deposit_address);
+    if (Number(amount) < env.bscSweepMinUsdt) return null;
+
+    const privateKey = this.decrypt(wallet.encrypted_private_key);
+    const gasRequired = this.bsc.applyGasBuffer(await this.bsc.estimateUsdtTransferGasWei(privateKey, env.bscHotWalletAddress, amount));
+    const currentGas = await this.bsc.nativeBalanceWei(wallet.deposit_address);
+    const gasNeededBnb = this.bsc.formatNative(gasRequired);
+
+    if (currentGas < gasRequired) {
+      if (!env.bscGasWalletPrivateKey) {
+        await this.recordSweepFailure(wallet, depositId, amount, gasNeededBnb, "Gas wallet private key is not configured.");
+        return { status: "failed" };
+      }
+
+      const gasToFund = gasRequired - currentGas;
+      const gasToFundBnb = this.bsc.formatNative(gasToFund);
+      const gasTx = await this.bsc.fundGas(wallet.deposit_address, gasToFundBnb);
+      const sweep = await this.insertSweep(wallet, depositId, amount, "gas_funded", gasNeededBnb, gasToFundBnb, gasTx.txHash);
+      await this.audit("wallet_sweep.gas_funded", sweep.id, { userId, amount, address: wallet.deposit_address, gasTxHash: gasTx.txHash, gasToFundBnb });
+      await this.alerts.sendOperationalAlert("Deposit wallet gas funded", `Funded ${gasToFundBnb} BNB for automatic sweep.`, {
+        userId,
+        depositId,
+        wallet: wallet.deposit_address,
+        gasTxHash: gasTx.txHash,
+      });
+      return { status: "gas_funded" };
+    }
+
+    const sweep = await this.insertSweep(wallet, depositId, amount, "pending", gasNeededBnb, null, null);
+    try {
+      const tx = await this.bsc.sendUsdtFromPrivateKey(privateKey, env.bscHotWalletAddress, amount);
+      await this.db.query(
+        `UPDATE wallet_sweeps
+         SET status = 'broadcast', sweep_tx_hash = $2, updated_at = now()
+         WHERE id = $1`,
+        [sweep.id, tx.txHash],
+      );
+      await this.audit("wallet_sweep.broadcast", sweep.id, { userId, amount, from: tx.fromAddress, to: tx.toAddress, txHash: tx.txHash });
+      await this.alerts.sendOperationalAlert("Deposit wallet swept", `Swept ${amount} USDT from deposit wallet to hot wallet.`, {
+        userId,
+        depositId,
+        from: tx.fromAddress,
+        to: tx.toAddress,
+        txHash: tx.txHash,
+      });
+      return { status: "broadcast", txHash: tx.txHash };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "Sweep broadcast failed.";
+      await this.db.query(
+        `UPDATE wallet_sweeps
+         SET status = 'failed', error = $2, updated_at = now()
+         WHERE id = $1`,
+        [sweep.id, reason],
+      );
+      await this.audit("wallet_sweep.failed", sweep.id, { userId, amount, address: wallet.deposit_address, reason });
+      await this.alerts.sendOperationalAlert("Deposit wallet sweep failed", reason, { userId, depositId, wallet: wallet.deposit_address, amount });
+      return { status: "failed" };
+    }
+  }
+
+  private async insertSweep(
+    wallet: SweepWalletRow,
+    depositId: string,
+    amount: string,
+    status: "pending" | "gas_funded" | "broadcast" | "failed",
+    gasNeededBnb: string | null,
+    gasFundedBnb: string | null,
+    gasFundingTxHash: string | null,
+  ) {
+    const result = await this.db.query<{ id: string }>(
+      `INSERT INTO wallet_sweeps
+        (wallet_account_id, user_id, deposit_id, from_address, to_address, asset, amount, status, gas_needed_bnb, gas_funded_bnb, gas_funding_tx_hash)
+       VALUES ($1, $2, $3, $4, $5, 'USDT', $6, $7, $8, $9, $10)
+       RETURNING id`,
+      [wallet.id, wallet.user_id, depositId, wallet.deposit_address, this.bsc.normalizeAddress(env.bscHotWalletAddress), amount, status, gasNeededBnb, gasFundedBnb, gasFundingTxHash],
+    );
+    return result.rows[0];
+  }
+
+  private async recordSweepFailure(wallet: SweepWalletRow, depositId: string, amount: string, gasNeededBnb: string, reason: string) {
+    const sweep = await this.insertSweep(wallet, depositId, amount, "failed", gasNeededBnb, null, null);
+    await this.db.query("UPDATE wallet_sweeps SET error = $2, updated_at = now() WHERE id = $1", [sweep.id, reason]);
+    await this.audit("wallet_sweep.failed", sweep.id, { userId: wallet.user_id, amount, address: wallet.deposit_address, reason });
+    await this.alerts.sendOperationalAlert("Deposit wallet sweep failed", reason, { userId: wallet.user_id, depositId, wallet: wallet.deposit_address, amount });
+  }
+
+  private async audit(action: string, entityId: string, metadata: Record<string, unknown>) {
+    await this.db.query(
+      `INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, metadata)
+       VALUES (NULL, $1, 'wallet_sweep', $2, $3::jsonb)`,
+      [action, entityId, JSON.stringify(metadata)],
+    );
+  }
+
+  private decrypt(value: string) {
+    const [ivRaw, tagRaw, encryptedRaw] = value.split(":");
+    if (!ivRaw || !tagRaw || !encryptedRaw) throw new Error("Encrypted deposit wallet key is invalid.");
+    const key = createHash("sha256").update(env.encryptionKey).digest();
+    const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(ivRaw, "base64"));
+    decipher.setAuthTag(Buffer.from(tagRaw, "base64"));
+    return Buffer.concat([decipher.update(Buffer.from(encryptedRaw, "base64")), decipher.final()]).toString("utf8");
   }
 
   private confirmationsFor(blockNumber: number, latestBlock: number) {

@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { AlertsService } from "../alerts/alerts.service";
 import { AuthenticatedUser, AuthService } from "../auth/auth.service";
 import { BscService } from "../blockchain/bsc.service";
 import { env } from "../config/env";
@@ -80,6 +81,7 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
     private readonly auth: AuthService,
     private readonly bsc: BscService,
     private readonly email: EmailService,
+    private readonly alerts: AlertsService,
   ) {}
 
   onModuleInit() {
@@ -106,8 +108,10 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
     const risk = await this.loadRiskUser(user.id);
     this.assertUserCanWithdraw(risk, amount);
     await this.assertWithinTierLimit(risk, amount);
+    await this.assertWithinPlatformDailyLimit(amount);
 
     const withdrawalAddress = await this.resolveWithdrawalAddress(user.id, body);
+    const review = this.withdrawalReview(amount);
 
     const result = await this.db.transaction(async (client) => {
       const inserted = await client.query<WithdrawalRow>(
@@ -115,7 +119,7 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
           (user_id, withdrawal_address_id, requested_by_session_id, address, network, asset, amount, fee, status,
            risk_decision, review_reason, approved_at, auto_approved_at)
          VALUES
-          ($1, $2, $3, $4, $5, $6, $7, 0, 'approved', 'auto_approved', $8, now(), now())
+          ($1, $2, $3, $4, $5, $6, $7, 0, $8::tx_status, $9, $10, $11, $12)
          RETURNING id, user_id, withdrawal_address_id, address, network, asset, amount, fee, status, risk_decision,
            review_reason, tx_hash, auto_approved_at, approved_at, broadcast_at, confirmed_at, rejected_at,
            failed_reason, created_at, updated_at`,
@@ -127,7 +131,11 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
           withdrawalAddress.network,
           withdrawalAddress.asset,
           amount,
-          "Passed automatic checks: 2FA, active account, tier limit, password cooldown, and available balance.",
+          review.status,
+          review.riskDecision,
+          review.reason,
+          review.approvedAt,
+          review.autoApprovedAt,
         ],
       );
       const withdrawal = inserted.rows[0];
@@ -144,11 +152,12 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
 
       await client.query(
         `INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, metadata)
-         VALUES ($1, 'withdrawal.auto_approved', 'withdrawal', $2, $3::jsonb)`,
+         VALUES ($1, $4, 'withdrawal', $2, $3::jsonb)`,
         [
           user.id,
           withdrawal.id,
-          JSON.stringify({ amount, asset, network, addressId: withdrawalAddress.id, policy: "2fa_and_24h_password_cooldown" }),
+          JSON.stringify({ amount, asset, network, addressId: withdrawalAddress.id, policy: review.riskDecision, autoApproveLimitUsdt: env.withdrawalAutoApproveLimitUsdt }),
+          review.auditAction,
         ],
       );
 
@@ -164,9 +173,118 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
     });
 
     await this.email.sendWithdrawalRequested(risk.email, result.withdrawal.amount, result.withdrawal.address).catch((error) => this.logger.warn(error));
+    if (result.withdrawal.status === "requested") {
+      await this.alerts.sendOperationalAlert("Withdrawal needs manual review", `${result.withdrawal.amount} USDT withdrawal is waiting for admin approval.`, {
+        userId: result.withdrawal.user_id,
+        withdrawalId: result.withdrawal.id,
+        amount: result.withdrawal.amount,
+        address: result.withdrawal.address,
+      });
+    }
     return { withdrawal: this.toApi(result.withdrawal), balance: result.balance };
   }
 
+  async approveWithdrawal(adminId: string, withdrawalId: string, body: { note?: string }) {
+    const note = this.reviewNote(body.note, "Approved by admin review.");
+    const result = await this.db.transaction(async (client) => {
+      const locked = await client.query<WithdrawalRow>(
+        `SELECT * FROM withdrawals WHERE id = $1 AND status = 'requested' FOR UPDATE`,
+        [withdrawalId],
+      );
+      const withdrawal = locked.rows[0];
+      if (!withdrawal) throw new BadRequestException("Withdrawal is not waiting for admin approval.");
+
+      const updated = await client.query<WithdrawalRow>(
+        `UPDATE withdrawals
+         SET status = 'approved',
+             risk_decision = 'admin_approved',
+             approved_at = now(),
+             review_reason = $2,
+             updated_at = now()
+         WHERE id = $1
+         RETURNING id, user_id, withdrawal_address_id, address, network, asset, amount, fee, status, risk_decision,
+           review_reason, tx_hash, auto_approved_at, approved_at, broadcast_at, confirmed_at, rejected_at,
+           failed_reason, created_at, updated_at`,
+        [withdrawalId, note],
+      );
+
+      await client.query(
+        `INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, metadata)
+         VALUES ($1, 'withdrawal.admin_approved', 'withdrawal', $2, $3::jsonb)`,
+        [adminId, withdrawalId, JSON.stringify({ note, amount: withdrawal.amount, address: withdrawal.address })],
+      );
+
+      return updated.rows[0];
+    });
+
+    await this.alerts.sendOperationalAlert("Withdrawal approved", `${result.amount} USDT withdrawal approved for broadcast.`, {
+      adminId,
+      withdrawalId,
+      amount: result.amount,
+      address: result.address,
+    });
+    return { withdrawal: this.toApi(result) };
+  }
+
+  async rejectWithdrawal(adminId: string, withdrawalId: string, body: { reason?: string }) {
+    const reason = this.reviewNote(body.reason, "Rejected by admin review.");
+    const result = await this.db.transaction(async (client) => {
+      const locked = await client.query<WithdrawalRow>(
+        `SELECT * FROM withdrawals WHERE id = $1 AND status = 'requested' FOR UPDATE`,
+        [withdrawalId],
+      );
+      const withdrawal = locked.rows[0];
+      if (!withdrawal) throw new BadRequestException("Withdrawal is not waiting for admin approval.");
+
+      await this.ledger.returnPendingWithdrawalToAvailable(client, {
+        userId: withdrawal.user_id,
+        asset: withdrawal.asset,
+        amount: withdrawal.amount,
+        reason: "withdrawal_admin_rejected_returned",
+        referenceType: "withdrawal",
+        referenceId: withdrawal.id,
+        idempotencyKey: `withdrawal:${withdrawal.id}:admin-rejected`,
+      });
+
+      const updated = await client.query<WithdrawalRow>(
+        `UPDATE withdrawals
+         SET status = 'rejected',
+             risk_decision = 'admin_rejected',
+             review_reason = $2,
+             rejected_at = now(),
+             updated_at = now()
+         WHERE id = $1
+         RETURNING id, user_id, withdrawal_address_id, address, network, asset, amount, fee, status, risk_decision,
+           review_reason, tx_hash, auto_approved_at, approved_at, broadcast_at, confirmed_at, rejected_at,
+           failed_reason, created_at, updated_at`,
+        [withdrawalId, reason],
+      );
+
+      await client.query(
+        `INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, metadata)
+         VALUES ($1, 'withdrawal.admin_rejected', 'withdrawal', $2, $3::jsonb)`,
+        [adminId, withdrawalId, JSON.stringify({ reason, amount: withdrawal.amount, address: withdrawal.address })],
+      );
+
+      const balance = await client.query(
+        `SELECT available_balance, locked_balance, pending_deposit, pending_withdrawal
+         FROM balances
+         WHERE user_id = $1 AND asset = $2
+         LIMIT 1`,
+        [withdrawal.user_id, withdrawal.asset],
+      );
+
+      return { withdrawal: updated.rows[0], balance: this.ledger.normalizeBalance(balance.rows[0]) };
+    });
+
+    await this.alerts.sendOperationalAlert("Withdrawal rejected", `${result.withdrawal.amount} USDT withdrawal rejected and returned to user balance.`, {
+      adminId,
+      withdrawalId,
+      amount: result.withdrawal.amount,
+      address: result.withdrawal.address,
+    });
+    return { withdrawal: this.toApi(result.withdrawal), balance: result.balance };
+  }
   async myWithdrawals(userId: string) {
     const result = await this.db.query<WithdrawalRow>(
       `SELECT id, user_id, withdrawal_address_id, address, network, asset, amount, fee, status, risk_decision,
@@ -381,6 +499,51 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
     if (limit > 0 && Number(amount) > limit) throw new BadRequestException(`Withdrawal exceeds your ${tier} limit of ${limit.toLocaleString()} USDT.`);
   }
 
+  private async assertWithinPlatformDailyLimit(amount: string) {
+    const limit = env.withdrawalDailyPlatformLimitUsdt;
+    if (limit <= 0) return;
+
+    const result = await this.db.query<{ total: string }>(
+      `SELECT COALESCE(SUM(amount), 0)::text AS total
+       FROM withdrawals
+       WHERE asset = 'USDT'
+         AND status IN ('requested', 'approved', 'broadcast', 'confirmed')
+         AND created_at >= now() - interval '24 hours'`,
+    );
+    const current = Number(result.rows[0]?.total ?? 0);
+    if (current + Number(amount) > limit) {
+      throw new BadRequestException(`Platform daily withdrawal cap reached. Try again later or contact support.`);
+    }
+  }
+
+  private withdrawalReview(amount: string) {
+    const autoApproveLimit = env.withdrawalAutoApproveLimitUsdt;
+    if (autoApproveLimit > 0 && Number(amount) <= autoApproveLimit) {
+      return {
+        status: "approved",
+        riskDecision: "auto_approved",
+        reason: "Passed automatic checks: 2FA, active account, tier limit, password cooldown, platform cap, and available balance.",
+        approvedAt: new Date(),
+        autoApprovedAt: new Date(),
+        auditAction: "withdrawal.auto_approved",
+      };
+    }
+
+    return {
+      status: "requested",
+      riskDecision: "manual_review",
+      reason: `Manual admin approval required above ${autoApproveLimit.toLocaleString()} USDT auto-approve limit.`,
+      approvedAt: null,
+      autoApprovedAt: null,
+      auditAction: "withdrawal.manual_review_requested",
+    };
+  }
+
+  private reviewNote(value: string | undefined, fallback: string) {
+    const note = String(value ?? "").trim() || fallback;
+    if (note.length > 500) throw new BadRequestException("Review note must be 500 characters or fewer.");
+    return note;
+  }
   private async resolveWithdrawalAddress(userId: string, body: WithdrawalRequestBody) {
     const id = String(body.withdrawalAddressId || "").trim();
     if (!id) throw new BadRequestException("Choose a saved BEP20 withdrawal address first.");

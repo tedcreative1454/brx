@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { AccountModule } from "./account/account.module";
+import { AlertsModule } from "./alerts/alerts.module";
 import { AdminModule } from "./admin/admin.module";
 import { AuthModule } from "./auth/auth.module";
 import { BlockchainModule } from "./blockchain/blockchain.module";
@@ -19,6 +20,7 @@ import { WithdrawalsModule } from "./withdrawals/withdrawals.module";
 @Module({
   imports: [
     DatabaseModule,
+    AlertsModule,
     AdminModule,
     AccountModule,
     BlockchainModule,

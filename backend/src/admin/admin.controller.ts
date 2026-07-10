@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Headers, Param, Patch, Post } from "@nestjs/common";
 import { AuthService } from "../auth/auth.service";
 import { TradesService } from "../trades/trades.service";
+import { WithdrawalsService } from "../withdrawals/withdrawals.service";
 import { AdminService } from "./admin.service";
 
 @Controller("admin")
@@ -9,6 +10,7 @@ export class AdminController {
     private readonly auth: AuthService,
     private readonly admin: AdminService,
     private readonly trades: TradesService,
+    private readonly withdrawalsService: WithdrawalsService,
   ) {}
 
   @Get("stats")
@@ -17,6 +19,11 @@ export class AdminController {
     return this.admin.stats();
   }
 
+  @Get("treasury")
+  async treasury(@Headers("authorization") authorization?: string) {
+    await this.auth.requireAdmin(authorization);
+    return this.admin.treasury();
+  }
   @Get("users")
   async users(@Headers("authorization") authorization?: string) {
     await this.auth.requireAdmin(authorization);
@@ -54,6 +61,25 @@ export class AdminController {
     return this.admin.withdrawals();
   }
 
+  @Post("withdrawals/:withdrawalId/approve")
+  async approveWithdrawal(
+    @Headers("authorization") authorization: string | undefined,
+    @Param("withdrawalId") withdrawalId: string,
+    @Body() body: { note?: string },
+  ) {
+    const admin = await this.auth.requireAdmin(authorization);
+    return this.withdrawalsService.approveWithdrawal(admin.id, withdrawalId, body);
+  }
+
+  @Post("withdrawals/:withdrawalId/reject")
+  async rejectWithdrawal(
+    @Headers("authorization") authorization: string | undefined,
+    @Param("withdrawalId") withdrawalId: string,
+    @Body() body: { reason?: string },
+  ) {
+    const admin = await this.auth.requireAdmin(authorization);
+    return this.withdrawalsService.rejectWithdrawal(admin.id, withdrawalId, body);
+  }
   @Get("trades")
   async tradesList(@Headers("authorization") authorization?: string) {
     await this.auth.requireAdmin(authorization);
