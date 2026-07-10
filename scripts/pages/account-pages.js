@@ -30,6 +30,7 @@
   let tradeChatSignature = "";
   let tradeStatusFilter = "all";
   let lastMyTrades = [];
+  let walletActivityState = { loaded: false, loading: false, deposits: [], withdrawals: [], error: "" };
 
   function renderAds() {
     const user = requireUser();
@@ -1560,6 +1561,10 @@
       void securityService.loadSecurity().then(() => renderWallet()).catch((error) => console.error(error));
     }
 
+    if (accountService && !walletActivityState.loaded && !walletActivityState.loading) {
+      void loadWalletActivity();
+    }
+
     const depositAddress = user.depositAddress || "";
     const balance = user.balance || window.BRX.profileService.emptyBalance();
     const available = Number(balance.available) || 0;
@@ -1594,7 +1599,7 @@
           <div class="wallet-operation-panel">${walletModePanel(activeWalletMode, depositAddress, user)}</div>
           <aside class="wallet-activity-panel">
             <div class="wallet-activity-head"><div><p class="app-label">Recent activity</p><h3>Transactions</h3></div><span>${icon("activity")}</span></div>
-            <div class="wallet-activity-empty">${icon("database")}<strong>No wallet activity yet</strong><p>Your confirmed deposits and withdrawals will appear here.</p></div>
+            ${walletActivityPanel()}
             <a href="#/trades">View P2P trade activity ${icon("external")}</a>
           </aside>
         </div>
@@ -1726,6 +1731,101 @@
     const feeText = fee > 0 ? ` Withdrawal fee: ${format(fee)} USDT.` : "";
     return `Withdrawals are sent on BNB Smart Chain. Confirm the saved address carefully; approved withdrawals cannot be reversed on-chain.${feeText}`;
   }
+
+  async function loadWalletActivity() {
+    if (!accountService || walletActivityState.loading) return;
+    walletActivityState = { ...walletActivityState, loading: true, error: "" };
+    try {
+      const [depositResult, withdrawalResult] = await Promise.all([
+        accountService.listDeposits(),
+        accountService.listWithdrawals(),
+      ]);
+      walletActivityState = {
+        loaded: true,
+        loading: false,
+        deposits: depositResult.deposits || [],
+        withdrawals: withdrawalResult.withdrawals || [],
+        error: "",
+      };
+    } catch (error) {
+      walletActivityState = { ...walletActivityState, loaded: true, loading: false, error: error.message || "Could not load wallet activity." };
+    }
+    if (window.BRX.router.routeName() === "wallet") renderWallet();
+  }
+
+  function refreshWalletActivity() {
+    walletActivityState = { ...walletActivityState, loaded: false, error: "" };
+    if (accountService) void loadWalletActivity();
+  }
+
+  function walletActivityPanel() {
+    const items = walletActivityItems();
+    if (walletActivityState.loading && !walletActivityState.loaded && !items.length) {
+      return `<div class="wallet-activity-empty">${icon("activity")}<strong>Loading wallet activity</strong><p>Checking deposits and withdrawals.</p></div>`;
+    }
+    if (walletActivityState.error && !items.length) {
+      return `<div class="wallet-activity-empty">${icon("info")}<strong>Activity unavailable</strong><p>${escapeHtml(walletActivityState.error)}</p></div>`;
+    }
+    if (!items.length) {
+      return `<div class="wallet-activity-empty">${icon("database")}<strong>No wallet activity yet</strong><p>Your deposits, queued withdrawals, failed withdrawals, and confirmed withdrawals will appear here.</p></div>`;
+    }
+    return `<div class="wallet-activity-list">${items.map(walletActivityRow).join("")}</div>`;
+  }
+
+  function walletActivityItems() {
+    const deposits = (walletActivityState.deposits || []).map((deposit) => ({
+      type: "deposit",
+      id: deposit.id,
+      status: deposit.status || "detected",
+      amount: Number(deposit.amount || 0),
+      title: deposit.status === "credited" ? "Deposit credited" : `Deposit ${statusLabel(deposit.status || "detected")}`,
+      detail: deposit.txHash ? shortHash(deposit.txHash) : `${deposit.confirmations || 0} confirmations`,
+      date: deposit.creditedAt || deposit.updatedAt || deposit.createdAt,
+      txHash: deposit.txHash,
+    }));
+    const withdrawals = (walletActivityState.withdrawals || []).map((withdrawal) => ({
+      type: "withdrawal",
+      id: withdrawal.id,
+      status: withdrawal.status || "requested",
+      amount: Number(withdrawal.amount || 0),
+      fee: Number(withdrawal.fee || 0),
+      title: withdrawalActivityTitle(withdrawal.status),
+      detail: withdrawal.failedReason || withdrawal.reviewReason || (withdrawal.txHash ? shortHash(withdrawal.txHash) : shortAddress(withdrawal.address || "")),
+      date: withdrawal.confirmedAt || withdrawal.broadcastAt || withdrawal.updatedAt || withdrawal.createdAt,
+      txHash: withdrawal.txHash,
+    }));
+    return deposits.concat(withdrawals)
+      .sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime())
+      .slice(0, 12);
+  }
+
+  function walletActivityRow(item) {
+    const failed = item.status === "failed" || item.status === "rejected";
+    const sign = item.type === "deposit" ? "+" : "-";
+    const tone = item.type === "deposit" ? "deposit" : failed ? "failed" : "withdrawal";
+    const fee = item.type === "withdrawal" && item.fee > 0 ? `<small>Fee ${format(item.fee)} USDT</small>` : "";
+    return `
+      <article class="wallet-activity-row ${tone}">
+        <span class="wallet-activity-mark">${icon(item.type === "deposit" ? "download" : failed ? "info" : "upload")}</span>
+        <span class="wallet-activity-main"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.detail || "BRX wallet")}</small>${fee}</span>
+        <span class="wallet-activity-side"><strong>${sign}${format(item.amount)} USDT</strong><small>${escapeHtml(dateTime(item.date))}</small></span>
+      </article>
+    `;
+  }
+
+  function withdrawalActivityTitle(status) {
+    if (status === "confirmed") return "Withdrawal confirmed";
+    if (status === "broadcast") return "Withdrawal sent";
+    if (status === "approved") return "Withdrawal queued";
+    if (status === "failed") return "Withdrawal failed";
+    if (status === "rejected") return "Withdrawal rejected";
+    return "Withdrawal requested";
+  }
+
+  function shortHash(value) {
+    const text = String(value || "");
+    return text.length > 16 ? `${text.slice(0, 10)}...${text.slice(-6)}` : text;
+  }
   function transferPanel() {
     return `
       <section class="wallet-panel wallet-form-panel internal-transfer-panel">
@@ -1839,6 +1939,7 @@
         saveUsers(users().map((item) => item.id === refreshedUser.id ? { ...item, balance: result.balance } : item));
       }
       showToast("Withdrawal approved and queued for BEP20 broadcast.");
+      refreshWalletActivity();
       renderWallet();
     } catch (error) {
       showToast(error.message || "Could not request withdrawal.");

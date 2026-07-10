@@ -127,6 +127,10 @@
   async function listWithdrawals() {
     return requestJson("/withdrawals/my");
   }
+
+  async function listDeposits() {
+    return requestJson("/deposits/my");
+  }
   function defaultNotifications() {
     return {
       emailVerification: true,
@@ -158,6 +162,7 @@
     internalTransfer,
     requestWithdrawal,
     listWithdrawals,
+    listDeposits,
     defaultNotifications,
     defaultTradePreferences,
   };

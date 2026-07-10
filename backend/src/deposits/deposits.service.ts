@@ -68,6 +68,19 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+
+  async myDeposits(userId: string) {
+    const result = await this.db.query(
+      `SELECT id, tx_hash, log_index, block_number, from_address, to_address, network, asset, amount,
+              confirmations, status, credited_at, created_at, updated_at
+       FROM deposits
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT 50`,
+      [userId],
+    );
+    return { deposits: result.rows.map((row) => this.keysToCamel(row)) };
+  }
   private async scanAssignedWalletsOnce() {
     const latest = await this.bsc.latestBlock();
     const fromBlock = await this.nextFromBlock(latest);
@@ -390,6 +403,12 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
     const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(ivRaw, "base64"));
     decipher.setAuthTag(Buffer.from(tagRaw, "base64"));
     return Buffer.concat([decipher.update(Buffer.from(encryptedRaw, "base64")), decipher.final()]).toString("utf8");
+  }
+
+  private keysToCamel(row: Record<string, unknown>) {
+    return Object.fromEntries(
+      Object.entries(row).map(([key, value]) => [key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase()), value]),
+    );
   }
 
   private confirmationsFor(blockNumber: number, latestBlock: number) {

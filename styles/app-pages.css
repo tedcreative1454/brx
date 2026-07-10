@@ -8270,3 +8270,104 @@ body[data-route="market"] .brx-p2p-market .market-trader-avatar.has-image img {
   color: var(--text);
   font-size: 13px;
 }
+
+.wallet-activity-list {
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  padding: 12px 0;
+  overflow: auto;
+}
+
+.wallet-activity-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, .07);
+  border-radius: 10px;
+  background: rgba(5, 11, 22, .45);
+}
+
+.wallet-activity-mark {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: rgba(0, 153, 255, .1);
+  color: var(--blue-2);
+}
+
+.wallet-activity-row.deposit .wallet-activity-mark {
+  background: rgba(8, 201, 139, .12);
+  color: var(--green);
+}
+
+.wallet-activity-row.failed .wallet-activity-mark {
+  background: rgba(255, 75, 103, .12);
+  color: var(--red);
+}
+
+.wallet-activity-mark svg {
+  width: 15px;
+  height: 15px;
+}
+
+.wallet-activity-main,
+.wallet-activity-side {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.wallet-activity-main strong,
+.wallet-activity-side strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.wallet-activity-main small,
+.wallet-activity-side small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 8px;
+  line-height: 1.25;
+}
+
+.wallet-activity-side {
+  justify-items: end;
+  text-align: right;
+}
+
+.wallet-activity-row.deposit .wallet-activity-side strong {
+  color: var(--green);
+}
+
+.wallet-activity-row.withdrawal .wallet-activity-side strong {
+  color: var(--blue-2);
+}
+
+.wallet-activity-row.failed .wallet-activity-side strong {
+  color: var(--red);
+}
+
+@media (max-width: 560px) {
+  .wallet-activity-row {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+
+  .wallet-activity-side {
+    grid-column: 2;
+    justify-items: start;
+    text-align: left;
+  }
+}
