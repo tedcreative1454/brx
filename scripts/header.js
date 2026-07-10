@@ -282,6 +282,7 @@
     const adminMenuLink = user.role === "admin" ? `<a href="#/admin">${icon("shield")}Admin Console</a>` : "";
     return `
       <a href="#/profile">${icon("user")}View Profile</a>
+      <a href="#/ads">${icon("market")}My ads</a>
       <a href="#/settings">${icon("settings")}Settings</a>
       ${adminMenuLink}
       <a href="#/referrals">${icon("gift")}Refer & Earn</a>

@@ -3288,3 +3288,75 @@
     grid-column: 1 / -1 !important;
   }
 }
+
+/* Mobile settings side actions and compact dashboard balance tile. */
+@media (max-width: 760px) {
+  .professional-settings-page .settings-row {
+    grid-template-columns: 44px minmax(0, 1fr) auto !important;
+    align-items: center !important;
+    min-height: 66px !important;
+  }
+
+  .professional-settings-page .settings-row-aside {
+    grid-column: 3 !important;
+    grid-row: 1 !important;
+    width: auto !important;
+    justify-self: end !important;
+    align-self: center !important;
+    margin-top: 0 !important;
+  }
+
+  .professional-settings-page .settings-action,
+  .professional-settings-page .settings-badge {
+    min-width: 0 !important;
+    min-height: 34px !important;
+    padding: 0 12px !important;
+    border-radius: 10px !important;
+    font-size: 12px !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+  }
+
+  .professional-settings-page .settings-row-main small {
+    max-width: 100% !important;
+  }
+
+  .dashboard-balance-breakdown:has(> div:only-child) {
+    width: fit-content !important;
+    max-width: 100% !important;
+    grid-template-columns: minmax(128px, 176px) !important;
+  }
+
+  .dashboard-balance-breakdown > div:only-child {
+    grid-column: auto !important;
+  }
+}
+
+/* Mobile two-factor setup QR flow. */
+@media (max-width: 760px) {
+  .two-factor-setup-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .two-factor-qr-card {
+    width: min(190px, 58vw) !important;
+    min-height: 0 !important;
+    aspect-ratio: 1 !important;
+    justify-self: center !important;
+  }
+
+  .two-factor-secret-panel {
+    padding: 12px !important;
+  }
+
+  .two-factor-secret-actions {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .two-factor-secret-actions .settings-action {
+    width: 100% !important;
+  }
+}

@@ -19,6 +19,8 @@
   let showOfferForm = false;
   let showPaymentMethodForm = false;
   let showTraderNameEditor = false;
+  let showDisableTwoFactorForm = false;
+  let showTwoFactorSetupDetails = false;
   let offerRequirementsLoading = false;
   let adStatusFilter = "all";
   let lastMyOffers = [];
@@ -530,8 +532,8 @@
     bindTradeListEvents();
   }
 
-  function tradeFilterButton(key, label, count) {
-    return `<button class="${tradeStatusFilter === key ? "active" : ""}" type="button" data-trade-filter="${key}"><span>${label}</span><b>${count}</b></button>`;
+  function tradeFilterButton(key, label) {
+    return `<button class="${tradeStatusFilter === key ? "active" : ""}" type="button" data-trade-filter="${key}"><span>${label}</span></button>`;
   }
 
   function bindTradeListEvents() {
@@ -2090,7 +2092,7 @@
           <div><h3>${icon("shield")} Two-Factor Authentication</h3><p>Use Google Authenticator, Authy, 1Password, or any TOTP app.</p></div>
           ${statusBadge(twoFactor.enabled ? "Enabled" : setup ? "Setup pending" : "Disabled", twoFactor.enabled ? "success" : "neutral")}
         </div>
-        ${setup ? twoFactorSetupBlock(setup) : twoFactor.enabled ? twoFactorEnabledBlock() : twoFactorDisabledBlock()}
+        ${setup && showTwoFactorSetupDetails ? twoFactorSetupBlock(setup) : twoFactor.enabled ? twoFactorEnabledBlock() : twoFactorDisabledBlock(Boolean(setup))}
       </section>
 
       <section class="settings-card settings-card-flat">
@@ -2291,7 +2293,11 @@
     document.querySelector("#passwordChangeForm")?.addEventListener("submit", handlePasswordChange);
     document.querySelector("#withdrawalAddressForm")?.addEventListener("submit", handleWithdrawalAddressSubmit);
     document.querySelector("#startTwoFactorSetup")?.addEventListener("click", handleStartTwoFactorSetup);
+    document.querySelector("#restartTwoFactorSetup")?.addEventListener("click", handleRestartTwoFactorSetup);
+    document.querySelector("#copyTwoFactorSecret")?.addEventListener("click", handleCopyTwoFactorSecret);
     document.querySelector("#confirmTwoFactor")?.addEventListener("click", handleConfirmTwoFactor);
+    document.querySelector("#showDisableTwoFactorForm")?.addEventListener("click", handleShowDisableTwoFactorForm);
+    document.querySelector("#cancelDisableTwoFactor")?.addEventListener("click", handleCancelDisableTwoFactor);
     document.querySelector("#disableTwoFactor")?.addEventListener("click", handleDisableTwoFactor);
     document.querySelector("#revokeOtherSessions")?.addEventListener("click", handleRevokeOtherSessions);
 
@@ -2532,11 +2538,11 @@
     }
   }
 
-  function twoFactorDisabledBlock() {
+  function twoFactorDisabledBlock(hasPendingSetup = false) {
     return `
       <div class="settings-security-block">
-        <p class="app-muted">Add 2FA before launch so sign-ins and withdrawals can require an authenticator code.</p>
-        <button class="settings-action success" type="button" id="startTwoFactorSetup">Set up 2FA</button>
+        <p class="app-muted">${hasPendingSetup ? "Finish your pending 2FA setup when you are ready." : "Require an authenticator code for sign-ins, withdrawals, and sensitive account changes."}</p>
+        <button class="settings-action success" type="button" id="startTwoFactorSetup">Enable 2FA</button>
       </div>
     `;
   }
@@ -2545,23 +2551,54 @@
     return `
       <div class="settings-security-block">
         <p class="app-muted">2FA is active on this account. New sign-ins require a six-digit authenticator code.</p>
-        <label class="form-field compact"><span>Authenticator code</span><input id="disableTwoFactorCode" inputmode="numeric" maxlength="6" placeholder="code" /></label>
-        <button class="settings-action danger" type="button" id="disableTwoFactor">Disable 2FA</button>
+        ${showDisableTwoFactorForm ? `
+          <div class="two-factor-disable-confirm">
+            <label class="form-field compact"><span>Authenticator code</span><input id="disableTwoFactorCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="code" autofocus /></label>
+            <div class="two-factor-secret-actions">
+              <button class="settings-action danger" type="button" id="disableTwoFactor">Confirm disable</button>
+              <button class="settings-action" type="button" id="cancelDisableTwoFactor">Cancel</button>
+            </div>
+          </div>
+        ` : `<button class="settings-action danger" type="button" id="showDisableTwoFactorForm">Disable 2FA</button>`}
       </div>
     `;
   }
 
   function twoFactorSetupBlock(setup) {
     return `
-      <div class="settings-security-block">
-        <p class="app-muted">Add this secret to your authenticator app, then enter the six-digit code it shows.</p>
-        <code class="secret-code">${escapeHtml(setup.secret || "")}</code>
-        <div class="settings-form-grid compact-grid">
-          <label class="form-field"><span>Authenticator code</span><input id="confirmTwoFactorCode" inputmode="numeric" maxlength="6" placeholder="code" /></label>
+      <div class="settings-security-block two-factor-setup-block">
+        <p class="app-muted">Scan the QR code with your authenticator app, then enter the six-digit code it shows.</p>
+        <div class="two-factor-setup-grid">
+          <div class="two-factor-qr-card" aria-label="Authenticator setup QR code">
+            ${twoFactorQrCodeSvg(setup.otpauthUri || "")}
+          </div>
+          <div class="two-factor-secret-panel">
+            <span>Setup key</span>
+            <code class="secret-code">${escapeHtml(setup.secret || "")}</code>
+            <div class="two-factor-secret-actions">
+              <button class="settings-action" type="button" id="copyTwoFactorSecret" data-secret="${escapeAttr(setup.secret || "")}">Copy key</button>
+              <button class="settings-action warning" type="button" id="restartTwoFactorSetup">New key</button>
+            </div>
+          </div>
+        </div>
+        <div class="settings-form-grid compact-grid two-factor-confirm-grid">
+          <label class="form-field"><span>Authenticator code</span><input id="confirmTwoFactorCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="code" /></label>
           <div class="settings-form-actions"><button class="app-button" type="button" id="confirmTwoFactor">Enable 2FA</button></div>
         </div>
       </div>
     `;
+  }
+
+  function twoFactorQrCodeSvg(value) {
+    if (!value || typeof qrcode !== "function") return `<span class="qr-placeholder">QR</span>`;
+    try {
+      const qr = qrcode(0, "M");
+      qr.addData(value);
+      qr.make();
+      return qr.createSvgTag({ cellSize: 4, margin: 2, alt: "Authenticator setup QR code", title: "BRX 2FA setup" });
+    } catch (error) {
+      return `<span class="qr-placeholder">QR</span>`;
+    }
   }
 
   function sessionRow(session) {
@@ -2684,19 +2721,62 @@
     }
   }
 
+  function handleShowDisableTwoFactorForm() {
+    showDisableTwoFactorForm = true;
+    renderSettings();
+    setTimeout(() => document.querySelector("#disableTwoFactorCode")?.focus(), 0);
+  }
+
+  function handleCancelDisableTwoFactor() {
+    showDisableTwoFactorForm = false;
+    renderSettings();
+  }
+
   async function handleStartTwoFactorSetup() {
     try {
+      showDisableTwoFactorForm = false;
+      const existingSetup = currentUser()?.security?.twoFactorSetup;
+      if (existingSetup) {
+        showTwoFactorSetupDetails = true;
+        renderSettings();
+        return;
+      }
+      showTwoFactorSetupDetails = true;
       await securityService.startTwoFactorSetup();
-      showToast("2FA setup started.");
+      showToast("Scan the QR code to finish enabling 2FA.");
       renderSettings();
     } catch (error) {
       showToast(error.message || "Could not start 2FA setup.");
     }
   }
 
+  async function handleRestartTwoFactorSetup() {
+    try {
+      showDisableTwoFactorForm = false;
+      showTwoFactorSetupDetails = true;
+      await securityService.startTwoFactorSetup();
+      showToast("New 2FA setup key created.");
+      renderSettings();
+    } catch (error) {
+      showToast(error.message || "Could not create a new 2FA key.");
+    }
+  }
+
+  async function handleCopyTwoFactorSecret(event) {
+    const secret = event.currentTarget.dataset.secret || "";
+    if (!secret) return showToast("No setup key to copy.");
+    try {
+      await navigator.clipboard?.writeText(secret);
+      showToast("2FA setup key copied.");
+    } catch (error) {
+      showToast("Could not copy setup key.");
+    }
+  }
+
   async function handleConfirmTwoFactor() {
     try {
       await securityService.confirmTwoFactor(document.querySelector("#confirmTwoFactorCode").value);
+      showDisableTwoFactorForm = false;
       showToast("2FA enabled.");
       renderSettings();
     } catch (error) {
@@ -2705,9 +2785,11 @@
   }
 
   async function handleDisableTwoFactor() {
-    if (!confirm("Disable two-factor authentication?")) return;
     try {
-      await securityService.disableTwoFactor(document.querySelector("#disableTwoFactorCode").value);
+      const code = document.querySelector("#disableTwoFactorCode")?.value?.trim() || "";
+      if (!/^\d{6}$/.test(code)) return showToast("Enter the six-digit authenticator code.");
+      await securityService.disableTwoFactor(code);
+      showDisableTwoFactorForm = false;
       showToast("2FA disabled.");
       renderSettings();
     } catch (error) {
