@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { BscService } from "../blockchain/bsc.service";
 import { env } from "../config/env";
 import { DatabaseService } from "../database/database.service";
+import { PlatformSettingsService } from "../platform-settings/platform-settings.service";
 
 interface LimitRow {
   tier: string;
@@ -32,7 +33,7 @@ interface StatsRow {
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly db: DatabaseService, private readonly bsc: BscService) {}
+  constructor(private readonly db: DatabaseService, private readonly bsc: BscService, private readonly platformSettingsService: PlatformSettingsService) {}
 
   async stats() {
     const result = await this.db.query<StatsRow>(
@@ -108,6 +109,7 @@ export class AdminService {
       this.treasuryWallet("cold", env.bscColdWalletAddress),
     ]);
     const sweeps = await this.recentSweeps();
+    const settings = await this.platformSettingsService.getSettings();
 
     return {
       treasury: {
@@ -115,11 +117,12 @@ export class AdminService {
         asset: "USDT",
         hotWalletSignerConfigured: this.bsc.withdrawalSignerConfigured(),
         gasWalletSignerConfigured: this.bsc.gasSignerConfigured(),
-        sweepEnabled: env.bscSweepEnabled,
-        sweepMinUsdt: env.bscSweepMinUsdt,
-        autoApproveLimitUsdt: env.withdrawalAutoApproveLimitUsdt,
-        manualReviewAboveUsdt: env.withdrawalAutoApproveLimitUsdt,
-        dailyPlatformLimitUsdt: env.withdrawalDailyPlatformLimitUsdt,
+        sweepEnabled: settings.bscSweepEnabled,
+        sweepMinUsdt: settings.bscSweepMinUsdt,
+        autoApproveLimitUsdt: settings.withdrawalAutoApproveLimitUsdt,
+        manualReviewAboveUsdt: settings.withdrawalAutoApproveLimitUsdt,
+        dailyPlatformLimitUsdt: settings.withdrawalDailyPlatformLimitUsdt,
+        withdrawalFeeUsdt: settings.withdrawalFeeUsdt,
         liabilities: {
           availableUsdt: liability.available_usdt,
           lockedUsdt: liability.locked_usdt,
@@ -242,6 +245,20 @@ export class AdminService {
     return { auditLogs: result.rows.map((row) => this.keysToCamel(row)) };
   }
 
+  async platformSettings() {
+    return { settings: await this.platformSettingsService.getSettings() };
+  }
+
+  async updatePlatformSettings(adminId: string, body: {
+    withdrawalFeeUsdt?: string | number;
+    withdrawalAutoApproveLimitUsdt?: string | number;
+    withdrawalDailyPlatformLimitUsdt?: string | number;
+    bscSweepEnabled?: boolean;
+    bscSweepMinUsdt?: string | number;
+    enabledPaymentMethodTypes?: string[];
+  }) {
+    return this.platformSettingsService.updateSettings(adminId, body);
+  }
   async limits() {
     const result = await this.db.query<LimitRow>(
       `SELECT tier, daily_trade_limit_usd, withdrawal_limit_usd, updated_at

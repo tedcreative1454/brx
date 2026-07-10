@@ -8,6 +8,7 @@ import { env } from "../config/env";
 import { DatabaseService } from "../database/database.service";
 import { LedgerService } from "../ledger/ledger.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { PlatformSettingsService } from "../platform-settings/platform-settings.service";
 
 interface WalletScanRow {
   user_id: string;
@@ -43,6 +44,7 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
     private readonly ledger: LedgerService,
     private readonly alerts: AlertsService,
     private readonly notifications: NotificationsService,
+    private readonly platformSettings: PlatformSettingsService,
   ) {}
 
   onModuleInit() {
@@ -262,7 +264,8 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async sweepUserWallet(userId: string, depositId: string) {
-    if (!env.bscSweepEnabled) return null;
+    const platform = await this.platformSettings.getSettings();
+    if (!platform.bscSweepEnabled) return null;
     if (!env.bscHotWalletAddress || !this.bsc.isAddress(env.bscHotWalletAddress)) return null;
 
     const walletResult = await this.db.query<SweepWalletRow>(
@@ -287,7 +290,7 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
     if (activeSweep.rows[0]) return null;
 
     const amount = await this.bsc.usdtBalance(wallet.deposit_address);
-    if (Number(amount) < env.bscSweepMinUsdt) return null;
+    if (Number(amount) < platform.bscSweepMinUsdt) return null;
 
     const privateKey = this.decrypt(wallet.encrypted_private_key);
     const gasRequired = this.bsc.applyGasBuffer(await this.bsc.estimateUsdtTransferGasWei(privateKey, env.bscHotWalletAddress, amount));

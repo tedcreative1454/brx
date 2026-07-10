@@ -1556,6 +1556,9 @@
     if (!user.accountSettingsLoaded && accountService) {
       void accountService.loadSettings().then(() => renderWallet()).catch((error) => console.error(error));
     }
+    if (activeWalletMode === "withdraw" && securityService && !user.securityLoaded) {
+      void securityService.loadSecurity().then(() => renderWallet()).catch((error) => console.error(error));
+    }
 
     const depositAddress = user.depositAddress || "";
     const balance = user.balance || window.BRX.profileService.emptyBalance();
@@ -1679,6 +1682,7 @@
       ? (user.withdrawalAddresses || []).filter((address) => address.isActive !== false && address.network === selectedNetwork)
       : [];
     const defaultAddress = addresses.find((address) => address.isDefault) || addresses[0];
+    const twoFactorGate = selectedNetwork === "BEP20" ? withdrawTwoFactorGate(user) : "";
     return `
       <section class="wallet-panel wallet-form-panel">
         <div class="sheet-head">
@@ -1691,7 +1695,7 @@
         ${networkSelector("withdraw", selectedNetwork)}
         ${!selected ? `<p class="network-helper">Choose BNB Smart Chain for BEP20 withdrawals. TRON withdrawals will be added later.</p>` : ""}
         ${selected && selected.status !== "available" ? `<p class="deposit-note">${escapeHtml(selected.name)} withdrawals are not enabled yet. Choose BNB Smart Chain for live withdrawals.</p>` : ""}
-        ${selectedNetwork === "BEP20" ? `
+        ${selectedNetwork === "BEP20" ? twoFactorGate || `
           <form class="wallet-action-form" id="withdrawForm">
             ${addresses.length ? `
               <label class="form-field"><span>Saved BEP20 address</span><select id="withdrawAddressId" required>
@@ -1701,7 +1705,7 @@
               <section class="deposit-address-card pending"><div><span>No saved withdrawal address</span><strong>Add a BEP20 address first</strong><small>Open Settings > Addresses and save a wallet you control.</small></div><a class="app-button small" href="#/settings?tab=addresses">Add address</a></section>
             `}
             <label class="form-field"><span>Amount</span><input id="withdrawAmount" inputmode="decimal" placeholder="0.00" required /></label>
-            <p class="deposit-note">Withdrawals are sent on BNB Smart Chain. Confirm the saved address carefully; approved withdrawals cannot be reversed on-chain.</p>
+            <p class="deposit-note">${withdrawalNote(user)}</p>
             <button class="app-button" type="submit" ${addresses.length ? "" : "disabled"}>Request withdrawal</button>
           </form>
         ` : ""}
@@ -1709,6 +1713,19 @@
     `;
   }
 
+  function withdrawTwoFactorGate(user) {
+    if (!user.securityLoaded) {
+      return `<section class="deposit-address-card pending"><div><span>Security check</span><strong>Loading 2FA status</strong><small>BRX is checking whether this account can withdraw.</small></div></section>`;
+    }
+    if (user.security?.twoFactor?.enabled) return "";
+    return `<section class="deposit-address-card pending"><div><span>2FA required</span><strong>Set up authenticator first</strong><small>Withdrawals require Google Authenticator or another TOTP app before a code can be entered.</small></div><a class="app-button small" href="#/settings?tab=security">Set up 2FA</a></section>`;
+  }
+
+  function withdrawalNote(user) {
+    const fee = Number(user.platformSettings?.withdrawalFeeUsdt || 0);
+    const feeText = fee > 0 ? ` Withdrawal fee: ${format(fee)} USDT.` : "";
+    return `Withdrawals are sent on BNB Smart Chain. Confirm the saved address carefully; approved withdrawals cannot be reversed on-chain.${feeText}`;
+  }
   function transferPanel() {
     return `
       <section class="wallet-panel wallet-form-panel internal-transfer-panel">
@@ -1806,13 +1823,20 @@
     const withdrawalAddressId = document.querySelector("#withdrawAddressId")?.value;
     const amount = document.querySelector("#withdrawAmount")?.value;
     if (!withdrawalAddressId) return showToast("Save a BEP20 withdrawal address first.");
+    const user = currentUser();
+    if (!user?.securityLoaded && securityService) await securityService.loadSecurity();
+    if (!currentUser()?.security?.twoFactor?.enabled) {
+      showToast("Set up 2FA before withdrawing.");
+      location.hash = "#/settings?tab=security";
+      return;
+    }
     const twoFactorCode = requestAuthenticatorCode("Enter your authenticator code to request this withdrawal.");
     if (!twoFactorCode) return;
     try {
       const result = await accountService.requestWithdrawal({ withdrawalAddressId, amount, twoFactorCode, network: "BEP20", asset: "USDT" });
-      const user = currentUser();
-      if (user && result.balance) {
-        saveUsers(users().map((item) => item.id === user.id ? { ...item, balance: result.balance } : item));
+      const refreshedUser = currentUser();
+      if (refreshedUser && result.balance) {
+        saveUsers(users().map((item) => item.id === refreshedUser.id ? { ...item, balance: result.balance } : item));
       }
       showToast("Withdrawal approved and queued for BEP20 broadcast.");
       renderWallet();
@@ -2131,12 +2155,7 @@
             <label class="form-field wide"><span>Payment Type</span>
               <select id="paymentType" required>
                 <option value="">Select payment method</option>
-                <option value="telebirr">Telebirr</option>
-                <option value="mpesa">M-Pesa</option>
-                <option value="cbe_birr">CBE Birr</option>
-                <option value="cbe_bank">CBE</option>
-                <option value="bank_of_abyssinia">Bank of Abyssinia</option>
-                <option value="awash_bank">Awash Bank</option>
+                ${paymentTypeOptions(user)}
               </select>
             </label>
             <label class="form-field wide"><span>Account Holder Name</span><input id="paymentAccountName" autocomplete="name" placeholder="Full name on the account" required /></label>
@@ -2836,6 +2855,16 @@
         </span>
       </div>
     `;
+  }
+  function enabledPaymentTypes(user) {
+    const configured = user.platformSettings?.enabledPaymentMethodTypes;
+    return Array.isArray(configured) && configured.length
+      ? configured
+      : ["telebirr", "mpesa", "cbe_birr", "cbe_bank", "bank_of_abyssinia", "awash_bank"];
+  }
+
+  function paymentTypeOptions(user) {
+    return enabledPaymentTypes(user).map((type) => `<option value="${escapeAttr(type)}">${escapeHtml(paymentTypeLabel(type))}</option>`).join("");
   }
   function paymentTypeLabel(type) {
     if (type === "telebirr") return "Telebirr";

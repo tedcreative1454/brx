@@ -25,6 +25,7 @@
       tradePreferences: backendUser.tradePreferences || existing.tradePreferences || defaultTradePreferences(),
       paymentMethods: payload.paymentMethods || existing.paymentMethods || [],
       withdrawalAddresses: payload.withdrawalAddresses || existing.withdrawalAddresses || [],
+      platformSettings: payload.platformSettings || existing.platformSettings || {},
       accountSettingsLoaded: true,
     };
     const saved = upsertUser(nextUser);

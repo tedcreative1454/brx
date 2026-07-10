@@ -24,6 +24,27 @@ export class AdminController {
     await this.auth.requireAdmin(authorization);
     return this.admin.treasury();
   }
+  @Get("platform-settings")
+  async platformSettings(@Headers("authorization") authorization?: string) {
+    await this.auth.requireAdmin(authorization);
+    return this.admin.platformSettings();
+  }
+
+  @Patch("platform-settings")
+  async updatePlatformSettings(
+    @Headers("authorization") authorization: string | undefined,
+    @Body() body: {
+      withdrawalFeeUsdt?: string | number;
+      withdrawalAutoApproveLimitUsdt?: string | number;
+      withdrawalDailyPlatformLimitUsdt?: string | number;
+      bscSweepEnabled?: boolean;
+      bscSweepMinUsdt?: string | number;
+      enabledPaymentMethodTypes?: string[];
+    },
+  ) {
+    const admin = await this.auth.requireAdmin(authorization);
+    return this.admin.updatePlatformSettings(admin.id, body);
+  }
   @Get("users")
   async users(@Headers("authorization") authorization?: string) {
     await this.auth.requireAdmin(authorization);

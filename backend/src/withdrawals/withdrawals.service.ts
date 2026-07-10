@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { PoolClient } from "pg";
 import { AlertsService } from "../alerts/alerts.service";
 import { AuthenticatedUser, AuthService } from "../auth/auth.service";
 import { BscService } from "../blockchain/bsc.service";
@@ -6,6 +7,7 @@ import { env } from "../config/env";
 import { DatabaseService } from "../database/database.service";
 import { EmailService } from "../email/email.service";
 import { LedgerService } from "../ledger/ledger.service";
+import { PlatformSettingsService } from "../platform-settings/platform-settings.service";
 
 export interface WithdrawalRequestBody {
   withdrawalAddressId?: string;
@@ -67,7 +69,6 @@ interface LimitRow {
 }
 
 const PASSWORD_WITHDRAWAL_COOLDOWN_MS = 24 * 60 * 60 * 1000;
-const NEW_WITHDRAWAL_ADDRESS_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
@@ -82,6 +83,7 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
     private readonly bsc: BscService,
     private readonly email: EmailService,
     private readonly alerts: AlertsService,
+    private readonly platformSettings: PlatformSettingsService,
   ) {}
 
   onModuleInit() {
@@ -99,6 +101,8 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
     const asset = String(body.asset || "USDT").trim().toUpperCase();
     const network = String(body.network || "BEP20").trim().toUpperCase();
     const amount = this.normalizeAmount(body.amount);
+    const platform = await this.platformSettings.getSettings();
+    const fee = this.withdrawalFee(platform.withdrawalFeeUsdt);
 
     if (asset !== "USDT") throw new BadRequestException("Only USDT withdrawals are supported right now.");
     if (network !== "BEP20") throw new BadRequestException("Choose a supported withdrawal network.");
@@ -108,10 +112,11 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
     const risk = await this.loadRiskUser(user.id);
     this.assertUserCanWithdraw(risk, amount);
     await this.assertWithinTierLimit(risk, amount);
-    await this.assertWithinPlatformDailyLimit(amount);
+    await this.assertWithinPlatformDailyLimit(amount, platform.withdrawalDailyPlatformLimitUsdt);
 
     const withdrawalAddress = await this.resolveWithdrawalAddress(user.id, body);
-    const review = this.withdrawalReview(amount);
+    await this.assertAvailableBalance(user.id, asset, amount, fee);
+    const review = this.withdrawalReview(amount, platform.withdrawalAutoApproveLimitUsdt);
 
     const result = await this.db.transaction(async (client) => {
       const inserted = await client.query<WithdrawalRow>(
@@ -119,7 +124,7 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
           (user_id, withdrawal_address_id, requested_by_session_id, address, network, asset, amount, fee, status,
            risk_decision, review_reason, approved_at, auto_approved_at)
          VALUES
-          ($1, $2, $3, $4, $5, $6, $7, 0, $8::tx_status, $9, $10, $11, $12)
+          ($1, $2, $3, $4, $5, $6, $7, $8, $9::tx_status, $10, $11, $12, $13)
          RETURNING id, user_id, withdrawal_address_id, address, network, asset, amount, fee, status, risk_decision,
            review_reason, tx_hash, auto_approved_at, approved_at, broadcast_at, confirmed_at, rejected_at,
            failed_reason, created_at, updated_at`,
@@ -131,6 +136,7 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
           withdrawalAddress.network,
           withdrawalAddress.asset,
           amount,
+          fee,
           review.status,
           review.riskDecision,
           review.reason,
@@ -150,13 +156,23 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
         idempotencyKey: `withdrawal:${withdrawal.id}:request`,
       });
 
+      await this.ledger.debitAvailableFee(client, {
+        userId: user.id,
+        asset,
+        amount: fee,
+        reason: "withdrawal_fee_reserved",
+        referenceType: "withdrawal",
+        referenceId: withdrawal.id,
+        idempotencyKey: `withdrawal:${withdrawal.id}:fee`,
+      });
+
       await client.query(
         `INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, metadata)
          VALUES ($1, $4, 'withdrawal', $2, $3::jsonb)`,
         [
           user.id,
           withdrawal.id,
-          JSON.stringify({ amount, asset, network, addressId: withdrawalAddress.id, policy: review.riskDecision, autoApproveLimitUsdt: env.withdrawalAutoApproveLimitUsdt }),
+          JSON.stringify({ amount, fee, asset, network, addressId: withdrawalAddress.id, policy: review.riskDecision, autoApproveLimitUsdt: platform.withdrawalAutoApproveLimitUsdt }),
           review.auditAction,
         ],
       );
@@ -178,6 +194,7 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
         userId: result.withdrawal.user_id,
         withdrawalId: result.withdrawal.id,
         amount: result.withdrawal.amount,
+        fee: result.withdrawal.fee,
         address: result.withdrawal.address,
       });
     }
@@ -211,7 +228,7 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
       await client.query(
         `INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, metadata)
          VALUES ($1, 'withdrawal.admin_approved', 'withdrawal', $2, $3::jsonb)`,
-        [adminId, withdrawalId, JSON.stringify({ note, amount: withdrawal.amount, address: withdrawal.address })],
+        [adminId, withdrawalId, JSON.stringify({ note, amount: withdrawal.amount, fee: withdrawal.fee, address: withdrawal.address })],
       );
 
       return updated.rows[0];
@@ -221,6 +238,7 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
       adminId,
       withdrawalId,
       amount: result.amount,
+      fee: result.fee,
       address: result.address,
     });
     return { withdrawal: this.toApi(result) };
@@ -245,6 +263,7 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
         referenceId: withdrawal.id,
         idempotencyKey: `withdrawal:${withdrawal.id}:admin-rejected`,
       });
+      await this.refundWithdrawalFee(client, withdrawal, "withdrawal_admin_rejected_fee_refund", `withdrawal:${withdrawal.id}:admin-rejected-fee`);
 
       const updated = await client.query<WithdrawalRow>(
         `UPDATE withdrawals
@@ -263,7 +282,7 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
       await client.query(
         `INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, metadata)
          VALUES ($1, 'withdrawal.admin_rejected', 'withdrawal', $2, $3::jsonb)`,
-        [adminId, withdrawalId, JSON.stringify({ reason, amount: withdrawal.amount, address: withdrawal.address })],
+        [adminId, withdrawalId, JSON.stringify({ reason, amount: withdrawal.amount, fee: withdrawal.fee, address: withdrawal.address })],
       );
 
       const balance = await client.query(
@@ -281,10 +300,12 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
       adminId,
       withdrawalId,
       amount: result.withdrawal.amount,
+      fee: result.withdrawal.fee,
       address: result.withdrawal.address,
     });
     return { withdrawal: this.toApi(result.withdrawal), balance: result.balance };
   }
+
   async myWithdrawals(userId: string) {
     const result = await this.db.query<WithdrawalRow>(
       `SELECT id, user_id, withdrawal_address_id, address, network, asset, amount, fee, status, risk_decision,
@@ -392,7 +413,7 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
         await client.query(
           `INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, metadata)
            VALUES ($1, 'withdrawal.confirmed', 'withdrawal', $2, $3::jsonb)`,
-          [row.user_id, row.id, JSON.stringify({ txHash: row.tx_hash, confirmations: status.confirmations })],
+          [row.user_id, row.id, JSON.stringify({ txHash: row.tx_hash, confirmations: status.confirmations, fee: row.fee })],
         );
       });
 
@@ -449,6 +470,7 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
         referenceId: row.id,
         idempotencyKey: `withdrawal:${row.id}:failed-return`,
       });
+      await this.refundWithdrawalFee(client, row, "withdrawal_failed_fee_refund", `withdrawal:${row.id}:failed-fee-return`);
       await client.query(
         `UPDATE withdrawals
          SET status = 'failed', failed_reason = $2, updated_at = now()
@@ -458,7 +480,7 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
       await client.query(
         `INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, metadata)
          VALUES ($1, 'withdrawal.failed_returned', 'withdrawal', $2, $3::jsonb)`,
-        [row.user_id, row.id, JSON.stringify({ reason })],
+        [row.user_id, row.id, JSON.stringify({ reason, fee: row.fee })],
       );
     });
     await this.email.sendWithdrawalFailed(withdrawal.user_email || "", withdrawal.amount, reason).catch((error) => this.logger.warn(error));
@@ -499,8 +521,7 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
     if (limit > 0 && Number(amount) > limit) throw new BadRequestException(`Withdrawal exceeds your ${tier} limit of ${limit.toLocaleString()} USDT.`);
   }
 
-  private async assertWithinPlatformDailyLimit(amount: string) {
-    const limit = env.withdrawalDailyPlatformLimitUsdt;
+  private async assertWithinPlatformDailyLimit(amount: string, limit: number) {
     if (limit <= 0) return;
 
     const result = await this.db.query<{ total: string }>(
@@ -512,17 +533,31 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
     );
     const current = Number(result.rows[0]?.total ?? 0);
     if (current + Number(amount) > limit) {
-      throw new BadRequestException(`Platform daily withdrawal cap reached. Try again later or contact support.`);
+      throw new BadRequestException("Platform daily withdrawal cap reached. Try again later or contact support.");
     }
   }
 
-  private withdrawalReview(amount: string) {
-    const autoApproveLimit = env.withdrawalAutoApproveLimitUsdt;
+  private async assertAvailableBalance(userId: string, asset: string, amount: string, fee: string) {
+    const total = Number(amount) + Number(fee);
+    const result = await this.db.query<{ available_balance: string }>(
+      `SELECT available_balance
+       FROM balances
+       WHERE user_id = $1 AND asset = $2
+       LIMIT 1`,
+      [userId, asset],
+    );
+    const available = Number(result.rows[0]?.available_balance ?? 0);
+    if (available < total) {
+      throw new BadRequestException(`Insufficient available USDT. This withdrawal needs ${total.toFixed(8)} USDT including the fee.`);
+    }
+  }
+
+  private withdrawalReview(amount: string, autoApproveLimit: number) {
     if (autoApproveLimit > 0 && Number(amount) <= autoApproveLimit) {
       return {
         status: "approved",
         riskDecision: "auto_approved",
-        reason: "Passed automatic checks: 2FA, active account, tier limit, password cooldown, platform cap, and available balance.",
+        reason: "Passed automatic checks: 2FA, active account, tier limit, platform cap, available balance, and configured fee.",
         approvedAt: new Date(),
         autoApprovedAt: new Date(),
         auditAction: "withdrawal.auto_approved",
@@ -544,6 +579,7 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
     if (note.length > 500) throw new BadRequestException("Review note must be 500 characters or fewer.");
     return note;
   }
+
   private async resolveWithdrawalAddress(userId: string, body: WithdrawalRequestBody) {
     const id = String(body.withdrawalAddressId || "").trim();
     if (!id) throw new BadRequestException("Choose a saved BEP20 withdrawal address first.");
@@ -559,11 +595,26 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
     if (!address) throw new BadRequestException("Saved withdrawal address was not found.");
     if (address.asset !== "USDT" || address.network !== "BEP20") throw new BadRequestException("Choose a USDT BEP20 withdrawal address.");
     if (!/^0x[a-fA-F0-9]{40}$/.test(address.address)) throw new BadRequestException("Saved withdrawal address is not a valid BEP20 address.");
-    const unlockAt = new Date(address.created_at).getTime() + NEW_WITHDRAWAL_ADDRESS_COOLDOWN_MS;
-    if (Date.now() < unlockAt) {
-      throw new BadRequestException(`New withdrawal addresses are locked for 24 hours. Try after ${new Date(unlockAt).toISOString()}.`);
-    }
     return address;
+  }
+
+  private async refundWithdrawalFee(client: PoolClient, withdrawal: WithdrawalRow, reason: string, idempotencyKey: string) {
+    if (Number(withdrawal.fee || 0) <= 0) return;
+    await this.ledger.creditAvailable(client, {
+      userId: withdrawal.user_id,
+      asset: withdrawal.asset,
+      amount: withdrawal.fee,
+      reason,
+      referenceType: "withdrawal",
+      referenceId: withdrawal.id,
+      idempotencyKey,
+    });
+  }
+
+  private withdrawalFee(value: string) {
+    const fee = Number(value);
+    if (!Number.isFinite(fee) || fee < 0) return "0.00000000";
+    return fee.toFixed(8);
   }
 
   private normalizeAmount(value: string | number | undefined) {
@@ -606,4 +657,3 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 }
-

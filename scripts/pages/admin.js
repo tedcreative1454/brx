@@ -9,7 +9,7 @@
   const adminService = window.BRX.adminService;
   const components = window.BRX.components;
 
-  let adminState = { stats: null, treasury: null, submissions: [], selected: null, limits: [], disputes: [], users: [], deposits: [], withdrawals: [], trades: [], auditLogs: [] };
+  let adminState = { stats: null, treasury: null, platformSettings: null, submissions: [], selected: null, limits: [], disputes: [], users: [], deposits: [], withdrawals: [], trades: [], auditLogs: [] };
   let adminUserSearch = "";
   let adminUserStatusFilter = "all";
 
@@ -118,6 +118,7 @@
     const jobs = {
       stats: adminService.stats(),
       treasury: adminService.treasury(),
+      platformSettings: adminService.platformSettings(),
       kyc: adminService.listKyc(),
       limits: adminService.limits(),
       disputes: adminService.listDisputes(),
@@ -141,6 +142,7 @@
 
     adminState.stats = result.stats.ok ? result.stats.value.stats || null : null;
     adminState.treasury = result.treasury.ok ? result.treasury.value.treasury || null : null;
+    adminState.platformSettings = result.platformSettings.ok ? result.platformSettings.value.settings || null : null;
     adminState.submissions = result.kyc.ok ? result.kyc.value.submissions || [] : [];
     adminState.limits = result.limits.ok ? result.limits.value.limits || [] : [];
     adminState.disputes = result.disputes.ok ? result.disputes.value.disputes || [] : [];
@@ -158,6 +160,7 @@
     renderOperations();
     renderAdminSettings();
 
+    if (!result.platformSettings.ok) showToast(adminError(result.platformSettings.error, "Could not load platform settings."));
     if (!result.stats.ok) document.querySelector("#adminStats").innerHTML = errorBlock(adminError(result.stats.error, "Could not load platform statistics."));
     if (!result.users.ok) document.querySelector("#adminUsersBody").innerHTML = errorBlock(adminError(result.users.error, "Could not load users."));
     if (!result.kyc.ok) document.querySelector("#kycQueue").innerHTML = errorBlock(adminError(result.kyc.error, "Could not load KYC submissions."));
@@ -622,6 +625,7 @@
   function renderAdminSettings() {
     const grid = document.querySelector("#adminSettings .admin-settings-grid");
     if (grid) grid.innerHTML = adminSettingsTiles();
+    document.querySelector("#platformSettingsForm")?.addEventListener("submit", handlePlatformSettingsSave);
   }
 
   function adminSettingsTiles() {
@@ -632,7 +636,62 @@
       ${settingTile("Email", "Resend", "Verification and security messages.")}
       ${settingTile("KYC", "Manual review", "Admin approval raises account limits.")}
       ${settingTile("Escrow", "Internal ledger", "P2P trades remain off-chain.")}
+      ${platformSettingsForm()}
     `;
+  }
+  function platformSettingsForm() {
+    const settings = adminState.platformSettings || {};
+    const enabled = new Set(settings.enabledPaymentMethodTypes || []);
+    const methods = ["telebirr", "mpesa", "cbe_birr", "cbe_bank", "bank_of_abyssinia", "awash_bank", "airtel_money", "bank", "other"];
+    return `
+      <form id="platformSettingsForm" class="admin-setting-tile platform-settings-form">
+        <span>Admin settings</span>
+        <label class="form-field"><span>Withdrawal fee USDT</span><input id="platformWithdrawalFee" inputmode="decimal" value="${escapeAttr(settings.withdrawalFeeUsdt || "0")}" /></label>
+        <label class="form-field"><span>Auto approve up to USDT</span><input id="platformAutoApprove" inputmode="decimal" value="${escapeAttr(settings.withdrawalAutoApproveLimitUsdt ?? "50")}" /></label>
+        <label class="form-field"><span>Daily withdrawal cap USDT</span><input id="platformDailyCap" inputmode="decimal" value="${escapeAttr(settings.withdrawalDailyPlatformLimitUsdt ?? "1000")}" /></label>
+        <label class="form-field"><span>Sweep minimum USDT</span><input id="platformSweepMin" inputmode="decimal" value="${escapeAttr(settings.bscSweepMinUsdt ?? "1")}" /></label>
+        <label class="admin-checkbox-line"><input id="platformSweepEnabled" type="checkbox" ${settings.bscSweepEnabled ? "checked" : ""} /> Auto sweep deposits</label>
+        <div class="admin-payment-checkboxes">
+          <strong>Enabled payment methods</strong>
+          ${methods.map((type) => `<label><input type="checkbox" value="${escapeAttr(type)}" ${enabled.has(type) ? "checked" : ""} /> ${escapeHtml(paymentMethodLabel(type))}</label>`).join("")}
+        </div>
+        <button class="app-button small" type="submit">Save settings</button>
+      </form>
+    `;
+  }
+
+  async function handlePlatformSettingsSave(event) {
+    event.preventDefault();
+    const enabledPaymentMethodTypes = [...document.querySelectorAll("#platformSettingsForm .admin-payment-checkboxes input:checked")].map((input) => input.value);
+    try {
+      const result = await adminService.updatePlatformSettings({
+        withdrawalFeeUsdt: document.querySelector("#platformWithdrawalFee").value,
+        withdrawalAutoApproveLimitUsdt: document.querySelector("#platformAutoApprove").value,
+        withdrawalDailyPlatformLimitUsdt: document.querySelector("#platformDailyCap").value,
+        bscSweepEnabled: document.querySelector("#platformSweepEnabled").checked,
+        bscSweepMinUsdt: document.querySelector("#platformSweepMin").value,
+        enabledPaymentMethodTypes,
+      });
+      adminState.platformSettings = result.settings || null;
+      const treasury = await adminService.treasury();
+      adminState.treasury = treasury.treasury || null;
+      renderAdminSettings();
+      showToast("Platform settings saved.");
+    } catch (error) {
+      showToast(error.message || "Could not save platform settings.");
+    }
+  }
+
+  function paymentMethodLabel(type) {
+    if (type === "telebirr") return "Telebirr";
+    if (type === "mpesa") return "M-Pesa";
+    if (type === "cbe_birr") return "CBE Birr";
+    if (type === "cbe_bank") return "CBE";
+    if (type === "bank_of_abyssinia") return "Bank of Abyssinia";
+    if (type === "awash_bank") return "Awash Bank";
+    if (type === "airtel_money") return "Airtel Money";
+    if (type === "bank") return "Bank transfer";
+    return "Other";
   }
   function treasurySummaryTile() {
     const treasury = adminState.treasury;

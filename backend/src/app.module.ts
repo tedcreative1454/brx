@@ -12,6 +12,7 @@ import { KycModule } from "./kyc/kyc.module";
 import { LedgerModule } from "./ledger/ledger.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { OffersModule } from "./offers/offers.module";
+import { PlatformSettingsModule } from "./platform-settings/platform-settings.module";
 import { SecurityModule } from "./security/security.module";
 import { TradesModule } from "./trades/trades.module";
 import { WalletsModule } from "./wallets/wallets.module";
@@ -20,6 +21,7 @@ import { WithdrawalsModule } from "./withdrawals/withdrawals.module";
 @Module({
   imports: [
     DatabaseModule,
+    PlatformSettingsModule,
     AlertsModule,
     AdminModule,
     AccountModule,

@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import { DatabaseService } from "../database/database.service";
+import { PlatformSettingsService } from "../platform-settings/platform-settings.service";
 
 interface ProfileRow {
   id: string;
@@ -107,17 +108,22 @@ const DEFAULT_TRADE_PREFERENCES = {
 
 @Injectable()
 export class AccountService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(private readonly db: DatabaseService, private readonly platformSettings: PlatformSettingsService) {}
 
   async settings(userId: string) {
     await this.ensureSettingsRows(userId);
     const profile = await this.profile(userId);
     const paymentMethods = await this.paymentMethods(userId);
     const withdrawalAddresses = await this.withdrawalAddresses(userId);
+    const platformSettings = await this.platformSettings.getSettings();
     return {
       ...profile,
       paymentMethods: paymentMethods.paymentMethods,
       withdrawalAddresses: withdrawalAddresses.withdrawalAddresses,
+      platformSettings: {
+        withdrawalFeeUsdt: platformSettings.withdrawalFeeUsdt,
+        enabledPaymentMethodTypes: platformSettings.enabledPaymentMethodTypes,
+      },
     };
   }
 
@@ -538,7 +544,8 @@ export class AccountService {
 
   private async paymentMethodInput(userId: string, body: PaymentMethodBody) {
     void userId;
-    const type = this.paymentType(body.type);
+    const platformSettings = await this.platformSettings.getSettings();
+    const type = this.paymentType(body.type, platformSettings.enabledPaymentMethodTypes);
     const label = this.requiredText(body.label || this.defaultLabel(type), "Label", 60);
     const accountName = this.requiredText(body.accountName, "Account name", 100);
     const phoneNumber = this.optionalText(body.phoneNumber, 40);
@@ -623,10 +630,12 @@ export class AccountService {
     };
   }
 
-  private paymentType(type: string | undefined) {
+  private paymentType(type: string | undefined, enabledTypes: string[]) {
     const normalized = String(type ?? "").trim().toLowerCase();
-    if (["telebirr", "mpesa", "cbe_birr", "cbe_bank", "bank_of_abyssinia", "awash_bank", "airtel_money", "bank", "other"].includes(normalized)) return normalized;
-    throw new BadRequestException("Payment method type must be Telebirr, M-Pesa, CBE, Bank of Abyssinia, or Awash Bank.");
+    const supported = ["telebirr", "mpesa", "cbe_birr", "cbe_bank", "bank_of_abyssinia", "awash_bank", "airtel_money", "bank", "other"];
+    if (!supported.includes(normalized)) throw new BadRequestException("Choose a supported payment method type.");
+    if (!enabledTypes.includes(normalized)) throw new BadRequestException("This payment method is not enabled right now.");
+    return normalized;
   }
 
   private withdrawalNetwork(network: string | undefined) {

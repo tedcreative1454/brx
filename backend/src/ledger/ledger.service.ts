@@ -457,6 +457,47 @@ export class LedgerService {
 
     return true;
   }
+
+  async debitAvailableFee(client: PoolClient, input: {
+    userId: string;
+    asset?: string;
+    amount: string;
+    reason: string;
+    referenceType: string;
+    referenceId: string;
+    idempotencyKey: string;
+  }) {
+    const asset = input.asset ?? "USDT";
+    if (Number(input.amount) <= 0) return false;
+    await this.ensureBalance(client, input.userId, asset);
+
+    const inserted = await client.query<{ id: string }>(
+      `INSERT INTO ledger_entries
+        (user_id, asset, balance_type, amount, direction, reason, reference_type, reference_id, idempotency_key)
+       VALUES ($1, $2, 'available', $3, 'debit', $4, $5, $6, $7)
+       ON CONFLICT (idempotency_key) DO NOTHING
+       RETURNING id`,
+      [input.userId, asset, input.amount, input.reason, input.referenceType, input.referenceId, input.idempotencyKey],
+    );
+
+    if (inserted.rowCount === 0) return false;
+
+    const balanceUpdate = await client.query(
+      `UPDATE balances
+       SET available_balance = available_balance - $1::numeric,
+           updated_at = now()
+       WHERE user_id = $2
+         AND asset = $3
+         AND available_balance >= $1::numeric`,
+      [input.amount, input.userId, asset],
+    );
+
+    if (balanceUpdate.rowCount === 0) {
+      throw new Error("Insufficient available balance for withdrawal fee.");
+    }
+
+    return true;
+  }
   async getOrCreateBalance(userId: string, asset = "USDT") {
     return this.db.transaction(async (client) => {
       await this.ensureBalance(client, userId, asset);
