@@ -81,6 +81,59 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
     );
     return { deposits: result.rows.map((row) => this.keysToCamel(row)) };
   }
+
+  async sweepFundedWallets(limit = 50) {
+    const cappedLimit = Math.max(1, Math.min(Number(limit) || 50, 200));
+    const wallets = await this.db.query<SweepWalletRow & { deposit_id: string | null }>(
+      `SELECT wa.id, wa.user_id, wa.deposit_address, wa.encrypted_private_key,
+              (
+                SELECT d.id
+                FROM deposits d
+                WHERE d.user_id = wa.user_id
+                  AND d.to_address = wa.deposit_address
+                  AND d.network = 'BEP20'
+                  AND d.asset = 'USDT'
+                  AND d.status = 'credited'
+                ORDER BY d.credited_at DESC NULLS LAST, d.created_at DESC
+                LIMIT 1
+              ) AS deposit_id
+       FROM wallet_accounts wa
+       WHERE wa.asset = 'USDT'
+         AND wa.network = 'BEP20'
+         AND wa.status = 'active'
+       ORDER BY wa.created_at ASC
+       LIMIT $1`,
+      [cappedLimit],
+    );
+
+    const result = { checked: 0, attempted: 0, broadcast: 0, gasFunded: 0, failed: 0, skipped: 0 };
+    const sweeps: Array<{ wallet: string; status: string; txHash?: string; reason?: string }> = [];
+
+    for (const wallet of wallets.rows) {
+      result.checked += 1;
+      const sweep = await this.sweepUserWallet(wallet.user_id, wallet.deposit_id).catch((error) => {
+        this.logger.warn(error instanceof Error ? error.message : error);
+        return { status: "failed", reason: error instanceof Error ? error.message : "Sweep failed." };
+      });
+      if (!sweep?.status) {
+        result.skipped += 1;
+        continue;
+      }
+      result.attempted += 1;
+      if (sweep.status === "broadcast") result.broadcast += 1;
+      else if (sweep.status === "gas_funded") result.gasFunded += 1;
+      else if (sweep.status === "failed") result.failed += 1;
+      else result.skipped += 1;
+      sweeps.push({
+        wallet: wallet.deposit_address,
+        status: sweep.status,
+        txHash: "txHash" in sweep ? sweep.txHash : undefined,
+        reason: "reason" in sweep ? sweep.reason : undefined,
+      });
+    }
+
+    return { ...result, sweeps };
+  }
   private async scanAssignedWalletsOnce() {
     const latest = await this.bsc.latestBlock();
     const fromBlock = await this.nextFromBlock(latest);
@@ -276,7 +329,7 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  private async sweepUserWallet(userId: string, depositId: string) {
+  private async sweepUserWallet(userId: string, depositId: string | null) {
     const platform = await this.platformSettings.getSettings();
     if (!platform.bscSweepEnabled) return null;
     if (!env.bscHotWalletAddress || !this.bsc.isAddress(env.bscHotWalletAddress)) return null;
@@ -291,16 +344,18 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
     const wallet = walletResult.rows[0];
     if (!wallet) return null;
 
-    const activeSweep = await this.db.query<{ id: string }>(
-      `SELECT id
+    const activeSweep = await this.db.query<{ id: string; status: string }>(
+      `SELECT id, status
        FROM wallet_sweeps
        WHERE wallet_account_id = $1
          AND status IN ('pending', 'gas_funded', 'broadcast')
          AND created_at >= now() - interval '45 minutes'
+       ORDER BY created_at DESC
        LIMIT 1`,
       [wallet.id],
     );
-    if (activeSweep.rows[0]) return null;
+    const activeSweepRow = activeSweep.rows[0];
+    if (activeSweepRow && activeSweepRow.status !== "gas_funded") return null;
 
     const amount = await this.bsc.usdtBalance(wallet.deposit_address);
     if (Number(amount) < platform.bscSweepMinUsdt) return null;
@@ -311,6 +366,7 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
     const gasNeededBnb = this.bsc.formatNative(gasRequired);
 
     if (currentGas < gasRequired) {
+      if (activeSweepRow?.status === "gas_funded") return { status: "gas_funded" };
       if (!env.bscGasWalletPrivateKey) {
         await this.recordSweepFailure(wallet, depositId, amount, gasNeededBnb, "Gas wallet private key is not configured.");
         return { status: "failed" };
@@ -330,7 +386,9 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
       return { status: "gas_funded" };
     }
 
-    const sweep = await this.insertSweep(wallet, depositId, amount, "pending", gasNeededBnb, null, null);
+    const sweep = activeSweepRow?.status === "gas_funded"
+      ? activeSweepRow
+      : await this.insertSweep(wallet, depositId, amount, "pending", gasNeededBnb, null, null);
     try {
       const tx = await this.bsc.sendUsdtFromPrivateKey(privateKey, env.bscHotWalletAddress, amount);
       await this.db.query(
@@ -364,7 +422,7 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
 
   private async insertSweep(
     wallet: SweepWalletRow,
-    depositId: string,
+    depositId: string | null,
     amount: string,
     status: "pending" | "gas_funded" | "broadcast" | "failed",
     gasNeededBnb: string | null,
@@ -381,7 +439,7 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
     return result.rows[0];
   }
 
-  private async recordSweepFailure(wallet: SweepWalletRow, depositId: string, amount: string, gasNeededBnb: string, reason: string) {
+  private async recordSweepFailure(wallet: SweepWalletRow, depositId: string | null, amount: string, gasNeededBnb: string, reason: string) {
     const sweep = await this.insertSweep(wallet, depositId, amount, "failed", gasNeededBnb, null, null);
     await this.db.query("UPDATE wallet_sweeps SET error = $2, updated_at = now() WHERE id = $1", [sweep.id, reason]);
     await this.audit("wallet_sweep.failed", sweep.id, { userId: wallet.user_id, amount, address: wallet.deposit_address, reason });

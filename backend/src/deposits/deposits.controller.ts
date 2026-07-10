@@ -19,4 +19,10 @@ export class DepositsController {
     await this.auth.requireAdmin(authorization);
     return this.deposits.scanAssignedWallets();
   }
+
+  @Post("sweep")
+  async sweep(@Headers("authorization") authorization?: string) {
+    await this.auth.requireAdmin(authorization);
+    return this.deposits.sweepFundedWallets();
+  }
 }
