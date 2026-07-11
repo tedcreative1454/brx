@@ -3452,3 +3452,66 @@
     max-width: 90px !important;
   }
 }
+
+/* Native-feeling pull-to-refresh for the installed BRX PWA. */
+@media (max-width: 820px) {
+  body:has(.mobile-bottom-nav) {
+    overscroll-behavior-y: contain;
+  }
+
+  .pull-refresh-indicator {
+    --pull-distance: 0px;
+    position: fixed;
+    z-index: 115;
+    top: max(8px, env(safe-area-inset-top));
+    left: 50%;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 38px;
+    padding: 8px 14px;
+    border: 1px solid rgba(255, 255, 255, .11);
+    border-radius: 999px;
+    background: rgba(11, 22, 36, .96);
+    color: var(--muted);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .3);
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, calc(-54px + var(--pull-distance)));
+    transition: opacity 140ms ease, transform 140ms ease;
+  }
+
+  .pull-refresh-indicator.visible {
+    opacity: 1;
+  }
+
+  .pull-refresh-indicator span {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, .25);
+    border-top-color: var(--blue-2);
+    border-radius: 50%;
+  }
+
+  .pull-refresh-indicator.ready {
+    color: var(--text);
+  }
+
+  .pull-refresh-indicator.ready span {
+    border-color: var(--green);
+  }
+
+  .pull-refresh-indicator.refreshing span {
+    animation: brx-pull-refresh-spin .7s linear infinite;
+  }
+
+  .pull-refresh-indicator strong {
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  @keyframes brx-pull-refresh-spin {
+    to { transform: rotate(360deg); }
+  }
+}

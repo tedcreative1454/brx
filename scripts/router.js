@@ -54,7 +54,7 @@
       }
     }
 
-    renderHeader();
+
 
     if (route === "register") pages.renderRegister();
     else if (route === "login") pages.renderLogin();

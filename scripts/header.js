@@ -8,11 +8,13 @@
   const { icon } = window.BRX.icons;
   const notificationService = window.BRX.notificationService;
   let notificationPollTimer = null;
+  let notificationUnreadCount = 0;
 
   async function signOut() {
     document.removeEventListener("click", closeFloatingMenusOnOutsideClick);
     if (notificationPollTimer) clearInterval(notificationPollTimer);
     notificationPollTimer = null;
+    notificationUnreadCount = 0;
     try {
       await window.BRX.api.requestJson("/auth/logout", { method: "POST" });
     } catch (error) {
@@ -116,7 +118,7 @@
       refs.nav.innerHTML = adminMode ? adminNav() : appNav(route);
       refs.headerActions.innerHTML = `
         <button class="header-icon" id="themeToggle" type="button" aria-label="Toggle ${theme === "dark" ? "light" : "dark"} mode">${icon(theme === "dark" ? "sun" : "moon")}</button>
-        <button class="header-icon notification-button" id="notificationButton" type="button" aria-label="Notifications">${icon("bell")}<span class="notification-dot" id="notificationDot" hidden></span></button>
+        <button class="header-icon notification-button" id="notificationButton" type="button" aria-label="Notifications">${icon("bell")}<span class="notification-dot" id="notificationDot" ${notificationUnreadCount > 0 ? "" : "hidden"}>${notificationUnreadCount > 99 ? "99+" : notificationUnreadCount || ""}</span></button>
         <button class="menu-button" id="accountMenuButton" type="button" aria-label="Account menu">${icon("menu")}</button>
         <div class="notification-menu" id="notificationMenu">
           <div class="notification-menu-head"><strong>Notifications</strong><button type="button" id="markAllNotificationsRead">Mark all read</button></div>
@@ -190,25 +192,26 @@
   }
 
   async function refreshNotificationMenu() {
-    const dot = document.querySelector("#notificationDot");
-    const content = document.querySelector("#notificationMenuContent");
-    if (!dot || !content || !notificationService) return;
+    if (!notificationService) return;
 
     try {
       const result = await notificationService.list(6);
       const items = result.notifications || [];
-      const unreadCount = Number(result.unreadCount || 0);
-      dot.hidden = unreadCount === 0;
-      dot.textContent = unreadCount > 99 ? "99+" : String(unreadCount);
+      notificationUnreadCount = Number(result.unreadCount || 0);
+      const dot = document.querySelector("#notificationDot");
+      const content = document.querySelector("#notificationMenuContent");
+      if (!dot || !content) return;
+      dot.hidden = notificationUnreadCount === 0;
+      dot.textContent = notificationUnreadCount > 99 ? "99+" : String(notificationUnreadCount);
       content.innerHTML = items.length
         ? items.map(notificationMenuItem).join("")
-        : `<p class="notification-empty">No P2P alerts yet.</p>`;
+        : `<p class="notification-empty">No alerts yet.</p>`;
       bindNotificationLinks(content);
     } catch (error) {
-      content.innerHTML = `<p class="notification-empty">Could not load alerts.</p>`;
+      const content = document.querySelector("#notificationMenuContent");
+      if (content) content.innerHTML = `<p class="notification-empty">Could not load alerts.</p>`;
     }
   }
-
   function notificationMenuItem(notification) {
     return `
       <button class="notification-menu-item ${notification.isRead ? "" : "unread"}" type="button"
