@@ -2492,6 +2492,11 @@
     return `
       <section class="settings-card settings-card-flat">
         <div class="settings-card-head"><div><h3>${icon("bell")} Notifications</h3><p>Choose which BRX alerts you want to receive.</p></div></div>
+        <div class="push-notification-card">
+          <span class="push-notification-icon">${icon("bell")}</span>
+          <span><strong>Phone push notifications</strong><small>Receive trade, deposit, and withdrawal alerts when BRX is closed. Your device controls background notification sound.</small><em id="pushNotificationStatus">Checking this device...</em></span>
+          <button class="settings-action" id="pushNotificationsButton" type="button">Enable</button>
+        </div>
         ${rows.map(([key, title, detail]) => `
           <label class="settings-row settings-toggle-row">
             <span class="settings-row-icon">${icon("bell")}</span>
@@ -2575,6 +2580,8 @@
     document.querySelector("#cancelDisableTwoFactor")?.addEventListener("click", handleCancelDisableTwoFactor);
     document.querySelector("#disableTwoFactor")?.addEventListener("click", handleDisableTwoFactor);
     document.querySelector("#revokeOtherSessions")?.addEventListener("click", handleRevokeOtherSessions);
+    document.querySelector("#pushNotificationsButton")?.addEventListener("click", handlePushNotifications);
+    if (document.querySelector("#pushNotificationsButton")) void refreshPushNotificationStatus();
 
     document.querySelectorAll("[data-payment-delete]").forEach((button) => {
       button.addEventListener("click", () => handlePaymentDelete(button.dataset.paymentDelete, button));
@@ -2628,6 +2635,51 @@
     field.scrollIntoView({ behavior: "smooth", block: "center" });
     field.focus({ preventScroll: true });
     field.select?.();
+  }
+
+  async function refreshPushNotificationStatus() {
+    const button = document.querySelector("#pushNotificationsButton");
+    const label = document.querySelector("#pushNotificationStatus");
+    if (!button || !label || !window.BRX.pushService) return;
+    try {
+      const state = await window.BRX.pushService.status();
+      if (!state.supported) {
+        label.textContent = "Not supported by this browser.";
+        button.hidden = true;
+      } else if (!state.configured) {
+        label.textContent = "Waiting for BRX server configuration.";
+        button.disabled = true;
+      } else if (state.permission === "denied") {
+        label.textContent = "Blocked in browser settings.";
+        button.textContent = "Blocked";
+        button.disabled = true;
+      } else {
+        label.textContent = state.subscribed ? "Enabled on this device." : "Off on this device.";
+        button.textContent = state.subscribed ? "Disable" : "Enable";
+        button.dataset.subscribed = String(state.subscribed);
+      }
+    } catch (error) {
+      label.textContent = error.message || "Could not check push notifications.";
+    }
+  }
+
+  async function handlePushNotifications(event) {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      if (button.dataset.subscribed === "true") {
+        await window.BRX.pushService.disable();
+        showToast("Push notifications disabled on this device.");
+      } else {
+        await window.BRX.pushService.enable();
+        showToast("BRX push notifications enabled.");
+      }
+    } catch (error) {
+      showToast(error.message || "Could not update push notifications.");
+    } finally {
+      button.disabled = false;
+      await refreshPushNotificationStatus();
+    }
   }
   async function handleSettingsProfileSubmit(event) {
     event.preventDefault();

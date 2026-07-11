@@ -58,4 +58,7 @@ export const env = {
   bscColdWalletAddress: process.env.BSC_COLD_WALLET_ADDRESS ?? "",
   jwtAccessSecret: required("JWT_ACCESS_SECRET"),
   encryptionKey: required("ENCRYPTION_KEY"),
+  vapidPublicKey: process.env.VAPID_PUBLIC_KEY ?? "",
+  vapidPrivateKey: process.env.VAPID_PRIVATE_KEY ?? "",
+  vapidSubject: process.env.VAPID_SUBJECT ?? "mailto:support@brxp2p.com",
 };

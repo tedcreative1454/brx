@@ -23,7 +23,7 @@
     indicator.className = "pull-refresh-indicator";
     indicator.setAttribute("role", "status");
     indicator.setAttribute("aria-label", "Pull to refresh");
-    indicator.innerHTML = '<span><img src="./assets/brx-icon-192.png" alt="" /></span>';
+    indicator.innerHTML = '<span class="pull-refresh-shell"><i class="pull-refresh-orbit" aria-hidden="true"></i><img src="./assets/brx-icon-192.png" alt="" /><b aria-hidden="true"></b></span>';
     document.body.appendChild(indicator);
     return indicator;
   }
@@ -44,10 +44,12 @@
     node.classList.add("visible", "refreshing");
     node.classList.remove("ready");
     node.style.setProperty("--pull-distance", "58px");
+    node.style.setProperty("--pull-progress", "1");
     node.setAttribute("aria-label", "Refreshing");
 
     try {
       await window.BRX.router.render();
+      node.classList.add("complete");
       node.setAttribute("aria-label", "Updated");
     } catch (error) {
       console.error(error);
@@ -57,7 +59,7 @@
     } finally {
       window.setTimeout(() => {
         refreshing = false;
-        node.classList.remove("visible", "ready", "refreshing", "error");
+        node.classList.remove("visible", "ready", "refreshing", "complete", "error");
         node.style.setProperty("--pull-distance", "0px");
       }, 650);
     }
@@ -87,6 +89,7 @@
     node.classList.add("visible");
     node.classList.toggle("ready", distance >= threshold);
     node.style.setProperty("--pull-distance", distance + "px");
+    node.style.setProperty("--pull-progress", String(Math.min(1, distance / threshold)));
     node.setAttribute("aria-label", distance >= threshold ? "Release to refresh" : "Pull to refresh");
   }
 

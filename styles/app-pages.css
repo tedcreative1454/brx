@@ -8313,8 +8313,8 @@ body[data-route="market"] .brx-p2p-market .market-trader-avatar.has-image img {
 }
 
 .wallet-activity-row.withdrawal.completed .wallet-activity-mark {
-  background: rgba(8, 201, 139, .12);
-  color: var(--green);
+  background: rgba(255, 75, 103, .12);
+  color: var(--red);
 }
 
 .wallet-activity-row.failed .wallet-activity-mark {
@@ -8363,17 +8363,34 @@ body[data-route="market"] .brx-p2p-market .market-trader-avatar.has-image img {
 }
 
 .wallet-activity-row.withdrawal .wallet-activity-side strong {
-  color: var(--text);
+  color: var(--red);
 }
 
-.wallet-activity-row.withdrawal.completed .wallet-activity-side strong,
-.wallet-activity-row.withdrawal.completed .wallet-activity-main strong {
-  color: var(--green);
+.wallet-activity-row.withdrawal.completed .wallet-activity-side strong {
+  color: var(--red);
 }
 
 .wallet-activity-row.failed .wallet-activity-side strong {
   color: var(--red);
 }
+
+.push-notification-card {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 14px;
+  border: 1px solid rgba(30, 167, 255, .2);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(30, 167, 255, .1), rgba(5, 11, 22, .45));
+}
+.push-notification-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 13px; color: var(--blue-2); background: rgba(30,167,255,.12); }
+.push-notification-icon svg { width: 20px; height: 20px; }
+.push-notification-card > span:nth-child(2) { min-width: 0; display: grid; gap: 3px; }
+.push-notification-card strong { color: var(--text); font-size: 13px; }
+.push-notification-card small { color: var(--muted); font-size: 10px; line-height: 1.45; }
+.push-notification-card em { color: var(--blue-2); font-size: 9px; font-style: normal; }
 
 @media (max-width: 560px) {
   .wallet-activity-row {
