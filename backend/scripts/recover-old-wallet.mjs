@@ -123,8 +123,13 @@ try {
   );
   const receipt = await tx.wait(1);
   if (!receipt || receipt.status !== 1) throw new Error(`Recovery transaction failed: ${tx.hash}`);
-  await pool.query("UPDATE wallet_accounts SET status = 'disabled' WHERE id = $1", [record.id]);
-  console.log(`Recovery confirmed in block ${receipt.blockNumber}. The old deposit wallet is now disabled.`);
+  if (keySource === "current production key") {
+    await pool.query("UPDATE wallet_accounts SET status = 'active' WHERE id = $1", [record.id]);
+    console.log(`Recovery confirmed in block ${receipt.blockNumber}. This current-key deposit wallet remains active.`);
+  } else {
+    await pool.query("UPDATE wallet_accounts SET status = 'disabled' WHERE id = $1", [record.id]);
+    console.log(`Recovery confirmed in block ${receipt.blockNumber}. The old-key deposit wallet is now disabled.`);
+  }
 } finally {
   await pool.end();
 }
