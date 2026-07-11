@@ -191,6 +191,11 @@
       ${statCard("Open disputes", number(stats.marketplace?.openDisputes), "Needs admin decision", "trades")}
       ${statCard("Active offers", number(stats.marketplace?.activeOffers), "Visible in marketplace", "market")}
       ${statCard("Open trades", number(stats.marketplace?.openTrades), "Payment or escrow active", "activity")}
+      ${statCard("Completed transactions", number(stats.operations?.completedTransactions), "Trades, deposits and withdrawals", "check")}
+      ${statCard("P2P volume", `$${money(stats.volume?.completedTradeUsdt)} / ${money(stats.volume?.completedTradeEtb)} ETB`, "Completed trade volume", "trades")}
+      ${statCard("Deposit volume", `$${money(stats.volume?.creditedDepositUsdt)}`, "Credited on-chain deposits", "download")}
+      ${statCard("Withdrawal volume", `$${money(stats.volume?.confirmedWithdrawalUsdt)}`, `$${money(stats.volume?.deliveredWithdrawalUsdt)} delivered`, "upload")}
+      ${statCard("Fee revenue", `$${money(stats.volume?.feeRevenueUsdt)}`, "Confirmed platform fees", "wallet")}
       ${statCard("Locked escrow", `${money(stats.balances?.lockedUsdt)} USDT`, "Seller funds currently locked", "lock")}
       ${statCard("Pending withdrawals", number(stats.operations?.pendingWithdrawals), "Auto-approved queue", "upload")}
       ${statCard("Broadcasting", number(stats.operations?.broadcastWithdrawals), "Waiting on-chain confirmation", "wallet")}
@@ -481,7 +486,8 @@
 
   function withdrawalRow(item) {
     const needsReview = item.status === "requested";
-    return `<div class="admin-mini-row"><span><strong>${money(item.amount)} USDT</strong><small>${escapeHtml(item.email)} - ${escapeHtml(item.status)}${item.txHash ? ` - ${escapeHtml(item.txHash.slice(0, 12))}...` : ""}</small></span>${needsReview ? `<span class="admin-actions inline"><button class="outline-button tiny" type="button" data-withdrawal-approve="${escapeAttr(item.id)}">Approve</button><button class="danger-button tiny" type="button" data-withdrawal-reject="${escapeAttr(item.id)}">Reject</button></span>` : ""}</div>`;
+    const receive = Math.max(0, Number(item.amount || 0) - Number(item.fee || 0));
+    return `<div class="admin-mini-row"><span><strong>$${money(item.amount)} total</strong><small>${escapeHtml(item.email)} · ${escapeHtml(item.status)} · $${money(receive)} delivered · $${money(item.fee)} fee${item.txHash ? ` · ${escapeHtml(item.txHash.slice(0, 12))}...` : ""}</small></span>${needsReview ? `<span class="admin-actions inline"><button class="outline-button tiny" type="button" data-withdrawal-approve="${escapeAttr(item.id)}">Approve</button><button class="danger-button tiny" type="button" data-withdrawal-reject="${escapeAttr(item.id)}">Reject</button></span>` : ""}</div>`;
   }
 
   function depositRow(item) {
@@ -647,6 +653,9 @@
       <form id="platformSettingsForm" class="admin-setting-tile platform-settings-form">
         <span>Admin settings</span>
         <label class="form-field"><span>Withdrawal fee USDT</span><input id="platformWithdrawalFee" inputmode="decimal" value="${escapeAttr(settings.withdrawalFeeUsdt || "0")}" /></label>
+        <label class="form-field"><span>Basic taker fee %</span><input id="platformP2pBasicFee" inputmode="decimal" value="${escapeAttr(settings.p2pTakerFeeBasicPercent ?? "0.5")}" /></label>
+        <label class="form-field"><span>Verified taker fee %</span><input id="platformP2pVerifiedFee" inputmode="decimal" value="${escapeAttr(settings.p2pTakerFeeVerifiedPercent ?? "0.35")}" /></label>
+        <label class="form-field"><span>Merchant taker fee %</span><input id="platformP2pMerchantFee" inputmode="decimal" value="${escapeAttr(settings.p2pTakerFeeMerchantPercent ?? "0.15")}" /></label>
         <label class="form-field"><span>Auto approve up to USDT</span><input id="platformAutoApprove" inputmode="decimal" value="${escapeAttr(settings.withdrawalAutoApproveLimitUsdt ?? "50")}" /></label>
         <label class="form-field"><span>Daily withdrawal cap USDT</span><input id="platformDailyCap" inputmode="decimal" value="${escapeAttr(settings.withdrawalDailyPlatformLimitUsdt ?? "1000")}" /></label>
         <label class="form-field"><span>Sweep minimum USDT</span><input id="platformSweepMin" inputmode="decimal" value="${escapeAttr(settings.bscSweepMinUsdt ?? "1")}" /></label>
@@ -666,6 +675,9 @@
     try {
       const result = await adminService.updatePlatformSettings({
         withdrawalFeeUsdt: document.querySelector("#platformWithdrawalFee").value,
+        p2pTakerFeeBasicPercent: document.querySelector("#platformP2pBasicFee").value,
+        p2pTakerFeeVerifiedPercent: document.querySelector("#platformP2pVerifiedFee").value,
+        p2pTakerFeeMerchantPercent: document.querySelector("#platformP2pMerchantFee").value,
         withdrawalAutoApproveLimitUsdt: document.querySelector("#platformAutoApprove").value,
         withdrawalDailyPlatformLimitUsdt: document.querySelector("#platformDailyCap").value,
         bscSweepEnabled: document.querySelector("#platformSweepEnabled").checked,

@@ -7,6 +7,7 @@ import { DatabaseService } from "../database/database.service";
 import { EmailService } from "../email/email.service";
 import { LedgerService } from "../ledger/ledger.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { PlatformSettingsService } from "../platform-settings/platform-settings.service";
 
 interface OfferRow {
   id: string;
@@ -54,6 +55,13 @@ interface TradeRow {
   dispute_id?: string | null;
   evidence?: unknown;
   seller_payment_methods?: unknown;
+  maker_id?: string;
+  taker_id?: string;
+  taker_tier?: string;
+  fee_rate?: string;
+  fee_amount?: string;
+  escrow_amount?: string;
+  buyer_receive_amount?: string;
 }
 
 interface TradeMessageRow {
@@ -92,6 +100,7 @@ export class TradesService {
     private readonly ledger: LedgerService,
     private readonly email: EmailService,
     private readonly notifications: NotificationsService,
+    private readonly platformSettings: PlatformSettingsService,
   ) {}
 
   async myTrades(userId: string) {
@@ -212,6 +221,7 @@ export class TradesService {
     const assetAmount = this.positiveNumber(input.assetAmount, "Enter the USDT amount.");
     if (!offerId) throw new BadRequestException("Offer is required.");
 
+    const settings = await this.platformSettings.getSettings();
     const response = await this.db.transaction(async (client) => {
       const offer = await this.lockOffer(client, offerId);
       if (!offer) throw new NotFoundException("Offer was not found.");
@@ -235,19 +245,28 @@ export class TradesService {
 
       const buyerId = offer.side === "sell" ? userId : offer.user_id;
       const sellerId = offer.side === "sell" ? offer.user_id : userId;
+      const taker = await client.query<{ role: string; kyc_status: string }>("SELECT role, kyc_status FROM users WHERE id = $1", [userId]);
+      const takerTier = taker.rows[0]?.role === "merchant" ? "merchant" : taker.rows[0]?.kyc_status === "approved" ? "verified" : "basic";
+      const feePercent = Number(takerTier === "merchant" ? settings.p2pTakerFeeMerchantPercent : takerTier === "verified" ? settings.p2pTakerFeeVerifiedPercent : settings.p2pTakerFeeBasicPercent);
+      const feeAmount = assetAmount * feePercent / 100;
+      const buyerReceiveAmount = offer.side === "sell" ? assetAmount - feeAmount : assetAmount;
+      const escrowAmount = offer.side === "buy" ? assetAmount + feeAmount : assetAmount;
+      if (buyerReceiveAmount <= 0) throw new BadRequestException("Trade amount must be greater than the taker fee.");
 
       const tradeResult = await client.query<TradeRow>(
-        `INSERT INTO trades (offer_id, buyer_id, seller_id, asset, fiat, asset_amount, fiat_amount, payment_method, expires_at)
-         VALUES ($1, $2, $3, 'USDT', 'ETB', $4, $5, $6, now() + ($7::text || ' minutes')::interval)
+        `INSERT INTO trades (offer_id, buyer_id, seller_id, maker_id, taker_id, taker_tier, asset, fiat, asset_amount, fiat_amount,
+                             payment_method, fee_rate, fee_amount, escrow_amount, buyer_receive_amount, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, 'USDT', 'ETB', $7, $8, $9, $10, $11, $12, $13, now() + ($14::text || ' minutes')::interval)
          RETURNING *`,
-        [offer.id, buyerId, sellerId, assetAmount.toFixed(8), fiatAmount.toFixed(2), linkedPaymentMethod, this.paymentWindowMinutes],
+        [offer.id, buyerId, sellerId, offer.user_id, userId, takerTier, assetAmount.toFixed(8), fiatAmount.toFixed(2), linkedPaymentMethod,
+         feePercent.toFixed(6), feeAmount.toFixed(8), escrowAmount.toFixed(8), buyerReceiveAmount.toFixed(8), this.paymentWindowMinutes],
       );
       const trade = tradeResult.rows[0];
 
       try {
         await this.ledger.lockAvailable(client, {
           userId: sellerId,
-          amount: assetAmount.toFixed(8),
+          amount: escrowAmount.toFixed(8),
           reason: "p2p_trade_escrow_lock",
           referenceType: "trade",
           referenceId: trade.id,
@@ -266,7 +285,7 @@ export class TradesService {
         [Math.max(remaining, 0).toFixed(8), offer.id],
       );
 
-      await this.audit(client, userId, "trade.opened", "trade", trade.id, { offerId: offer.id, assetAmount, fiatAmount, paymentMethod: linkedPaymentMethod });
+      await this.audit(client, userId, "trade.opened", "trade", trade.id, { offerId: offer.id, assetAmount, fiatAmount, paymentMethod: linkedPaymentMethod, takerTier, feePercent, feeAmount });
       await this.createTradeNotifications(client, "opened", trade);
       return { trade: this.toTrade(trade, userId) };
     });
@@ -748,10 +767,11 @@ export class TradesService {
 
   private async releaseToBuyer(client: PoolClient, trade: TradeRow, actorId: string, reason: string, auditAction: string) {
     try {
-      await this.ledger.releaseLockedToAvailable(client, {
+      await this.ledger.releaseLockedWithFee(client, {
         sellerId: trade.seller_id,
         buyerId: trade.buyer_id,
-        amount: trade.asset_amount,
+        lockedAmount: trade.escrow_amount || trade.asset_amount,
+        buyerAmount: trade.buyer_receive_amount || trade.asset_amount,
         reason,
         referenceType: "trade",
         referenceId: trade.id,
@@ -759,6 +779,14 @@ export class TradesService {
       });
     } catch (error) {
       throw new BadRequestException(error instanceof Error ? error.message : "Could not release escrow.");
+    }
+
+    if (Number(trade.fee_amount || 0) > 0) {
+      await client.query(
+        `INSERT INTO platform_fee_entries (fee_type, asset, amount, reference_type, reference_id, idempotency_key, metadata)
+         VALUES ('p2p_taker', 'USDT', $1, 'trade', $2, $3, $4::jsonb) ON CONFLICT (idempotency_key) DO NOTHING`,
+        [trade.fee_amount, trade.id, `trade:${trade.id}:fee-revenue`, JSON.stringify({ takerId: trade.taker_id, takerTier: trade.taker_tier, feeRate: trade.fee_rate })],
+      );
     }
 
     await client.query(
@@ -774,7 +802,7 @@ export class TradesService {
     try {
       await this.ledger.unlockToAvailable(client, {
         userId: trade.seller_id,
-        amount: trade.asset_amount,
+        amount: trade.escrow_amount || trade.asset_amount,
         reason,
         referenceType: "trade",
         referenceId: trade.id,
@@ -838,6 +866,14 @@ export class TradesService {
       asset: row.asset,
       fiat: row.fiat,
       assetAmount: row.asset_amount,
+      makerId: row.maker_id,
+      takerId: row.taker_id,
+      takerTier: row.taker_tier,
+      feeRate: row.fee_rate || "0",
+      feeAmount: row.fee_amount || "0",
+      escrowAmount: row.escrow_amount || row.asset_amount,
+      buyerReceiveAmount: row.buyer_receive_amount || row.asset_amount,
+      isTaker: row.taker_id === viewerId,
       fiatAmount: row.fiat_amount,
       paymentMethod: row.payment_method,
       offerPrice: row.offer_price,

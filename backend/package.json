@@ -12,6 +12,7 @@
     "user:delete": "node scripts/delete-test-user.mjs",
     "user:fund": "node scripts/fund-test-user.mjs",
     "user:admin": "node scripts/make-admin.mjs",
+    "wallet:recover": "node scripts/recover-old-wallet.mjs",
     "scan:deposits": "node dist/scripts/scan-deposits.js"
   },
   "dependencies": {

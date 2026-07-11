@@ -993,6 +993,8 @@
               <div class="trade-summary-metrics">
                 <div><span>ETB total</span><strong>${format(Number(trade.fiatAmount))} ETB</strong></div>
                 <div><span>Price</span><strong>${format(price)} ETB/USDT</strong></div>
+                <div><span>${trade.isTaker ? `Taker fee (${format(Number(trade.feeRate || 0))}%)` : "Maker fee"}</span><strong>${format(trade.isTaker ? Number(trade.feeAmount || 0) : 0, 4)} USDT</strong></div>
+                <div><span>${isBuyer ? "You receive" : "Escrow deducted"}</span><strong>${format(Number(isBuyer ? trade.buyerReceiveAmount || trade.assetAmount : trade.escrowAmount || trade.assetAmount), 4)} USDT</strong></div>
               </div>
             </section>
 
@@ -1579,13 +1581,13 @@
         <section class="professional-wallet-summary">
           <div class="wallet-total-block">
             <span class="wallet-summary-icon">${icon("wallet")}</span>
-            <div><p>Total balance</p><h2>${format(total)} <span>USDT</span></h2><small>Available and escrow-held BRX funds</small></div>
+            <div><p>Total balance</p><h2>$${format(total)}</h2><small>Available and escrow-held BRX funds</small></div>
           </div>
           <div class="professional-balance-grid">
-            <div class="available"><span>Available</span><strong>${format(available)} <small>USDT</small></strong></div>
-            <div class="locked"><span>In escrow</span><strong>${format(locked)} <small>USDT</small></strong></div>
-            ${pendingDeposit > 0 ? `<div class="pending"><span>Pending deposit</span><strong>${format(pendingDeposit)} <small>USDT</small></strong></div>` : ""}
-            ${pendingWithdrawal > 0 ? `<div class="pending"><span>Pending withdrawal</span><strong>${format(pendingWithdrawal)} <small>USDT</small></strong></div>` : ""}
+            <div class="available"><span>Available</span><strong>$${format(available)}</strong></div>
+            <div class="locked"><span>In escrow</span><strong>$${format(locked)}</strong></div>
+            ${pendingDeposit > 0 ? `<div class="pending"><span>Pending deposit</span><strong>$${format(pendingDeposit)}</strong></div>` : ""}
+            ${pendingWithdrawal > 0 ? `<div class="pending"><span>Pending withdrawal</span><strong>$${format(pendingWithdrawal)}</strong></div>` : ""}
           </div>
         </section>
 
@@ -1631,12 +1633,12 @@
         const fee = Number(currentUser()?.platformSettings?.withdrawalFeeUsdt || 0);
         const receive = Math.max(0, Number(amountInput?.value || 0) - fee);
         const output = document.querySelector("[data-withdraw-receive]");
-        if (output) output.textContent = format(receive) + " USDT";
+        if (output) output.textContent = "$" + format(receive);
       };
       document.querySelector("#withdrawForm")?.addEventListener("submit", handleWithdrawalSubmit);
       amountInput?.addEventListener("input", updateReceive);
       document.querySelector("[data-withdraw-max]")?.addEventListener("click", () => {
-        if (amountInput) amountInput.value = String(Math.max(0, Number(currentUser()?.balance?.available || 0) - Number(currentUser()?.platformSettings?.withdrawalFeeUsdt || 0)));
+        if (amountInput) amountInput.value = String(Math.max(0, Number(currentUser()?.balance?.available || 0)));
         updateReceive();
       });
       return;
@@ -1719,8 +1721,8 @@
           <form class="wallet-action-form" id="withdrawForm">
             <label class='form-field withdraw-address-field'><span>Address</span><input id='withdrawAddress' autocomplete='off' spellcheck='false' placeholder='Paste BEP20 address (0x...)' required /></label>
             <label class="form-field withdraw-amount-field"><span>Withdrawal amount</span><div><input id="withdrawAmount" inputmode="decimal" placeholder="0.00" required /><b>USDT</b><button type="button" data-withdraw-max>Max</button></div></label>
-            <div class="withdraw-available"><span>Available</span><strong>${format(available)} USDT</strong></div>
-            <div class="withdraw-summary"><span>Receive amount <strong data-withdraw-receive>0 USDT</strong></span><span>Network fee <strong>${format(fee)} USDT</strong></span></div>
+            <div class="withdraw-available"><span>Available</span><strong>$${format(available)}</strong></div>
+            <div class="withdraw-summary"><span>Receive amount <strong data-withdraw-receive>$0</strong></span><span>Withdrawal fee <strong>$${format(fee)}</strong></span></div>
             <button class="withdrawal-flow-primary" type="submit">Withdraw</button>
           </form>
         ` : ""}
@@ -2065,7 +2067,8 @@
     }
     const fee = Number(currentUser()?.platformSettings?.withdrawalFeeUsdt || 0);
     const available = Number(currentUser()?.balance?.available || 0);
-    if (amount + fee > available) return showToast(`Insufficient available balance. You need ${format(amount + fee)} USDT including the fee.`);
+    if (amount > available) return showToast(`Insufficient available balance. You need $${format(amount)}.`);
+    if (amount <= fee) return showToast(`Withdrawal amount must be greater than the $${format(fee)} fee.`);
     showWithdrawalConfirmation({ address, amount, fee });
   }
 

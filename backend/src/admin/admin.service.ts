@@ -25,6 +25,13 @@ interface StatsRow {
   pending_deposits: number;
   pending_withdrawals: number;
   broadcast_withdrawals: number;
+  completed_transactions: number;
+  completed_trade_usdt: string;
+  completed_trade_etb: string;
+  credited_deposit_usdt: string;
+  confirmed_withdrawal_usdt: string;
+  delivered_withdrawal_usdt: string;
+  fee_revenue_usdt: string;
   available_usdt: string;
   locked_usdt: string;
   pending_deposit_usdt: string;
@@ -51,6 +58,15 @@ export class AdminService {
         (SELECT COUNT(*)::int FROM deposits WHERE status IN ('detected', 'confirming')) AS pending_deposits,
         (SELECT COUNT(*)::int FROM withdrawals WHERE status IN ('requested', 'approved')) AS pending_withdrawals,
         (SELECT COUNT(*)::int FROM withdrawals WHERE status = 'broadcast') AS broadcast_withdrawals,
+        ((SELECT COUNT(*) FROM trades WHERE status = 'released') +
+         (SELECT COUNT(*) FROM deposits WHERE status = 'credited') +
+         (SELECT COUNT(*) FROM withdrawals WHERE status = 'confirmed'))::int AS completed_transactions,
+        COALESCE((SELECT SUM(asset_amount) FROM trades WHERE status = 'released'), 0)::text AS completed_trade_usdt,
+        COALESCE((SELECT SUM(fiat_amount) FROM trades WHERE status = 'released'), 0)::text AS completed_trade_etb,
+        COALESCE((SELECT SUM(amount) FROM deposits WHERE status = 'credited'), 0)::text AS credited_deposit_usdt,
+        COALESCE((SELECT SUM(amount) FROM withdrawals WHERE status = 'confirmed'), 0)::text AS confirmed_withdrawal_usdt,
+        COALESCE((SELECT SUM(amount - fee) FROM withdrawals WHERE status = 'confirmed'), 0)::text AS delivered_withdrawal_usdt,
+        COALESCE((SELECT SUM(amount) FROM platform_fee_entries WHERE asset = 'USDT'), 0)::text AS fee_revenue_usdt,
         COALESCE((SELECT SUM(available_balance) FROM balances), 0)::text AS available_usdt,
         COALESCE((SELECT SUM(locked_balance) FROM balances), 0)::text AS locked_usdt,
         COALESCE((SELECT SUM(pending_deposit) FROM balances), 0)::text AS pending_deposit_usdt,
@@ -77,6 +93,15 @@ export class AdminService {
           pendingDeposits: row.pending_deposits,
           pendingWithdrawals: row.pending_withdrawals,
           broadcastWithdrawals: row.broadcast_withdrawals,
+          completedTransactions: row.completed_transactions,
+        },
+        volume: {
+          completedTradeUsdt: row.completed_trade_usdt,
+          completedTradeEtb: row.completed_trade_etb,
+          creditedDepositUsdt: row.credited_deposit_usdt,
+          confirmedWithdrawalUsdt: row.confirmed_withdrawal_usdt,
+          deliveredWithdrawalUsdt: row.delivered_withdrawal_usdt,
+          feeRevenueUsdt: row.fee_revenue_usdt,
         },
         balances: {
           availableUsdt: row.available_usdt,
@@ -251,6 +276,9 @@ export class AdminService {
 
   async updatePlatformSettings(adminId: string, body: {
     withdrawalFeeUsdt?: string | number;
+    p2pTakerFeeBasicPercent?: string | number;
+    p2pTakerFeeVerifiedPercent?: string | number;
+    p2pTakerFeeMerchantPercent?: string | number;
     withdrawalAutoApproveLimitUsdt?: string | number;
     withdrawalDailyPlatformLimitUsdt?: string | number;
     bscSweepEnabled?: boolean;

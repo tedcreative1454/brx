@@ -105,6 +105,7 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
     const amount = this.normalizeAmount(body.amount);
     const platform = await this.platformSettings.getSettings();
     const fee = this.withdrawalFee(platform.withdrawalFeeUsdt);
+    if (Number(amount) <= Number(fee)) throw new BadRequestException(`Withdrawal amount must be greater than the ${Number(fee).toFixed(2)} USDT fee.`);
 
     if (asset !== "USDT") throw new BadRequestException("Only USDT withdrawals are supported right now.");
     if (network !== "BEP20") throw new BadRequestException("Choose a supported withdrawal network.");
@@ -117,7 +118,7 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
     await this.assertWithinPlatformDailyLimit(amount, platform.withdrawalDailyPlatformLimitUsdt);
 
     const withdrawalAddress = await this.resolveWithdrawalAddress(user.id, body);
-    await this.assertAvailableBalance(user.id, asset, amount, fee);
+    await this.assertAvailableBalance(user.id, asset, amount);
     const review = this.withdrawalReview(amount, platform.withdrawalAutoApproveLimitUsdt);
 
     const result = await this.db.transaction(async (client) => {
@@ -156,16 +157,6 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
         referenceType: "withdrawal",
         referenceId: withdrawal.id,
         idempotencyKey: `withdrawal:${withdrawal.id}:request`,
-      });
-
-      await this.ledger.debitAvailableFee(client, {
-        userId: user.id,
-        asset,
-        amount: fee,
-        reason: "withdrawal_fee_reserved",
-        referenceType: "withdrawal",
-        referenceId: withdrawal.id,
-        idempotencyKey: `withdrawal:${withdrawal.id}:fee`,
       });
 
       await client.query(
@@ -274,7 +265,6 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
         referenceId: withdrawal.id,
         idempotencyKey: `withdrawal:${withdrawal.id}:admin-rejected`,
       });
-      await this.refundWithdrawalFee(client, withdrawal, "withdrawal_admin_rejected_fee_refund", `withdrawal:${withdrawal.id}:admin-rejected-fee`);
 
       const updated = await client.query<WithdrawalRow>(
         `UPDATE withdrawals
@@ -353,7 +343,8 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
       if (!withdrawal) break;
 
       try {
-        const tx = await this.bsc.sendUsdt(withdrawal.address, withdrawal.amount);
+        const receiveAmount = this.netWithdrawalAmount(withdrawal.amount, withdrawal.fee);
+        const tx = await this.bsc.sendUsdt(withdrawal.address, receiveAmount);
         await this.db.query(
           `UPDATE withdrawals
            SET tx_hash = $2,
@@ -368,13 +359,13 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
         await this.notifications.create(withdrawal.user_id, {
           type: "withdrawal.broadcast",
           title: "Withdrawal sent",
-          message: `${withdrawal.amount} USDT was sent on BNB Smart Chain and is awaiting confirmation.`,
+          message: `${receiveAmount} USDT was sent on BNB Smart Chain and is awaiting confirmation.`,
           entityType: "withdrawal",
           entityId: withdrawal.id,
           actionUrl: "#/wallet?mode=withdraw",
           idempotencyKey: `withdrawal:${withdrawal.id}:broadcast-notification`,
         });
-        await this.email.sendWithdrawalBroadcast(withdrawal.user_email || "", withdrawal.amount, tx.txHash).catch((error) => this.logger.warn(error));
+        await this.email.sendWithdrawalBroadcast(withdrawal.user_email || "", receiveAmount, tx.txHash).catch((error) => this.logger.warn(error));
         broadcasted += 1;
       } catch (error) {
         failed += 1;
@@ -430,6 +421,19 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
            WHERE id = $1`,
           [row.id],
         );
+        if (Number(row.fee) > 0) {
+          await client.query(
+            `INSERT INTO platform_fee_entries
+              (fee_type, asset, amount, reference_type, reference_id, idempotency_key, metadata)
+             VALUES ('withdrawal', $1, $2, 'withdrawal', $3, $4, $5::jsonb)
+             ON CONFLICT (idempotency_key) DO NOTHING`,
+            [row.asset, row.fee, row.id, `withdrawal:${row.id}:fee-revenue`, JSON.stringify({
+              grossAmount: row.amount,
+              receiveAmount: this.netWithdrawalAmount(row.amount, row.fee),
+              txHash: row.tx_hash,
+            })],
+          );
+        }
         await client.query(
           `INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, metadata)
            VALUES ($1, 'withdrawal.confirmed', 'withdrawal', $2, $3::jsonb)`,
@@ -438,7 +442,7 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
         await this.notifications.create(row.user_id, {
           type: "withdrawal.completed",
           title: "Withdrawal completed",
-          message: `${row.amount} USDT withdrawal was confirmed on BNB Smart Chain.`,
+          message: `${this.netWithdrawalAmount(row.amount, row.fee)} USDT was delivered after the ${Number(row.fee).toFixed(2)} USDT withdrawal fee.`,
           entityType: "withdrawal",
           entityId: row.id,
           actionUrl: "#/wallet?mode=withdraw",
@@ -446,7 +450,7 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
         }, client);
       });
 
-      await this.email.sendWithdrawalConfirmed(withdrawal.user_email || "", withdrawal.amount, withdrawal.tx_hash!).catch((error) => this.logger.warn(error));
+      await this.email.sendWithdrawalConfirmed(withdrawal.user_email || "", this.netWithdrawalAmount(withdrawal.amount, withdrawal.fee), withdrawal.tx_hash!).catch((error) => this.logger.warn(error));
       confirmed += 1;
     }
 
@@ -499,7 +503,6 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
         referenceId: row.id,
         idempotencyKey: `withdrawal:${row.id}:failed-return`,
       });
-      await this.refundWithdrawalFee(client, row, "withdrawal_failed_fee_refund", `withdrawal:${row.id}:failed-fee-return`);
       await client.query(
         `UPDATE withdrawals
          SET status = 'failed', failed_reason = $2, updated_at = now()
@@ -575,8 +578,7 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async assertAvailableBalance(userId: string, asset: string, amount: string, fee: string) {
-    const total = Number(amount) + Number(fee);
+  private async assertAvailableBalance(userId: string, asset: string, amount: string) {
     const result = await this.db.query<{ available_balance: string }>(
       `SELECT available_balance
        FROM balances
@@ -585,11 +587,10 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
       [userId, asset],
     );
     const available = Number(result.rows[0]?.available_balance ?? 0);
-    if (available < total) {
-      throw new BadRequestException(`Insufficient available USDT. This withdrawal needs ${total.toFixed(8)} USDT including the fee.`);
+    if (available < Number(amount)) {
+      throw new BadRequestException(`Insufficient available USDT. This withdrawal requires ${Number(amount).toFixed(8)} USDT.`);
     }
   }
-
   private withdrawalReview(amount: string, autoApproveLimit: number) {
     if (autoApproveLimit > 0 && Number(amount) <= autoApproveLimit) {
       return {
@@ -641,19 +642,11 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
     return address;
   }
 
-  private async refundWithdrawalFee(client: PoolClient, withdrawal: WithdrawalRow, reason: string, idempotencyKey: string) {
-    if (Number(withdrawal.fee || 0) <= 0) return;
-    await this.ledger.creditAvailable(client, {
-      userId: withdrawal.user_id,
-      asset: withdrawal.asset,
-      amount: withdrawal.fee,
-      reason,
-      referenceType: "withdrawal",
-      referenceId: withdrawal.id,
-      idempotencyKey,
-    });
+  private netWithdrawalAmount(amount: string, fee: string) {
+    const net = Number(amount) - Number(fee);
+    if (!Number.isFinite(net) || net <= 0) throw new BadRequestException("Withdrawal amount must be greater than the withdrawal fee.");
+    return net.toFixed(8);
   }
-
   private withdrawalFee(value: string) {
     const fee = Number(value);
     if (!Number.isFinite(fee) || fee < 0) return "0.00000000";
@@ -683,6 +676,7 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
       asset: row.asset,
       amount: row.amount,
       fee: row.fee,
+      receiveAmount: this.netWithdrawalAmount(row.amount, row.fee),
       status: row.status,
       riskDecision: row.risk_decision,
       reviewReason: row.review_reason,

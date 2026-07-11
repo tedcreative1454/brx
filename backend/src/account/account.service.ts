@@ -126,6 +126,9 @@ export class AccountService {
       withdrawalAddresses: withdrawalAddresses.withdrawalAddresses,
       platformSettings: {
         withdrawalFeeUsdt: platformSettings.withdrawalFeeUsdt,
+        p2pTakerFeeBasicPercent: platformSettings.p2pTakerFeeBasicPercent,
+        p2pTakerFeeVerifiedPercent: platformSettings.p2pTakerFeeVerifiedPercent,
+        p2pTakerFeeMerchantPercent: platformSettings.p2pTakerFeeMerchantPercent,
         enabledPaymentMethodTypes: platformSettings.enabledPaymentMethodTypes,
       },
     };

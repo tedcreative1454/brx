@@ -76,7 +76,7 @@
         </div>
 
         <div class="dashboard-balance-value">
-          <strong>${hidden ? hiddenAmount() : format(total)}</strong><span>USDT</span>
+          <strong>${hidden ? hiddenAmount() : `$${format(total)}`}</strong>
           <small>${hidden ? "Balance hidden" : `&asymp; ${format(total * RATE)} ETB at the reference rate`}</small>
         </div>
 
@@ -121,7 +121,7 @@
   }
 
   function balanceItem(label, value, tone, hidden = false) {
-    return `<div class="${tone}"><span>${label}</span><strong>${hidden ? hiddenAmount() : format(value)} <small>USDT</small></strong></div>`;
+    return `<div class="${tone}"><span>${label}</span><strong>${hidden ? hiddenAmount() : `$${format(value)}`}</strong></div>`;
   }
 
 

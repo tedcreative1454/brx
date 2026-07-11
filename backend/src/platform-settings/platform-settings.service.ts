@@ -4,6 +4,9 @@ import { DatabaseService } from "../database/database.service";
 
 export interface PlatformSettings {
   withdrawalFeeUsdt: string;
+  p2pTakerFeeBasicPercent: string;
+  p2pTakerFeeVerifiedPercent: string;
+  p2pTakerFeeMerchantPercent: string;
   withdrawalAutoApproveLimitUsdt: number;
   withdrawalDailyPlatformLimitUsdt: number;
   bscSweepEnabled: boolean;
@@ -43,7 +46,10 @@ export class PlatformSettingsService {
       if (!this.isUndefinedTable(error)) throw error;
     }
     return {
-      withdrawalFeeUsdt: this.decimalValue(stored.get("withdrawal_fee_usdt"), "0", "Withdrawal fee"),
+      withdrawalFeeUsdt: this.decimalValue(stored.get("withdrawal_fee_usdt"), "1", "Withdrawal fee"),
+      p2pTakerFeeBasicPercent: this.percentValue(stored.get("p2p_taker_fee_basic_percent"), "0.5", "Basic taker fee"),
+      p2pTakerFeeVerifiedPercent: this.percentValue(stored.get("p2p_taker_fee_verified_percent"), "0.35", "Verified taker fee"),
+      p2pTakerFeeMerchantPercent: this.percentValue(stored.get("p2p_taker_fee_merchant_percent"), "0.15", "Merchant taker fee"),
       withdrawalAutoApproveLimitUsdt: this.numberValue(stored.get("withdrawal_auto_approve_limit_usdt"), env.withdrawalAutoApproveLimitUsdt),
       withdrawalDailyPlatformLimitUsdt: this.numberValue(stored.get("withdrawal_daily_platform_limit_usdt"), env.withdrawalDailyPlatformLimitUsdt),
       bscSweepEnabled: this.booleanValue(stored.get("bsc_sweep_enabled"), env.bscSweepEnabled),
@@ -56,6 +62,9 @@ export class PlatformSettingsService {
     adminId: string,
     input: Partial<{
       withdrawalFeeUsdt: string | number;
+      p2pTakerFeeBasicPercent: string | number;
+      p2pTakerFeeVerifiedPercent: string | number;
+      p2pTakerFeeMerchantPercent: string | number;
       withdrawalAutoApproveLimitUsdt: string | number;
       withdrawalDailyPlatformLimitUsdt: string | number;
       bscSweepEnabled: boolean;
@@ -65,6 +74,9 @@ export class PlatformSettingsService {
   ) {
     const updates: Array<[string, unknown]> = [];
     if (input.withdrawalFeeUsdt !== undefined) updates.push(["withdrawal_fee_usdt", this.decimalValue(input.withdrawalFeeUsdt, "0", "Withdrawal fee")]);
+    if (input.p2pTakerFeeBasicPercent !== undefined) updates.push(["p2p_taker_fee_basic_percent", this.percentValue(input.p2pTakerFeeBasicPercent, "0.5", "Basic taker fee")]);
+    if (input.p2pTakerFeeVerifiedPercent !== undefined) updates.push(["p2p_taker_fee_verified_percent", this.percentValue(input.p2pTakerFeeVerifiedPercent, "0.35", "Verified taker fee")]);
+    if (input.p2pTakerFeeMerchantPercent !== undefined) updates.push(["p2p_taker_fee_merchant_percent", this.percentValue(input.p2pTakerFeeMerchantPercent, "0.15", "Merchant taker fee")]);
     if (input.withdrawalAutoApproveLimitUsdt !== undefined) updates.push(["withdrawal_auto_approve_limit_usdt", this.positiveNumber(input.withdrawalAutoApproveLimitUsdt, "Auto approve limit")]);
     if (input.withdrawalDailyPlatformLimitUsdt !== undefined) updates.push(["withdrawal_daily_platform_limit_usdt", this.positiveNumber(input.withdrawalDailyPlatformLimitUsdt, "Daily platform withdrawal cap")]);
     if (input.bscSweepEnabled !== undefined) updates.push(["bsc_sweep_enabled", Boolean(input.bscSweepEnabled)]);
@@ -110,6 +122,12 @@ export class PlatformSettingsService {
     const number = Number(value);
     if (!Number.isFinite(number) || number < 0) throw new BadRequestException(`${label} must be zero or greater.`);
     return number;
+  }
+
+  private percentValue(value: unknown, fallback: string, label: string) {
+    const result = this.decimalValue(value, fallback, label);
+    if (Number(result) > 100) throw new BadRequestException(`${label} cannot exceed 100%.`);
+    return result;
   }
 
   private numberValue(value: unknown, fallback: number) {

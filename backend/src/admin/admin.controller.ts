@@ -35,6 +35,9 @@ export class AdminController {
     @Headers("authorization") authorization: string | undefined,
     @Body() body: {
       withdrawalFeeUsdt?: string | number;
+      p2pTakerFeeBasicPercent?: string | number;
+      p2pTakerFeeVerifiedPercent?: string | number;
+      p2pTakerFeeMerchantPercent?: string | number;
       withdrawalAutoApproveLimitUsdt?: string | number;
       withdrawalDailyPlatformLimitUsdt?: string | number;
       bscSweepEnabled?: boolean;

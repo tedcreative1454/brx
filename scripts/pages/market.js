@@ -69,6 +69,7 @@
   }
   async function loadMarketOffers() {
     try {
+      await window.BRX.accountService.loadSettings();
       const offerSide = marketMode === "buy" ? "sell" : "buy";
       const result = await marketplace.listOffers(offerSide);
       lastOffers = result.offers || [];
@@ -406,8 +407,9 @@
               </div>
               <div class="order-quote">
                 <div><span>${action === "Buy" ? "You pay" : "Buyer pays"}</span><strong id="orderFiatPreview">-- ETB</strong></div>
-
-                <div><span>${action === "Buy" ? "You get" : "You sell"}</span><strong id="orderUsdtPreview">-- USDT</strong></div>
+                <div><span>${action === "Buy" ? "Trade amount" : "Buyer receives"}</span><strong id="orderUsdtPreview">-- USDT</strong></div>
+                <div><span>Trading fee (<b id="orderFeeRate">${format(takerFeePercent())}%</b>)</span><strong id="orderFeePreview">-- USDT</strong></div>
+                <div><span>${action === "Buy" ? "You receive" : "Total deducted"}</span><strong id="orderFinalPreview">-- USDT</strong></div>
               </div>
               <div class="form-error" id="orderError"></div>
             </form>
@@ -508,13 +510,25 @@
     const usdt = hasAmount && price > 0 ? fiat / price : 0;
     const fiatPreview = document.querySelector("#orderFiatPreview");
     const usdtPreview = document.querySelector("#orderUsdtPreview");
+    const feePreview = document.querySelector("#orderFeePreview");
+    const finalPreview = document.querySelector("#orderFinalPreview");
     const submit = document.querySelector("#orderSubmit");
     if (fiatPreview) fiatPreview.textContent = hasAmount ? `${format(fiat)} ETB` : "-- ETB";
     if (usdtPreview) usdtPreview.textContent = hasAmount ? `${format(usdt)} USDT` : "-- USDT";
+    const fee = usdt * takerFeePercent() / 100;
+    if (feePreview) feePreview.textContent = hasAmount ? `${format(fee, 4)} USDT` : "-- USDT";
+    if (finalPreview) finalPreview.textContent = hasAmount ? `${format(offer.side === "sell" ? usdt - fee : usdt + fee, 4)} USDT` : "-- USDT";
     if (submit) {
       const validAmount = hasAmount && fiat >= min && fiat <= max;
       submit.disabled = !validAmount || !offer.paymentMethods?.length || !selectedPaymentMethod;
     }
+  }
+  function takerFeePercent() {
+    const user = window.BRX.state.currentUser?.() || {};
+    const settings = user.platformSettings || {};
+    if (user.role === "merchant") return Number(settings.p2pTakerFeeMerchantPercent ?? 0.15);
+    if (user.kycStatus === "approved") return Number(settings.p2pTakerFeeVerifiedPercent ?? 0.35);
+    return Number(settings.p2pTakerFeeBasicPercent ?? 0.5);
   }
   function setOrderError(message) {
     const errorBox = document.querySelector("#orderError");
