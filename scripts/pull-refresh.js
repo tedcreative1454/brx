@@ -22,8 +22,8 @@
     indicator = document.createElement("div");
     indicator.className = "pull-refresh-indicator";
     indicator.setAttribute("role", "status");
-    indicator.setAttribute("aria-live", "polite");
-    indicator.innerHTML = "<span></span><strong>Pull to refresh</strong>";
+    indicator.setAttribute("aria-label", "Pull to refresh");
+    indicator.innerHTML = '<span><img src="./assets/brx-icon-192.png" alt="" /></span>';
     document.body.appendChild(indicator);
     return indicator;
   }
@@ -32,9 +32,9 @@
     distance = 0;
     tracking = false;
     if (!indicator || refreshing) return;
-    indicator.classList.remove("visible", "ready");
+    indicator.classList.remove("visible", "ready", "error");
     indicator.style.setProperty("--pull-distance", "0px");
-    indicator.querySelector("strong").textContent = "Pull to refresh";
+    indicator.setAttribute("aria-label", "Pull to refresh");
   }
 
   async function refreshCurrentRoute() {
@@ -44,19 +44,20 @@
     node.classList.add("visible", "refreshing");
     node.classList.remove("ready");
     node.style.setProperty("--pull-distance", "58px");
-    node.querySelector("strong").textContent = "Refreshing";
+    node.setAttribute("aria-label", "Refreshing");
 
     try {
       await window.BRX.router.render();
-      node.querySelector("strong").textContent = "Updated";
-      window.BRX.ui.showToast("Page updated");
+      node.setAttribute("aria-label", "Updated");
     } catch (error) {
       console.error(error);
-      node.querySelector("strong").textContent = "Could not refresh";
+      node.classList.add("error");
+      node.setAttribute("aria-label", "Could not refresh");
+      window.BRX.ui.showToast("Could not refresh. Try again.");
     } finally {
       window.setTimeout(() => {
         refreshing = false;
-        node.classList.remove("visible", "ready", "refreshing");
+        node.classList.remove("visible", "ready", "refreshing", "error");
         node.style.setProperty("--pull-distance", "0px");
       }, 650);
     }
@@ -86,7 +87,7 @@
     node.classList.add("visible");
     node.classList.toggle("ready", distance >= threshold);
     node.style.setProperty("--pull-distance", distance + "px");
-    node.querySelector("strong").textContent = distance >= threshold ? "Release to refresh" : "Pull to refresh";
+    node.setAttribute("aria-label", distance >= threshold ? "Release to refresh" : "Pull to refresh");
   }
 
   function onTouchEnd() {
