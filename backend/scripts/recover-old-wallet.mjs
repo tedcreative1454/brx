@@ -73,15 +73,22 @@ try {
   const record = result.rows[0];
   if (!record) throw new Error("No wallet record exists for that deposit address.");
 
-  const oldEncryptionKey = await hiddenPrompt("Old encryption key (hidden): ");
-  if (!oldEncryptionKey) throw new Error("No encryption key was entered.");
-  console.log(`Received an old encryption key with ${oldEncryptionKey.length} characters.`);
   let privateKey;
+  let keySource = "current production key";
   try {
-    privateKey = decrypt(record.encrypted_private_key, oldEncryptionKey);
+    privateKey = decrypt(record.encrypted_private_key, process.env.ENCRYPTION_KEY || "");
   } catch {
-    throw new Error("The old encryption key could not decrypt this wallet.");
+    keySource = "old recovery key";
+    const oldEncryptionKey = await hiddenPrompt("Current key did not match. Old encryption key (hidden): ");
+    if (!oldEncryptionKey) throw new Error("No encryption key was entered.");
+    console.log(`Received an old encryption key with ${oldEncryptionKey.length} characters.`);
+    try {
+      privateKey = decrypt(record.encrypted_private_key, oldEncryptionKey);
+    } catch {
+      throw new Error("Neither the current production key nor the supplied old key could decrypt this wallet.");
+    }
   }
+  console.log(`Wallet decrypted successfully using the ${keySource}.`);
 
   const provider = new ethers.JsonRpcProvider(process.env.ALCHEMY_BNB_RPC_URL);
   const network = await provider.getNetwork();
