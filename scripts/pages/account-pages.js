@@ -1626,7 +1626,19 @@
       return;
     }
     if (activeWalletMode === "withdraw") {
+      const amountInput = document.querySelector("#withdrawAmount");
+      const updateReceive = () => {
+        const fee = Number(currentUser()?.platformSettings?.withdrawalFeeUsdt || 0);
+        const receive = Math.max(0, Number(amountInput?.value || 0) - fee);
+        const output = document.querySelector("[data-withdraw-receive]");
+        if (output) output.textContent = format(receive) + " USDT";
+      };
       document.querySelector("#withdrawForm")?.addEventListener("submit", handleWithdrawalSubmit);
+      amountInput?.addEventListener("input", updateReceive);
+      document.querySelector("[data-withdraw-max]")?.addEventListener("click", () => {
+        if (amountInput) amountInput.value = String(Math.max(0, Number(currentUser()?.balance?.available || 0) - Number(currentUser()?.platformSettings?.withdrawalFeeUsdt || 0)));
+        updateReceive();
+      });
       return;
     }
     if (activeWalletMode === "transfer") {
@@ -1683,35 +1695,33 @@
   function withdrawPanel(user) {
     const selectedNetwork = selectedWalletNetwork.withdraw;
     const selected = NETWORKS.find((network) => network.id === selectedNetwork);
-    const addresses = selectedNetwork
-      ? (user.withdrawalAddresses || []).filter((address) => address.isActive !== false && address.network === selectedNetwork)
-      : [];
-    const defaultAddress = addresses.find((address) => address.isDefault) || addresses[0];
+    const available = Number(user.balance?.available || 0);
+    const fee = Number(user.platformSettings?.withdrawalFeeUsdt || 0);
     const twoFactorGate = selectedNetwork === "BEP20" ? withdrawTwoFactorGate(user) : "";
     return `
       <section class="wallet-panel wallet-form-panel">
         <div class="sheet-head">
           <div>
-            <p class="app-label blue">Withdraw USDT</p>
-            <h2>Choose Network</h2>
+            <p class="app-label blue">BRX wallet</p>
+            <h2>Send USDT</h2>
           </div>
           <span class="sheet-badge">USDT</span>
         </div>
-        ${networkSelector("withdraw", selectedNetwork)}
+        ${selectedNetwork !== "BEP20" ? networkSelector("withdraw", selectedNetwork) : `
+          <div class="withdraw-network-field">
+            <span>Network</span>
+            <div><strong>BSC</strong><small>BNB Smart Chain (BEP20)</small><b>Selected</b></div>
+          </div>
+        `}
         ${!selected ? `<p class="network-helper">Choose BNB Smart Chain for BEP20 withdrawals. TRON withdrawals will be added later.</p>` : ""}
         ${selected && selected.status !== "available" ? `<p class="deposit-note">${escapeHtml(selected.name)} withdrawals are not enabled yet. Choose BNB Smart Chain for live withdrawals.</p>` : ""}
         ${selectedNetwork === "BEP20" ? twoFactorGate || `
           <form class="wallet-action-form" id="withdrawForm">
-            ${addresses.length ? `
-              <label class="form-field"><span>Saved BEP20 address</span><select id="withdrawAddressId" required>
-                ${addresses.map((address) => `<option value="${escapeAttr(address.id)}" ${defaultAddress?.id === address.id ? "selected" : ""}>${escapeHtml(address.label || "BEP20 wallet")} - ${escapeHtml(shortAddress(address.address))}</option>`).join("")}
-              </select></label>
-            ` : `
-              <section class="deposit-address-card pending"><div><span>No saved withdrawal address</span><strong>Add a BEP20 address first</strong><small>Open Settings > Addresses and save a wallet you control.</small></div><a class="app-button small" href="#/settings?tab=addresses">Add address</a></section>
-            `}
-            <label class="form-field"><span>Amount</span><input id="withdrawAmount" inputmode="decimal" placeholder="0.00" required /></label>
-            <p class="deposit-note">${withdrawalNote(user)}</p>
-            <button class="app-button" type="submit" ${addresses.length ? "" : "disabled"}>Request withdrawal</button>
+            <label class='form-field withdraw-address-field'><span>Address</span><input id='withdrawAddress' autocomplete='off' spellcheck='false' placeholder='Paste BEP20 address (0x...)' required /></label>
+            <label class="form-field withdraw-amount-field"><span>Withdrawal amount</span><div><input id="withdrawAmount" inputmode="decimal" placeholder="0.00" required /><b>USDT</b><button type="button" data-withdraw-max>Max</button></div></label>
+            <div class="withdraw-available"><span>Available</span><strong>${format(available)} USDT</strong></div>
+            <div class="withdraw-summary"><span>Receive amount <strong data-withdraw-receive>0 USDT</strong></span><span>Network fee <strong>${format(fee)} USDT</strong></span></div>
+            <button class="withdrawal-flow-primary" type="submit">Withdraw</button>
           </form>
         ` : ""}
       </section>
@@ -1761,6 +1771,7 @@
 
   function walletActivityPanel() {
     const items = walletActivityItems();
+    setTimeout(bindWalletActivityRows, 0);
     if (walletActivityState.loading && !walletActivityState.loaded && !items.length) {
       return `<div class="wallet-activity-empty">${icon("activity")}<strong>Loading wallet activity</strong><p>Checking deposits and withdrawals.</p></div>`;
     }
@@ -1768,7 +1779,7 @@
       return `<div class="wallet-activity-empty">${icon("info")}<strong>Activity unavailable</strong><p>${escapeHtml(walletActivityState.error)}</p></div>`;
     }
     if (!items.length) {
-      return `<div class="wallet-activity-empty">${icon("database")}<strong>No wallet activity yet</strong><p>Your deposits, queued withdrawals, failed withdrawals, and confirmed withdrawals will appear here.</p></div>`;
+      return `<div class="wallet-activity-empty">${icon("database")}<strong>No wallet activity yet</strong><p>Your deposits, processing withdrawals, failed withdrawals, and completed withdrawals will appear here.</p></div>`;
     }
     return `<div class="wallet-activity-list">${items.map(walletActivityRow).join("")}</div>`;
   }
@@ -1803,7 +1814,8 @@
   function walletActivityRow(item) {
     const failed = item.status === "failed" || item.status === "rejected";
     const sign = item.type === "deposit" ? "+" : "-";
-    const tone = item.type === "deposit" ? "deposit" : failed ? "failed" : "withdrawal";
+    const completed = item.type === "withdrawal" && item.status === "confirmed";
+    const tone = item.type === "deposit" ? "deposit" : failed ? "failed" : completed ? "withdrawal completed" : "withdrawal processing";
     const fee = item.type === "withdrawal" && item.fee > 0 ? `<small>Fee ${format(item.fee)} USDT</small>` : "";
     return `
       <article class="wallet-activity-row ${tone}">
@@ -1814,13 +1826,46 @@
     `;
   }
 
+  function transactionDetailsMarkup(item) {
+    const direction = item.type === 'deposit' ? 'Received' : 'Sent';
+    const fee = item.fee > 0 ? `<div><dt>Fee</dt><dd>` + format(item.fee) + ` USDT</dd></div>` : '';
+    const hash = item.txHash ? `<div><dt>Transaction hash</dt><dd class='withdrawal-reference'>` + escapeHtml(item.txHash) + `</dd></div>` : '';
+    return `<section class='withdrawal-success-modal transaction-detail-modal' role='dialog'><div class='withdrawal-success-heading'><p class='app-label'>Transaction details</p><h2>` + escapeHtml(item.title) + `</h2></div><div class='withdrawal-success-amount'><span>` + direction + `</span><strong>` + format(item.amount) + ` <small>USDT</small></strong></div><dl class='withdrawal-success-details'><div><dt>Status</dt><dd>` + escapeHtml(statusLabel(item.status)) + `</dd></div><div><dt>Date</dt><dd>` + escapeHtml(dateTime(item.date)) + `</dd></div><div><dt>Reference</dt><dd class='withdrawal-reference'>` + escapeHtml(item.id || '') + `</dd></div>` + fee + hash + `</dl><div class='withdrawal-success-actions'><button class='app-button' type='button' data-close-transaction>Done</button></div></section>`;
+  }
+
+  function showTransactionDetails(item) {
+    const modal = document.createElement('div');
+    modal.className = 'withdrawal-success-backdrop';
+    modal.innerHTML = transactionDetailsMarkup(item);
+    document.body.appendChild(modal);
+    const close = () => modal.remove();
+    modal.querySelector('[data-close-transaction]')?.addEventListener('click', close);
+    modal.addEventListener('click', (event) => { if (event.target === modal) close(); });
+  }
+
+  function bindWalletActivityRows() {
+    const items = walletActivityItems();
+    document.querySelectorAll('.wallet-activity-row').forEach((row, index) => {
+      const item = items[index];
+      if (!item) return;
+      row.setAttribute('role', 'button');
+      row.setAttribute('tabindex', '0');
+      row.setAttribute('aria-label', 'View ' + item.title + ' details');
+      const open = () => showTransactionDetails(item);
+      row.addEventListener('click', open);
+      row.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); }
+      });
+    });
+  }
+
   function withdrawalActivityTitle(status) {
-    if (status === "confirmed") return "Withdrawal confirmed";
-    if (status === "broadcast") return "Withdrawal sent";
-    if (status === "approved") return "Withdrawal queued";
+    if (status === "confirmed") return "Withdrawal completed";
+    if (status === "broadcast") return "Withdrawal processing";
+    if (status === "approved") return "Withdrawal processing";
     if (status === "failed") return "Withdrawal failed";
     if (status === "rejected") return "Withdrawal rejected";
-    return "Withdrawal requested";
+    return "Withdrawal processing";
   }
 
   function shortHash(value) {
@@ -1852,12 +1897,11 @@
   function networkSelector(mode, selectedNetwork, insertAfterNetworkId = "", insertMarkup = "") {
     return `
       <div class="network-choice-list wallet-network-grid">
-        ${NETWORKS.map((network) => `
+        ${NETWORKS.filter((network) => mode !== 'withdraw' || network.id === 'BEP20').map((network) => `
           <button class="deposit-network-card wallet-network-card ${selectedNetwork === network.id ? "active" : ""} ${network.status === "available" ? "" : "muted"}" type="button" data-network-select="${network.id}">
             <span class="network-mark ${network.id === "BEP20" ? "bsc" : "tron"}">${network.mark}</span>
             <div>
               <strong>${network.name}</strong>
-              <small>${network.id === "BEP20" ? "Live network for BRX deposits and withdrawals" : "Future network - not active yet"}</small>
               <small>${network.token}</small>
               <small>${network.confirmations}</small>
               <small>${network.minDeposit}</small>
@@ -1919,34 +1963,116 @@
     }
     return normalized;
   }
-  async function handleWithdrawalSubmit(event) {
+  function withdrawalSuccessMarkup(withdrawal, isQueued) {
+    const state = isQueued ? 'Processing' : 'Under review';
+    const amount = escapeHtml(format(Number(withdrawal.amount || 0)));
+    const head = `<section class='withdrawal-success-modal' role='dialog'><div class='withdrawal-success-mark'>` + icon('check') + `</div><div class='withdrawal-success-heading'><p class='app-label'>Request received</p><h2>Withdrawal submitted successfully</h2><p>Your request is now ` + state.toLowerCase() + `. Follow every update in transaction history.</p></div>`;
+    const amountCard = `<div class='withdrawal-success-amount'><span>Amount</span><strong>` + amount + ` <small>USDT</small></strong></div>`;
+    const status = `<p class='withdrawal-success-note'>BNB Smart Chain (BEP20) - ` + state + `</p>`;
+    const actions = `<div class='withdrawal-success-actions'><button class='app-button' type='button' data-view-withdrawal-history>View History</button><button class='app-ghost-button' type='button' data-close-withdrawal-success>Done</button></div></section>`;
+    return head + amountCard + status + actions;
+  }
+
+  function showWithdrawalSuccess(result) {
+    const withdrawal = result && result.withdrawal ? result.withdrawal : {};
+    const isQueued = String(withdrawal.status || 'requested').toLowerCase() === 'approved';
+    const modal = document.createElement('div');
+    modal.className = 'withdrawal-success-backdrop';
+    modal.innerHTML = withdrawalSuccessMarkup(withdrawal, isQueued);
+    document.body.appendChild(modal);
+    const close = () => modal.remove();
+    modal.querySelectorAll('[data-close-withdrawal-success]').forEach((button) => button.addEventListener('click', close));
+    modal.addEventListener('click', (event) => { if (event.target === modal) close(); });
+    modal.querySelector('[data-view-withdrawal-history]')?.addEventListener('click', () => {
+      close();
+      document.querySelector('.wallet-activity-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
+
+  function showWithdrawalProcessing(modal, result) {
+    const withdrawal = result?.withdrawal || {};
+    const state = withdrawal.status === 'approved' ? 'Processing' : 'Under review';
+    modal.innerHTML = `<section class='withdrawal-flow-card processing-step' role='dialog' aria-modal='true'><div class='processing-icon'>` + icon('clock') + `</div><h1>Withdrawal ` + state + `</h1><strong>` + format(Number(withdrawal.amount || 0)) + ` USDT</strong><p>Your request was submitted successfully. BRX will notify you when its status changes.</p><div class='processing-status'>` + state + ` on BNB Smart Chain (BEP20)</div><button class='withdrawal-flow-primary' type='button' data-processing-history>View History</button></section>`;
+    modal.querySelector('[data-processing-history]')?.addEventListener('click', () => {
+      modal.remove();
+      document.querySelector('.wallet-activity-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
+
+  async function submitVerifiedWithdrawal(event, modal, data) {
     event.preventDefault();
-    const withdrawalAddressId = document.querySelector("#withdrawAddressId")?.value;
-    const amount = document.querySelector("#withdrawAmount")?.value;
-    if (!withdrawalAddressId) return showToast("Save a BEP20 withdrawal address first.");
-    const user = currentUser();
-    if (!user?.securityLoaded && securityService) await securityService.loadSecurity();
-    if (!currentUser()?.security?.twoFactor?.enabled) {
-      showToast("Set up 2FA before withdrawing.");
-      location.hash = "#/settings?tab=security";
-      return;
-    }
-    const twoFactorCode = requestAuthenticatorCode("Enter your authenticator code to request this withdrawal.");
-    if (!twoFactorCode) return;
+    const code = modal.querySelector('#withdrawalAuthenticatorCode')?.value.trim() || '';
+    const errorNode = modal.querySelector('#withdrawalAuthError');
+    const submit = event.currentTarget.querySelector('button[type=submit]');
+    if (!/^\d{6}$/.test(code)) { errorNode.textContent = 'Enter the current 6-digit authenticator code.'; return; }
+    submit.disabled = true;
+    submit.textContent = 'Verifying...';
     try {
-      const result = await accountService.requestWithdrawal({ withdrawalAddressId, amount, twoFactorCode, network: "BEP20", asset: "USDT" });
-      const refreshedUser = currentUser();
-      if (refreshedUser && result.balance) {
-        saveUsers(users().map((item) => item.id === refreshedUser.id ? { ...item, balance: result.balance } : item));
-      }
-      showToast("Withdrawal approved and queued for BEP20 broadcast.");
+      const result = await accountService.requestWithdrawal({ address: data.address, amount: data.amount, twoFactorCode: code, network: 'BEP20', asset: 'USDT' });
+      const user = currentUser();
+      if (user && result.balance) saveUsers(users().map((item) => item.id === user.id ? { ...item, balance: result.balance } : item));
       refreshWalletActivity();
       renderWallet();
+      showWithdrawalProcessing(modal, result);
     } catch (error) {
-      showToast(error.message || "Could not request withdrawal.");
+      errorNode.textContent = error.message || 'Could not request withdrawal.';
+      submit.disabled = false;
+      submit.textContent = 'Submit';
     }
   }
 
+  function showWithdrawalAuthenticator(modal, data) {
+    modal.innerHTML = withdrawalAuthenticatorMarkup();
+    const input = modal.querySelector('#withdrawalAuthenticatorCode');
+    modal.querySelector('[data-auth-back]')?.addEventListener('click', () => { modal.remove(); showWithdrawalConfirmation(data); });
+    modal.querySelector('[data-auth-close]')?.addEventListener('click', () => modal.remove());
+    modal.querySelector('[data-paste-auth]')?.addEventListener('click', async () => {
+      try { input.value = (await navigator.clipboard.readText()).replace(/\D/g, '').slice(0, 6); } catch { input.focus(); }
+    });
+    modal.querySelector('#withdrawalAuthenticatorForm')?.addEventListener('submit', (event) => submitVerifiedWithdrawal(event, modal, data));
+    input?.focus();
+  }
+
+  function withdrawalAuthenticatorMarkup() {
+    return `<section class='withdrawal-flow-card authenticator-step' role='dialog' aria-modal='true'><header><button type='button' data-auth-back aria-label='Back'>` + icon('back') + `</button><h2>Security verification</h2><button type='button' data-auth-close aria-label='Close'>` + icon('x') + `</button></header><div class='withdrawal-auth-copy'><h1>Authenticator App Verification</h1><p>Enter the 6-digit code generated by your authenticator app.</p></div><form id='withdrawalAuthenticatorForm'><label><span>Authenticator App</span><div><input id='withdrawalAuthenticatorCode' inputmode='numeric' autocomplete='one-time-code' maxlength='6' required /><button type='button' data-paste-auth>Paste</button></div></label><p class='form-error' id='withdrawalAuthError'></p><button class='withdrawal-flow-primary' type='submit'>Submit</button></form></section>`;
+  }
+
+  function showWithdrawalConfirmation(data) {
+    const modal = document.createElement('div');
+    modal.className = 'withdrawal-flow-backdrop';
+    modal.innerHTML = withdrawalConfirmationMarkup(data);
+    document.body.appendChild(modal);
+    modal.querySelector('[data-withdraw-back]')?.addEventListener('click', () => modal.remove());
+    modal.querySelector('[data-confirm-withdrawal]')?.addEventListener('click', () => showWithdrawalAuthenticator(modal, data));
+  }
+
+  function withdrawalConfirmationMarkup(data) {
+    const receive = Math.max(0, data.amount - data.fee);
+    return `<section class='withdrawal-flow-card' role='dialog' aria-modal='true'><header><button type='button' data-withdraw-back aria-label='Back'>` + icon('back') + `</button><h2>Confirm order</h2><span></span></header><div class='withdrawal-flow-receive'><span>You'll receive</span><strong>` + format(receive) + ` USDT</strong></div><dl class='withdrawal-flow-details'><div><dt>Network</dt><dd>BNB Smart Chain (BEP20)</dd></div><div><dt>Address</dt><dd class='withdrawal-flow-address'>` + escapeHtml(data.address) + `</dd></div><div><dt>Withdrawal amount</dt><dd>` + format(data.amount) + ` USDT</dd></div><div><dt>Network fee</dt><dd>` + format(data.fee) + ` USDT</dd></div><div><dt>Wallet</dt><dd>BRX Wallet</dd></div></dl><div class='withdrawal-flow-warning'>` + icon('info') + `<span>Ensure that the address is correct and on the same network. Transactions cannot be cancelled.</span></div><button class='withdrawal-flow-primary' type='button' data-confirm-withdrawal>Confirm</button></section>`;
+  }
+
+  async function startWithdrawalFlow() {
+    const address = document.querySelector('#withdrawAddress')?.value.trim() || '';
+    const amount = Number(document.querySelector('#withdrawAmount')?.value);
+    if (!/^0x[a-fA-F0-9]{40}$/.test(address)) return showToast('Enter a valid BEP20 withdrawal address.');
+    if (!Number.isFinite(amount) || amount <= 0) return showToast('Enter a valid withdrawal amount.');
+    const user = currentUser();
+    if (!user?.securityLoaded && securityService) await securityService.loadSecurity();
+    if (!currentUser()?.security?.twoFactor?.enabled) {
+      showToast('Set up 2FA before withdrawing.');
+      location.hash = '#/settings?tab=security';
+      return;
+    }
+    const fee = Number(currentUser()?.platformSettings?.withdrawalFeeUsdt || 0);
+    const available = Number(currentUser()?.balance?.available || 0);
+    if (amount + fee > available) return showToast(`Insufficient available balance. You need ${format(amount + fee)} USDT including the fee.`);
+    showWithdrawalConfirmation({ address, amount, fee });
+  }
+
+  async function handleWithdrawalSubmit(event) {
+    event.preventDefault();
+    await startWithdrawalFlow();
+  }
   function renderKyc() {
     const user = requireUser();
     if (!user) return;
@@ -2058,6 +2184,9 @@
   function renderProfile() {
     const user = requireUser();
     if (!user) return;
+    if (!user.accountSettingsLoaded && accountService) {
+      void accountService.loadSettings().then(() => renderProfile()).catch((error) => console.error(error));
+    }
     const traderName = traderDisplayName(user);
     refs.app.innerHTML = `
       <section class="exchange-app app-page-wide profile-page professional-profile-page">
@@ -2086,7 +2215,16 @@
         </section>
       </section>
     `;
+    renderProfileTradingStats(user);
   }
+  function renderProfileTradingStats(user) {
+    const stats = user.tradingStats || {};
+    const panel = document.createElement('section');
+    panel.className = 'profile-trading-stats';
+    panel.innerHTML = `<div class='profile-stat-head'><div><p class='app-label blue'>Trading performance</p><h2>Trading statistics</h2></div><small>Based on completed and closed BRX orders</small></div><div class='profile-stat-grid'><div class='primary'><span>Completion rate</span><strong>` + format(Number(stats.completionRate ?? 100)) + `%</strong></div><div><span>Total trades</span><strong>` + Number(stats.totalTrades || 0).toLocaleString() + `</strong></div><div><span>Completed</span><strong>` + Number(stats.completedTrades || 0).toLocaleString() + `</strong></div><div><span>Buy / Sell</span><strong>` + Number(stats.buyTrades || 0).toLocaleString() + ` / ` + Number(stats.sellTrades || 0).toLocaleString() + `</strong></div></div>`;
+    document.querySelector('.profile-view-card')?.before(panel);
+  }
+
   function renderSettings() {
     const user = requireUser();
     if (!user) return;
@@ -2695,7 +2833,7 @@
         <p class="app-muted">2FA is active on this account. New sign-ins require a six-digit authenticator code.</p>
         ${showDisableTwoFactorForm ? `
           <div class="two-factor-disable-confirm">
-            <label class="form-field compact"><span>Authenticator code</span><input id="disableTwoFactorCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="code" autofocus /></label>
+            <label class="form-field compact"><span>Authenticator App</span><input id="disableTwoFactorCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="code" autofocus /></label>
             <div class="two-factor-secret-actions">
               <button class="settings-action danger" type="button" id="disableTwoFactor">Confirm disable</button>
               <button class="settings-action" type="button" id="cancelDisableTwoFactor">Cancel</button>
@@ -2724,7 +2862,7 @@
           </div>
         </div>
         <div class="settings-form-grid compact-grid two-factor-confirm-grid">
-          <label class="form-field"><span>Authenticator code</span><input id="confirmTwoFactorCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="code" /></label>
+          <label class="form-field"><span>Authenticator App</span><input id="confirmTwoFactorCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="code" /></label>
           <div class="settings-form-actions"><button class="app-button" type="button" id="confirmTwoFactor">Enable 2FA</button></div>
         </div>
       </div>

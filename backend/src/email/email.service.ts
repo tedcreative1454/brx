@@ -1,4 +1,4 @@
-﻿import { BadGatewayException, Injectable, ServiceUnavailableException } from "@nestjs/common";
+import { BadGatewayException, Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { env } from "../config/env";
 
 @Injectable()
@@ -12,15 +12,24 @@ export class EmailService {
     });
   }
 
+
+  async sendDepositCredited(to: string, amount: string, txHash: string) {
+    await this.sendEmail({
+      to,
+      subject: "BRX deposit credited",
+      html: this.noticeTemplate("Deposit credited", `Your ${amount} USDT deposit was confirmed on BEP20 and added to your available BRX balance. Transaction hash: ${this.escape(txHash)}.`),
+      text: `Your ${amount} USDT deposit was confirmed on BEP20 and added to your available BRX balance. Transaction hash: ${txHash}.`,
+    });
+  }
   async sendWithdrawalRequested(to: string, amount: string, address: string) {
     await this.sendEmail({
       to,
       subject: "BRX withdrawal requested",
       html: this.noticeTemplate(
         "Withdrawal requested",
-        `Your ${amount} USDT withdrawal to ${this.escape(address)} passed automatic checks and is queued for BEP20 broadcast.`,
+        `Your ${amount} USDT withdrawal to ${this.escape(address)} was received and is being processed on BNB Smart Chain.`,
       ),
-      text: `Your ${amount} USDT withdrawal to ${address} passed automatic checks and is queued for BEP20 broadcast.`,
+      text: `Your ${amount} USDT withdrawal to ${address} was received and is being processed on BNB Smart Chain.`,
     });
   }
 

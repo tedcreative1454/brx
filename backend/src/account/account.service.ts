@@ -17,6 +17,10 @@ interface ProfileRow {
   avatar_url: string | null;
   notification_preferences: Record<string, boolean> | null;
   trade_preferences: Record<string, unknown> | null;
+  completed_trades: string;
+  closed_trades: string;
+  buy_trades: string;
+  sell_trades: string;
 }
 
 interface PaymentMethodRow {
@@ -131,10 +135,18 @@ export class AccountService {
     const result = await this.db.query<ProfileRow>(
       `SELECT u.id, u.email, u.username, u.email_verified_at, u.kyc_status, u.status, u.role, u.created_at,
               p.full_name, p.phone, p.avatar_url,
-              s.notification_preferences, s.trade_preferences
+              s.notification_preferences, s.trade_preferences,
+              stats.completed_trades, stats.closed_trades, stats.buy_trades, stats.sell_trades
        FROM users u
        LEFT JOIN user_profiles p ON p.user_id = u.id
        LEFT JOIN user_settings s ON s.user_id = u.id
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*) FILTER (WHERE status = 'released')::text AS completed_trades,
+                COUNT(*) FILTER (WHERE status IN ('released', 'cancelled', 'expired'))::text AS closed_trades,
+                COUNT(*) FILTER (WHERE buyer_id = u.id)::text AS buy_trades,
+                COUNT(*) FILTER (WHERE seller_id = u.id)::text AS sell_trades
+         FROM trades WHERE buyer_id = u.id OR seller_id = u.id
+       ) stats ON true
        WHERE u.id = $1
        LIMIT 1`,
       [userId],
@@ -582,6 +594,9 @@ export class AccountService {
   }
 
   private profileToApi(row: ProfileRow) {
+    const completedTrades = Number(row.completed_trades ?? 0);
+    const closedTrades = Number(row.closed_trades ?? 0);
+    const completionRate = closedTrades === 0 ? 100 : Number(((completedTrades / closedTrades) * 100).toFixed(1));
     return {
       id: row.id,
       email: row.email,
@@ -596,6 +611,13 @@ export class AccountService {
       createdAt: row.created_at,
       notificationPreferences: { ...DEFAULT_NOTIFICATIONS, ...(row.notification_preferences ?? {}) },
       tradePreferences: { ...DEFAULT_TRADE_PREFERENCES, ...(row.trade_preferences ?? {}) },
+      tradingStats: {
+        completionRate,
+        completedTrades,
+        totalTrades: Number(row.buy_trades ?? 0) + Number(row.sell_trades ?? 0),
+        buyTrades: Number(row.buy_trades ?? 0),
+        sellTrades: Number(row.sell_trades ?? 0),
+      },
     };
   }
 

@@ -19,6 +19,7 @@ interface OfferRow {
   trader_label?: string | null;
   advertiser_avatar_url?: string | null;
   completed_trades?: string;
+  total_trades?: string;
   advertiser_last_seen_at?: Date | null;
 }
 
@@ -45,7 +46,8 @@ export class OffersService {
 
     const result = await this.db.query<OfferRow>(
       `SELECT o.*, u.email, u.username, u.trader_label, p.avatar_url AS advertiser_avatar_url, sess.last_seen_at AS advertiser_last_seen_at,
-              COUNT(DISTINCT t.id) FILTER (WHERE t.status = 'released')::text AS completed_trades
+              COUNT(DISTINCT t.id) FILTER (WHERE t.status = 'released')::text AS completed_trades,
+              COUNT(DISTINCT t.id) FILTER (WHERE t.status IN ('released', 'cancelled', 'expired'))::text AS total_trades
        FROM offers o
        JOIN users u ON u.id = o.user_id
        LEFT JOIN user_profiles p ON p.user_id = u.id
@@ -74,7 +76,8 @@ export class OffersService {
   async myOffers(userId: string) {
     const result = await this.db.query<OfferRow>(
       `SELECT o.*, u.email, u.username, u.trader_label, p.avatar_url AS advertiser_avatar_url, sess.last_seen_at AS advertiser_last_seen_at,
-              COUNT(DISTINCT t.id) FILTER (WHERE t.status = 'released')::text AS completed_trades
+              COUNT(DISTINCT t.id) FILTER (WHERE t.status = 'released')::text AS completed_trades,
+              COUNT(DISTINCT t.id) FILTER (WHERE t.status IN ('released', 'cancelled', 'expired'))::text AS total_trades
        FROM offers o
        JOIN users u ON u.id = o.user_id
        LEFT JOIN user_profiles p ON p.user_id = u.id
@@ -189,6 +192,9 @@ export class OffersService {
     return { offer: this.toOffer(result.rows[0]) };
   }
   private toOffer(row: OfferRow) {
+    const completedTrades = Number(row.completed_trades ?? 0);
+    const totalTrades = Number(row.total_trades ?? 0);
+    const completionRate = totalTrades === 0 ? 100 : Number(((completedTrades / totalTrades) * 100).toFixed(1));
     const anonymousName = `Trader#${row.id.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
     return {
       id: row.id,
@@ -205,7 +211,9 @@ export class OffersService {
       advertiser: row.username || anonymousName,
       traderLabel: row.trader_label || "",
       avatarUrl: row.advertiser_avatar_url || "",
-      completedTrades: Number(row.completed_trades ?? 0),
+      completedTrades,
+      totalTrades,
+      completionRate,
       advertiserLastSeenAt: row.advertiser_last_seen_at,
       createdAt: row.created_at,
     };

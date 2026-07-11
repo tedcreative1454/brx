@@ -26,6 +26,7 @@
       paymentMethods: payload.paymentMethods || existing.paymentMethods || [],
       withdrawalAddresses: payload.withdrawalAddresses || existing.withdrawalAddresses || [],
       platformSettings: payload.platformSettings || existing.platformSettings || {},
+      tradingStats: backendUser.tradingStats || existing.tradingStats || {},
       accountSettingsLoaded: true,
     };
     const saved = upsertUser(nextUser);
@@ -113,6 +114,9 @@
   }
 
   async function requestWithdrawal(withdrawal) {
+    if (withdrawal.withdrawalAddressId === 'manual') {
+      withdrawal = { ...withdrawal, withdrawalAddressId: undefined, address: document.querySelector('#withdrawAddress')?.value };
+    }
     const result = await requestJson("/withdrawals", {
       method: "POST",
       body: JSON.stringify(withdrawal),

@@ -16,6 +16,9 @@
   }
 
   function actionUrl(notification) {
+    if (notification.type === 'trade.message' && notification.entityId) {
+      return `#/p2p-chat?id=${encodeURIComponent(notification.entityId)}`;
+    }
     if (notification.actionUrl) return notification.actionUrl;
     if (notification.entityType === "trade" && notification.entityId) {
       return `#/trades?id=${encodeURIComponent(notification.entityId)}`;

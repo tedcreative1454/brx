@@ -8307,6 +8307,16 @@ body[data-route="market"] .brx-p2p-market .market-trader-avatar.has-image img {
   color: var(--green);
 }
 
+.wallet-activity-row.withdrawal .wallet-activity-mark {
+  background: rgba(255, 255, 255, .08);
+  color: var(--muted);
+}
+
+.wallet-activity-row.withdrawal.completed .wallet-activity-mark {
+  background: rgba(8, 201, 139, .12);
+  color: var(--green);
+}
+
 .wallet-activity-row.failed .wallet-activity-mark {
   background: rgba(255, 75, 103, .12);
   color: var(--red);
@@ -8353,7 +8363,12 @@ body[data-route="market"] .brx-p2p-market .market-trader-avatar.has-image img {
 }
 
 .wallet-activity-row.withdrawal .wallet-activity-side strong {
-  color: var(--blue-2);
+  color: var(--text);
+}
+
+.wallet-activity-row.withdrawal.completed .wallet-activity-side strong,
+.wallet-activity-row.withdrawal.completed .wallet-activity-main strong {
+  color: var(--green);
 }
 
 .wallet-activity-row.failed .wallet-activity-side strong {

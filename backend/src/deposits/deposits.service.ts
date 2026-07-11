@@ -6,6 +6,7 @@ import { AlertsService } from "../alerts/alerts.service";
 import { BscService, UsdtTransferLog } from "../blockchain/bsc.service";
 import { env } from "../config/env";
 import { DatabaseService } from "../database/database.service";
+import { EmailService } from "../email/email.service";
 import { LedgerService } from "../ledger/ledger.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { PlatformSettingsService } from "../platform-settings/platform-settings.service";
@@ -43,6 +44,7 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
     private readonly bsc: BscService,
     private readonly ledger: LedgerService,
     private readonly alerts: AlertsService,
+    private readonly email: EmailService,
     private readonly notifications: NotificationsService,
     private readonly platformSettings: PlatformSettingsService,
   ) {}
@@ -271,6 +273,7 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
       const wasCredited = await this.creditConfirmedDeposit(deposit, confirmations);
       if (wasCredited) {
         credited += 1;
+        await this.sendDepositCreditedEmail(deposit).catch((error) => this.logger.warn(error));
         const sweep = await this.sweepUserWallet(deposit.user_id, deposit.id).catch((error) => {
           this.logger.warn(error instanceof Error ? error.message : error);
           return null;
@@ -329,6 +332,12 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+
+  private async sendDepositCreditedEmail(deposit: PendingDepositRow) {
+    const result = await this.db.query<{ email: string }>("SELECT email FROM users WHERE id = $1 LIMIT 1", [deposit.user_id]);
+    const email = result.rows[0]?.email;
+    if (email) await this.email.sendDepositCredited(email, deposit.amount, deposit.tx_hash);
+  }
   private async sweepUserWallet(userId: string, depositId: string | null) {
     const platform = await this.platformSettings.getSettings();
     if (!platform.bscSweepEnabled) return null;

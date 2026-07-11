@@ -333,7 +333,7 @@ export class TradesService {
         message: preview,
         entityType: "trade",
         entityId: trade.id,
-        actionUrl: `#/trades?id=${encodeURIComponent(trade.id)}`,
+        actionUrl: `#/p2p-chat?id=${encodeURIComponent(trade.id)}`,
         idempotencyKey: `trade:${trade.id}:message:${message.id}`,
       }, client);
       return { message: this.toMessage(message, userId) };

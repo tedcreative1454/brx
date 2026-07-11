@@ -287,7 +287,7 @@
     const minFiat = Number(offer.minFiat);
     const maxFiat = Math.min(Number(offer.maxFiat), available * price);
     const methods = offer.paymentMethods || [];
-    const completion = Number(offer.completionRate || offer.completion || 98.4);
+    const completion = Number(offer.completionRate ?? offer.completion ?? 100);
     const orders = Math.max(0, Math.trunc(Number(offer.completedTrades || 0)));
     const releaseMinutes = 15;
     const presence = presenceMeta(offer.advertiserLastSeenAt || offer.lastSeenAt);
@@ -352,7 +352,7 @@
     if (paymentMethods.length && !paymentMethods.includes(selectedPaymentMethod)) selectedPaymentMethod = paymentMethods[0];
     const side = action.toLowerCase();
     const traderRole = action === "Buy" ? "Seller" : "Buyer";
-    const completion = Number(offer.completionRate || offer.completion || 100);
+    const completion = Number(offer.completionRate ?? offer.completion ?? 100);
 
     return `
       <section class="order-modal-backdrop" id="orderModalBackdrop" role="dialog" aria-modal="true" aria-labelledby="orderModalTitle">

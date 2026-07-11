@@ -7,6 +7,7 @@ import { env } from "../config/env";
 import { DatabaseService } from "../database/database.service";
 import { EmailService } from "../email/email.service";
 import { LedgerService } from "../ledger/ledger.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import { PlatformSettingsService } from "../platform-settings/platform-settings.service";
 
 export interface WithdrawalRequestBody {
@@ -19,7 +20,7 @@ export interface WithdrawalRequestBody {
 }
 
 interface WithdrawalAddressRow {
-  id: string;
+  id: string | null;
   label: string;
   address: string;
   network: string;
@@ -83,6 +84,7 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
     private readonly bsc: BscService,
     private readonly email: EmailService,
     private readonly alerts: AlertsService,
+    private readonly notifications: NotificationsService,
     private readonly platformSettings: PlatformSettingsService,
   ) {}
 
@@ -188,6 +190,15 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
       return { withdrawal, balance: this.ledger.normalizeBalance(balance.rows[0]) };
     });
 
+    await this.notifications.create(result.withdrawal.user_id, {
+      type: "withdrawal.processing",
+      title: "Withdrawal processing",
+      message: `${result.withdrawal.amount} USDT withdrawal is being processed on BNB Smart Chain.`,
+      entityType: "withdrawal",
+      entityId: result.withdrawal.id,
+      actionUrl: "#/wallet?mode=withdraw",
+      idempotencyKey: `withdrawal:${result.withdrawal.id}:requested-notification`,
+    });
     await this.email.sendWithdrawalRequested(risk.email, result.withdrawal.amount, result.withdrawal.address).catch((error) => this.logger.warn(error));
     if (result.withdrawal.status === "requested") {
       await this.alerts.sendOperationalAlert("Withdrawal needs manual review", `${result.withdrawal.amount} USDT withdrawal is waiting for admin approval.`, {
@@ -354,6 +365,15 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
           [withdrawal.id, tx.txHash],
         );
         await this.audit(withdrawal.user_id, "withdrawal.broadcast", withdrawal.id, { txHash: tx.txHash });
+        await this.notifications.create(withdrawal.user_id, {
+          type: "withdrawal.broadcast",
+          title: "Withdrawal sent",
+          message: `${withdrawal.amount} USDT was sent on BNB Smart Chain and is awaiting confirmation.`,
+          entityType: "withdrawal",
+          entityId: withdrawal.id,
+          actionUrl: "#/wallet?mode=withdraw",
+          idempotencyKey: `withdrawal:${withdrawal.id}:broadcast-notification`,
+        });
         await this.email.sendWithdrawalBroadcast(withdrawal.user_email || "", withdrawal.amount, tx.txHash).catch((error) => this.logger.warn(error));
         broadcasted += 1;
       } catch (error) {
@@ -415,6 +435,15 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
            VALUES ($1, 'withdrawal.confirmed', 'withdrawal', $2, $3::jsonb)`,
           [row.user_id, row.id, JSON.stringify({ txHash: row.tx_hash, confirmations: status.confirmations, fee: row.fee })],
         );
+        await this.notifications.create(row.user_id, {
+          type: "withdrawal.completed",
+          title: "Withdrawal completed",
+          message: `${row.amount} USDT withdrawal was confirmed on BNB Smart Chain.`,
+          entityType: "withdrawal",
+          entityId: row.id,
+          actionUrl: "#/wallet?mode=withdraw",
+          idempotencyKey: `withdrawal:${row.id}:completed-notification`,
+        }, client);
       });
 
       await this.email.sendWithdrawalConfirmed(withdrawal.user_email || "", withdrawal.amount, withdrawal.tx_hash!).catch((error) => this.logger.warn(error));
@@ -482,6 +511,15 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
          VALUES ($1, 'withdrawal.failed_returned', 'withdrawal', $2, $3::jsonb)`,
         [row.user_id, row.id, JSON.stringify({ reason, fee: row.fee })],
       );
+      await this.notifications.create(row.user_id, {
+        type: "withdrawal.failed",
+        title: "Withdrawal failed",
+        message: "The withdrawal could not be completed and the funds were returned to your available balance.",
+        entityType: "withdrawal",
+        entityId: row.id,
+        actionUrl: "#/wallet?mode=withdraw",
+        idempotencyKey: `withdrawal:${row.id}:failed-notification`,
+      }, client);
     });
     await this.email.sendWithdrawalFailed(withdrawal.user_email || "", withdrawal.amount, reason).catch((error) => this.logger.warn(error));
   }
@@ -557,7 +595,7 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
       return {
         status: "approved",
         riskDecision: "auto_approved",
-        reason: "Passed automatic checks: 2FA, active account, tier limit, platform cap, available balance, and configured fee.",
+        reason: "Withdrawal approved and processing.",
         approvedAt: new Date(),
         autoApprovedAt: new Date(),
         auditAction: "withdrawal.auto_approved",
@@ -581,6 +619,11 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async resolveWithdrawalAddress(userId: string, body: WithdrawalRequestBody) {
+    const directAddress = String(body.address || '').trim();
+    if (!body.withdrawalAddressId && /^0x[a-fA-F0-9]{40}$/.test(directAddress)) {
+      return { id: null, label: 'Direct address', address: directAddress, network: 'BEP20', asset: 'USDT', status: 'active', created_at: new Date() };
+    }
+    if (!body.withdrawalAddressId) throw new BadRequestException('Enter a valid BEP20 withdrawal address.');
     const id = String(body.withdrawalAddressId || "").trim();
     if (!id) throw new BadRequestException("Choose a saved BEP20 withdrawal address first.");
 
