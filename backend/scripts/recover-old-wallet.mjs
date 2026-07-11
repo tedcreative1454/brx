@@ -42,7 +42,7 @@ async function hiddenPrompt(label) {
       for (const character of chunk) {
         if (character === "\r" || character === "\n") {
           process.stdout.write("\n");
-          return value;
+          return value.replace(/\u001b\[200~/g, "").replace(/\u001b\[201~/g, "");
         }
         if (character === "\u0003") throw new Error("Recovery cancelled.");
         if (character === "\u007f" || character === "\b") value = value.slice(0, -1);
@@ -74,6 +74,8 @@ try {
   if (!record) throw new Error("No wallet record exists for that deposit address.");
 
   const oldEncryptionKey = await hiddenPrompt("Old encryption key (hidden): ");
+  if (!oldEncryptionKey) throw new Error("No encryption key was entered.");
+  console.log(`Received an old encryption key with ${oldEncryptionKey.length} characters.`);
   let privateKey;
   try {
     privateKey = decrypt(record.encrypted_private_key, oldEncryptionKey);
