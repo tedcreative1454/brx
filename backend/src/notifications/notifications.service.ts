@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { PoolClient } from "pg";
 import webPush from "web-push";
 import { env } from "../config/env";
@@ -30,10 +30,17 @@ export interface CreateNotificationInput {
 
 @Injectable()
 export class NotificationsService {
-  private readonly pushEnabled = Boolean(env.vapidPublicKey && env.vapidPrivateKey);
+  private readonly logger = new Logger(NotificationsService.name);
+  private pushEnabled = false;
 
   constructor(private readonly db: DatabaseService) {
-    if (this.pushEnabled) webPush.setVapidDetails(env.vapidSubject, env.vapidPublicKey, env.vapidPrivateKey);
+    if (!env.vapidPublicKey || !env.vapidPrivateKey) return;
+    try {
+      webPush.setVapidDetails(env.vapidSubject, env.vapidPublicKey, env.vapidPrivateKey);
+      this.pushEnabled = true;
+    } catch (error) {
+      this.logger.error(`Web Push is disabled because VAPID configuration is invalid: ${error instanceof Error ? error.message : "invalid keys"}`);
+    }
   }
 
   pushConfig() {
