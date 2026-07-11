@@ -353,8 +353,8 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
     const wallet = walletResult.rows[0];
     if (!wallet) return null;
 
-    const activeSweep = await this.db.query<{ id: string; status: string }>(
-      `SELECT id, status
+    const activeSweep = await this.db.query<{ id: string; status: string; updated_at: Date }>(
+      `SELECT id, status, updated_at
        FROM wallet_sweeps
        WHERE wallet_account_id = $1
          AND status IN ('pending', 'gas_funded', 'broadcast')
@@ -375,7 +375,9 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
     const gasNeededBnb = this.bsc.formatNative(gasRequired);
 
     if (currentGas < gasRequired) {
-      if (activeSweepRow?.status === "gas_funded") return { status: "gas_funded" };
+      if (activeSweepRow?.status === "gas_funded" && Date.now() - new Date(activeSweepRow.updated_at).getTime() < 120_000) {
+        return { status: "gas_funded" };
+      }
       if (!env.bscGasWalletPrivateKey) {
         await this.recordSweepFailure(wallet, depositId, amount, gasNeededBnb, "Gas wallet private key is not configured.");
         return { status: "failed" };
@@ -384,7 +386,19 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
       const gasToFund = gasRequired - currentGas;
       const gasToFundBnb = this.bsc.formatNative(gasToFund);
       const gasTx = await this.bsc.fundGas(wallet.deposit_address, gasToFundBnb);
-      const sweep = await this.insertSweep(wallet, depositId, amount, "gas_funded", gasNeededBnb, gasToFundBnb, gasTx.txHash);
+      const sweep = activeSweepRow?.status === "gas_funded"
+        ? (await this.db.query<{ id: string }>(
+            `UPDATE wallet_sweeps
+             SET gas_needed_bnb = $2,
+                 gas_funded_bnb = COALESCE(gas_funded_bnb, 0) + $3::numeric,
+                 gas_funding_tx_hash = $4,
+                 error = NULL,
+                 updated_at = now()
+             WHERE id = $1
+             RETURNING id`,
+            [activeSweepRow.id, gasNeededBnb, gasToFundBnb, gasTx.txHash],
+          )).rows[0]
+        : await this.insertSweep(wallet, depositId, amount, "gas_funded", gasNeededBnb, gasToFundBnb, gasTx.txHash);
       await this.audit("wallet_sweep.gas_funded", sweep.id, { userId, amount, address: wallet.deposit_address, gasTxHash: gasTx.txHash, gasToFundBnb });
       await this.alerts.sendOperationalAlert("Deposit wallet gas funded", `Funded ${gasToFundBnb} BNB for automatic sweep.`, {
         userId,
