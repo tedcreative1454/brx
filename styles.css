@@ -5005,6 +5005,7 @@ body:has(.landing-redesign) {
 .withdraw-network-field > span, .withdraw-address-field > span, .withdraw-amount-field > span { display:block; margin-bottom:9px; color:var(--muted); font-weight:800; }
 .withdraw-network-field > div { display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:12px; min-height:66px; padding:12px 16px; border:1px solid var(--line-blue); border-radius:12px; background:var(--surface-2); }
 .withdraw-network-field strong { display:grid; place-items:center; width:40px; height:40px; border-radius:50%; background:var(--blue); color:#fff; font-size:12px; }
+.withdraw-network-field .network-mark { width:40px; height:40px; }
 .withdraw-network-copy { display:flex; flex-direction:column; gap:3px; min-width:0; }
 .withdraw-network-field small { color:var(--muted); font-size:12px; line-height:1.35; }
 .withdraw-network-field .withdraw-network-name { color:var(--text); font-size:15px; font-weight:700; margin-bottom:2px; }

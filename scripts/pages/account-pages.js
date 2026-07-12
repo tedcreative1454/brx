@@ -1713,7 +1713,7 @@
           <div class="withdraw-network-field">
             <span>Network</span>
             <div>
-              <strong>BSC</strong>
+              <span class="network-mark bsc">BNB</span>
               <span class="withdraw-network-copy">
                 <small class="withdraw-network-name">BNB Smart Chain (BEP20)</small>
                 <small>15 block confirmations</small>
@@ -1907,6 +1907,7 @@
   }
 
   function networkSelector(mode, selectedNetwork, insertAfterNetworkId = "", insertMarkup = "") {
+    const withdrawalFee = Number(currentUser()?.platformSettings?.withdrawalFeeUsdt || 0);
     return `
       <div class="network-choice-list wallet-network-grid">
         ${NETWORKS.filter((network) => mode !== 'withdraw' || network.id === 'BEP20').map((network) => `
@@ -1917,6 +1918,7 @@
               <small>${network.token}</small>
               <small>${network.confirmations}</small>
               <small>${network.minDeposit}</small>
+              ${mode === "withdraw" ? `<small>Withdrawal fee ${format(withdrawalFee)} USDT</small>` : ""}
               <small>${network.arrival}</small>
             </div>
             <span class="network-status ${network.status === "available" ? "live" : "soon"}">${selectedNetwork === network.id ? "Selected" : network.status === "available" ? "Choose BNB" : "Coming soon"}</span>
