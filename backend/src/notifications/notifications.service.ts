@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { PoolClient } from "pg";
-import webPush from "web-push";
+import webPush = require("web-push");
 import { env } from "../config/env";
 import { DatabaseService } from "../database/database.service";
 
