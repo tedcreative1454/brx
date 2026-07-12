@@ -1712,7 +1712,17 @@
         ${selectedNetwork !== "BEP20" ? networkSelector("withdraw", selectedNetwork) : `
           <div class="withdraw-network-field">
             <span>Network</span>
-            <div><strong>BSC</strong><small>BNB Smart Chain (BEP20)</small><b>Selected</b></div>
+            <div>
+              <strong>BSC</strong>
+              <span class="withdraw-network-copy">
+                <small class="withdraw-network-name">BNB Smart Chain (BEP20)</small>
+                <small>15 block confirmations</small>
+                <small>Min. deposit &gt; 1 USDT</small>
+                <small>Withdrawal fee ${format(fee)} USDT</small>
+                <small>Est. arrival ~1-3 min</small>
+              </span>
+              <b>Selected</b>
+            </div>
           </div>
         `}
         ${!selected ? `<p class="network-helper">Choose BNB Smart Chain for BEP20 withdrawals. TRON withdrawals will be added later.</p>` : ""}

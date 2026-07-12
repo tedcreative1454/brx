@@ -74,7 +74,7 @@
         </section>
 
         <section id="adminOps" class="admin-console-section admin-ops-card">
-          <div class="admin-console-section-head"><div><p class="app-label blue">Operations feed</p><h2>Platform activity</h2><small>Users, deposits, withdrawals, trades, and immutable audit events.</small></div><button class="admin-process-button" type="button" id="processWithdrawals">${icon("upload")} Process withdrawals</button></div>
+          <div class="admin-console-section-head"><div><p class="app-label blue">Operations feed</p><h2>Platform activity</h2><small>Users, deposits, withdrawals, trades, and immutable audit events.</small></div><div class="admin-console-actions"><button class="admin-process-button" type="button" id="retryDepositSweeps">${icon("download")} Retry deposit sweeps</button><button class="admin-process-button" type="button" id="processWithdrawals">${icon("upload")} Process withdrawals</button></div></div>
           <div id="adminOpsBody">${loadingBlock("Loading operations")}</div>
         </section>
 
@@ -93,7 +93,21 @@
     `;
 
     document.querySelector("#refreshAdmin")?.addEventListener("click", (event) => refreshAdminConsole(event.currentTarget));
+    document.querySelector("#retryDepositSweeps")?.addEventListener("click", (event) => retryDepositSweeps(event.currentTarget));
     void loadAdminData();
+  }
+
+  async function retryDepositSweeps(button) {
+    button.disabled = true;
+    try {
+      const result = await adminService.retryDepositSweeps();
+      showToast(`Sweep retry finished: ${result.broadcast || 0} broadcast, ${result.gasFunded || 0} gas funded, ${result.failed || 0} failed.`);
+      await loadAdminData();
+    } catch (error) {
+      showToast(error.message || "Could not retry deposit sweeps.");
+    } finally {
+      button.disabled = false;
+    }
   }
 
   async function refreshAdminConsole(button) {

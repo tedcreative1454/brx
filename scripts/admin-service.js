@@ -48,6 +48,10 @@
     return requestJson("/withdrawals/process", { method: "POST" });
   }
 
+  function retryDepositSweeps() {
+    return requestJson("/deposits/sweep", { method: "POST" });
+  }
+
   function approveWithdrawal(id, note) {
     return requestJson(`/admin/withdrawals/${id}/approve`, {
       method: "POST",
@@ -126,6 +130,7 @@
     listDeposits,
     listWithdrawals,
     processWithdrawals,
+    retryDepositSweeps,
     approveWithdrawal,
     rejectWithdrawal,
     listTrades,

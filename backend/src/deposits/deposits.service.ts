@@ -64,7 +64,9 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
     if (this.scanRunning) return { scanned: false, reason: "deposit scanner already running" };
     this.scanRunning = true;
     try {
-      return await this.scanAssignedWalletsOnce();
+      const scan = await this.scanAssignedWalletsOnce();
+      const sweep = await this.sweepFundedWallets();
+      return { ...scan, sweep };
     } finally {
       this.scanRunning = false;
     }
@@ -103,7 +105,11 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
        WHERE wa.asset = 'USDT'
          AND wa.network = 'BEP20'
          AND wa.status = 'active'
-       ORDER BY wa.created_at ASC
+       ORDER BY EXISTS (
+         SELECT 1 FROM wallet_sweeps ws
+         WHERE ws.wallet_account_id = wa.id
+           AND ws.status = 'gas_funded'
+       ) DESC, wa.created_at ASC
        LIMIT $1`,
       [cappedLimit],
     );
@@ -357,8 +363,10 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
       `SELECT id, status, updated_at
        FROM wallet_sweeps
        WHERE wallet_account_id = $1
-         AND status IN ('pending', 'gas_funded', 'broadcast')
-         AND created_at >= now() - interval '45 minutes'
+         AND (
+           status = 'gas_funded'
+           OR (status IN ('pending', 'broadcast') AND created_at >= now() - interval '45 minutes')
+         )
        ORDER BY created_at DESC
        LIMIT 1`,
       [wallet.id],
