@@ -42,6 +42,7 @@
   async function render() {
     const route = routeName();
     const requiresAppSession = window.BRX.config.APP_ROUTES.includes(route);
+    document.body.classList.remove("payment-proof-open", "dispute-flow-open");
     document.body.dataset.route = route;
     document.title = routeTitle(route);
     refs.app.setAttribute("aria-busy", "true");

@@ -397,8 +397,8 @@
       <div class="admin-queue-row admin-dispute-row">
         <span>
           <strong>${format(Number(trade.assetAmount))} USDT - ${format(Number(trade.fiatAmount))} ETB</strong>
-          <small>Buyer: ${escapeHtml(trade.buyerEmail || "")}</small>
-          <small>Seller: ${escapeHtml(trade.sellerEmail || "")}</small>
+          <small>Buyer: ${escapeHtml(trade.buyerName || "BRX trader")}</small>
+          <small>Seller: ${escapeHtml(trade.sellerName || "BRX trader")}</small>
           <small>Reason: ${escapeHtml(trade.disputeReason || "No reason saved")}</small>
           ${evidenceLinks(trade.evidence)}
         </span>
@@ -509,7 +509,7 @@
   }
 
   function tradeRow(item) {
-    return `<div class="admin-mini-row"><span><strong>${money(item.assetAmount)} USDT</strong><small>${escapeHtml(item.status)} - ${escapeHtml(item.buyerEmail || "buyer")} / ${escapeHtml(item.sellerEmail || "seller")}</small></span></div>`;
+    return `<div class="admin-mini-row"><span><strong>${money(item.assetAmount)} USDT</strong><small>${escapeHtml(item.status)} - ${escapeHtml(item.buyerName || "buyer")} / ${escapeHtml(item.sellerName || "seller")}</small></span></div>`;
   }
 
   function auditRow(item) {

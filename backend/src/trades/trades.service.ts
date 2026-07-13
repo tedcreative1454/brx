@@ -49,6 +49,10 @@ interface TradeRow {
   offer_price?: string;
   buyer_email?: string;
   seller_email?: string;
+  buyer_username?: string | null;
+  seller_username?: string | null;
+  buyer_trader_label?: string | null;
+  seller_trader_label?: string | null;
   buyer_last_seen_at?: Date | null;
   seller_last_seen_at?: Date | null;
   dispute_status?: string | null;
@@ -97,6 +101,7 @@ interface PaymentProofInput {
 export class TradesService {
   private readonly logger = new Logger(TradesService.name);
   private readonly paymentWindowMinutes = 15;
+  private readonly disputeDelayMinutes = 15;
 
   constructor(
     private readonly db: DatabaseService,
@@ -111,6 +116,8 @@ export class TradesService {
     const result = await this.db.query<TradeRow>(
       `SELECT t.*, o.side AS offer_side, o.price AS offer_price,
               buyer.email AS buyer_email, seller.email AS seller_email,
+              buyer.username AS buyer_username, seller.username AS seller_username,
+              buyer.trader_label AS buyer_trader_label, seller.trader_label AS seller_trader_label,
               (SELECT MAX(last_seen_at) FROM user_sessions WHERE user_id = buyer.id AND revoked_at IS NULL AND expires_at > now()) AS buyer_last_seen_at,
               (SELECT MAX(last_seen_at) FROM user_sessions WHERE user_id = seller.id AND revoked_at IS NULL AND expires_at > now()) AS seller_last_seen_at,
               d.id AS dispute_id, d.status AS dispute_status
@@ -134,6 +141,8 @@ export class TradesService {
     const result = await this.db.query<TradeRow>(
       `SELECT t.*, o.side AS offer_side, o.price AS offer_price,
               buyer.email AS buyer_email, seller.email AS seller_email,
+              buyer.username AS buyer_username, seller.username AS seller_username,
+              buyer.trader_label AS buyer_trader_label, seller.trader_label AS seller_trader_label,
               (SELECT MAX(last_seen_at) FROM user_sessions WHERE user_id = buyer.id AND revoked_at IS NULL AND expires_at > now()) AS buyer_last_seen_at,
               (SELECT MAX(last_seen_at) FROM user_sessions WHERE user_id = seller.id AND revoked_at IS NULL AND expires_at > now()) AS seller_last_seen_at,
               d.id AS dispute_id, d.status AS dispute_status,
@@ -472,6 +481,13 @@ export class TradesService {
       if (trade.status !== "payment_sent") {
         throw new BadRequestException("An appeal can be opened only after payment has been submitted.");
       }
+      const paymentSentAt = trade.payment_sent_at?.getTime();
+      if (!paymentSentAt) throw new BadRequestException("Payment submission time is missing.");
+      const disputeUnlockAt = paymentSentAt + (this.disputeDelayMinutes * 60 * 1000);
+      if (Date.now() < disputeUnlockAt) {
+        const remainingMinutes = Math.max(1, Math.ceil((disputeUnlockAt - Date.now()) / 60000));
+        throw new BadRequestException(`Try resolving this trade in chat first. Disputes open in ${remainingMinutes} minute${remainingMinutes === 1 ? "" : "s"}.`);
+      }
 
       const openDispute = await client.query<{ id: string }>("SELECT id FROM disputes WHERE trade_id = $1 AND status = 'open' LIMIT 1", [trade.id]);
       let disputeId = openDispute.rows[0]?.id;
@@ -543,13 +559,15 @@ export class TradesService {
   }
 
   async adminDisputes() {
-    const result = await this.db.query<TradeRow & { opened_by_email?: string; dispute_created_at?: Date }>(
+    const result = await this.db.query<TradeRow & { opened_by_username?: string | null; opened_by_trader_label?: string | null; opened_by_id?: string; dispute_created_at?: Date }>(
       `SELECT t.*, o.side AS offer_side, o.price AS offer_price,
               buyer.email AS buyer_email, seller.email AS seller_email,
+              buyer.username AS buyer_username, seller.username AS seller_username,
+              buyer.trader_label AS buyer_trader_label, seller.trader_label AS seller_trader_label,
               (SELECT MAX(last_seen_at) FROM user_sessions WHERE user_id = buyer.id AND revoked_at IS NULL AND expires_at > now()) AS buyer_last_seen_at,
               (SELECT MAX(last_seen_at) FROM user_sessions WHERE user_id = seller.id AND revoked_at IS NULL AND expires_at > now()) AS seller_last_seen_at,
               d.id AS dispute_id, d.status AS dispute_status, d.created_at AS dispute_created_at,
-              opened.email AS opened_by_email,
+              opened.id AS opened_by_id, opened.username AS opened_by_username, opened.trader_label AS opened_by_trader_label,
               COALESCE((
                 SELECT json_agg(json_build_object(
                   'id', e.id,
@@ -573,7 +591,13 @@ export class TradesService {
        ORDER BY d.created_at ASC`,
     );
 
-    return { disputes: result.rows.map((row) => ({ ...this.toTrade(row, "admin"), openedByEmail: row.opened_by_email, disputeCreatedAt: row.dispute_created_at })) };
+    return {
+      disputes: result.rows.map((row) => ({
+        ...this.toTrade(row, "admin"),
+        openedByName: this.publicTraderName(row.opened_by_username, row.opened_by_id || ""),
+        disputeCreatedAt: row.dispute_created_at,
+      })),
+    };
   }
 
   async resolveDispute(adminId: string, tradeId: string, input: { resolution?: string; note?: string }) {
@@ -907,6 +931,8 @@ export class TradesService {
 
   private toTrade(row: TradeRow, viewerId: string) {
     const role = row.buyer_id === viewerId ? "buyer" : row.seller_id === viewerId ? "seller" : "viewer";
+    const buyerName = this.publicTraderName(row.buyer_username, row.buyer_id);
+    const sellerName = this.publicTraderName(row.seller_username, row.seller_id);
     return {
       id: row.id,
       offerId: row.offer_id,
@@ -928,9 +954,9 @@ export class TradesService {
       offerPrice: row.offer_price,
       status: row.status,
       role,
-      counterpartyEmail: role === "buyer" ? row.seller_email : row.buyer_email,
-      buyerEmail: row.buyer_email,
-      sellerEmail: row.seller_email,
+      counterpartyName: role === "buyer" ? sellerName : role === "seller" ? buyerName : "BRX trader",
+      buyerName,
+      sellerName,
       buyerLastSeenAt: row.buyer_last_seen_at,
       sellerLastSeenAt: row.seller_last_seen_at,
       counterpartyLastSeenAt: role === "buyer" ? row.seller_last_seen_at : row.buyer_last_seen_at,
@@ -952,6 +978,16 @@ export class TradesService {
       resolvedAt: row.resolved_at,
       createdAt: row.created_at,
     };
+  }
+
+  private publicTraderName(username: string | null | undefined, userId: string) {
+    const configuredName = String(username || "").trim();
+    if (configuredName && !configuredName.includes("@")) return configuredName;
+    let hash = 0;
+    for (const character of String(userId || "000000")) {
+      hash = ((hash * 31) + character.charCodeAt(0)) >>> 0;
+    }
+    return `Trader #${String(hash % 1000000).padStart(6, "0")}`;
   }
 
   private normalizePaymentMethod(value: string) {

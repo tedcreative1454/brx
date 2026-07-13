@@ -693,7 +693,8 @@
     return `<div class="p2p-chat-account">${avatar}<strong>${escapeHtml(name)}</strong><small>BRX account</small></div>`;
   }
   function p2pCounterparty(trade) {
-    return trade.counterpartyName || trade.counterpartyEmail || "BRX user";
+    const name = String(trade.counterpartyName || "").trim();
+    return name && !name.includes("@") ? name : "BRX trader";
   }
 
   function chatPreview(trade) {

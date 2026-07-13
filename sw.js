@@ -1,4 +1,4 @@
-const BRX_CACHE = "brx-pwa-shell-v2";
+const BRX_CACHE = "brx-pwa-shell-v3";
 const BRX_ASSETS = [
   "/",
   "/index.html",

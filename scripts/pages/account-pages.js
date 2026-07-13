@@ -556,6 +556,8 @@
 
   async function loadTradeDetail(tradeId) {
     const content = document.querySelector("#tradesContent");
+    document.body.classList.remove("payment-proof-open");
+    document.body.classList.remove("dispute-flow-open");
     try {
       const result = await marketplace.getTrade(tradeId);
       const trade = result.trade;
@@ -571,7 +573,7 @@
   function tradeRow(trade) {
     const isBuyer = trade.role === "buyer";
     const roleText = isBuyer ? "Buy USDT" : "Sell USDT";
-    const counterparty = escapeHtml(trade.counterpartyEmail || "BRX user");
+    const counterparty = escapeHtml(counterpartyName(trade));
     const tone = trade.status === "released" ? "success" : trade.status === "disputed" ? "warning" : ["cancelled", "expired"].includes(trade.status) ? "danger" : "active";
     const nextStep = trade.status === "opened" && isBuyer ? "Payment required" : trade.status === "payment_sent" && trade.role === "seller" ? "Confirm payment" : statusLabel(trade.status);
     return `
@@ -685,24 +687,75 @@
 
   function disputePanel(trade) {
     const isOpen = trade.status === "disputed";
+    const counterparty = counterpartyName(trade);
+    const shellClass = isOpen ? "dispute-review-shell" : "dispute-flow-backdrop";
     return `
-      <section class="app-card dispute-panel">
-        <div class="trade-detail-head">
-          <div>
-            <p class="app-label blue">${isOpen ? "Dispute evidence" : "Open dispute"}</p>
-            <h3>${isOpen ? "Add supporting evidence" : "Report a problem"}</h3>
+      <div class="${shellClass}" ${isOpen ? "" : "data-dispute-backdrop"}>
+        <section class="dispute-center ${isOpen ? "review" : "create"}" role="${isOpen ? "region" : "dialog"}" ${isOpen ? "" : 'aria-modal="true"'} aria-labelledby="disputeTitle">
+          <header class="dispute-center-head">
+            <div class="dispute-center-mark">!</div>
+            <div>
+              <span>${isOpen ? "Case in review" : "BRX dispute center"}</span>
+              <h2 id="disputeTitle">${isOpen ? "Dispute under review" : "Open a dispute"}</h2>
+              <p>${isOpen ? "Add information while BRX reviews the escrow." : "Escrow stays locked while BRX reviews both sides."}</p>
+            </div>
+            ${isOpen ? `<span class="dispute-review-status">In review</span>` : `<button class="dispute-close" type="button" data-close-dispute aria-label="Close dispute">&times;</button>`}
+          </header>
+
+          <div class="dispute-order-strip">
+            <div><span>Order</span><strong>#${shortTradeId(trade.id)}</strong></div>
+            <div><span>Amount</span><strong>${format(Number(trade.assetAmount))} USDT</strong></div>
+            <div><span>Trader</span><strong>${escapeHtml(counterparty)}</strong></div>
           </div>
-          ${isOpen ? `<span class="status-pill warning">Admin review</span>` : ""}
-        </div>
-        ${evidenceList(trade.evidence || [])}
-        <form class="evidence-form" id="evidenceForm">
-          <label class="form-field wide"><span>${isOpen ? "Evidence note" : "Dispute reason"}</span><textarea id="evidenceNote" rows="4" placeholder="Explain what happened, payment reference, time, and any useful details."></textarea></label>
-          <label class="form-field"><span>Payment reference</span><input id="evidenceReference" placeholder="M-Pesa code, bank ref, or note" /></label>
-          <label class="form-field"><span>Screenshot or document</span><input id="evidenceFile" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" /></label>
-          <div class="form-error" id="evidenceError"></div>
-          <button class="${isOpen ? "app-button" : "danger-button"}" type="submit">${isOpen ? "Add evidence" : "Open dispute"}</button>
-        </form>
-      </section>
+
+          ${isOpen ? evidenceList(trade.evidence || []) : `
+            <div class="dispute-safety-note">
+              <div><strong>Before you submit</strong><p>Check trade chat and your payment account first. Use a dispute only when payment or release is still unresolved.</p></div>
+              <a href="#/p2p-chat?id=${encodeURIComponent(trade.id)}">Open trade chat</a>
+            </div>
+          `}
+
+          <form class="evidence-form dispute-form" id="evidenceForm">
+            ${isOpen ? "" : `
+              <label class="dispute-field wide">
+                <span>What went wrong?</span>
+                <select id="evidenceCategory" required>
+                  <option value="">Select a reason</option>
+                  <option value="Payment sent but USDT was not released">Payment sent, USDT not released</option>
+                  <option value="Payment was not received">Payment not received</option>
+                  <option value="Payment details are incorrect">Incorrect payment details</option>
+                  <option value="Counterparty is not responding">Trader is not responding</option>
+                  <option value="Other trade issue">Other issue</option>
+                </select>
+              </label>
+            `}
+            <label class="dispute-field wide">
+              <span>${isOpen ? "Add a note" : "Tell us what happened"}</span>
+              <textarea id="evidenceNote" rows="4" maxlength="1000" placeholder="${isOpen ? "Share new information for the reviewer." : "Add only the details BRX needs to verify this trade."}"></textarea>
+              <small>Do not include passwords, PINs, or verification codes.</small>
+            </label>
+            <div class="dispute-support-grid">
+              <label class="dispute-field">
+                <span>Payment reference <em>Optional</em></span>
+                <input id="evidenceReference" maxlength="160" placeholder="Bank or mobile-money reference" />
+              </label>
+              <label class="dispute-upload" for="evidenceFile">
+                <input id="evidenceFile" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" />
+                <span>+</span>
+                <div><strong id="evidenceFileLabel">Add evidence</strong><small>Image or PDF, max 8 MB</small></div>
+              </label>
+            </div>
+            ${isOpen ? "" : `
+              <label class="dispute-confirm"><input id="disputeConfirm" type="checkbox" /><span>I confirm the information is accurate and understand that false claims may restrict my account.</span></label>
+            `}
+            <div class="form-error" id="evidenceError"></div>
+            <footer class="dispute-form-footer">
+              ${isOpen ? "" : `<button class="dispute-cancel" type="button" data-close-dispute>Cancel</button>`}
+              <button class="dispute-submit" type="submit">${isOpen ? "Add to case" : "Submit dispute"}</button>
+            </footer>
+          </form>
+        </section>
+      </div>
     `;
   }
 
@@ -723,7 +776,7 @@
 
   function tradeLifecyclePanel(trade) {
     const meta = tradeLifecycleMeta(trade);
-    const counterparty = trade.counterpartyEmail || (trade.role === "buyer" ? trade.sellerEmail : trade.buyerEmail) || "BRX user";
+    const counterparty = counterpartyName(trade);
     return `
       <section class="trade-counterparty-card">
         <p class="app-label">Counterparty</p>
@@ -972,8 +1025,6 @@
     const isBuyer = trade.role === "buyer";
     const price = Number(trade.offerPrice || Number(trade.fiatAmount) / Number(trade.assetAmount));
     const counterparty = counterpartyName(trade);
-    const counterpartyEmail = String(trade.counterpartyEmail || "");
-    const showCounterpartyEmail = counterpartyEmail && counterpartyEmail.toLowerCase() !== String(counterparty).toLowerCase();
     return `
       <section class="p2p-settlement-page">
         <header class="binance-payment-head">
@@ -987,7 +1038,7 @@
 
         <section class="binance-counterparty">
           <span class="avatar small">${displayInitial(counterparty)}</span>
-          <div><strong>${escapeHtml(counterparty)}</strong>${showCounterpartyEmail ? `<small>${escapeHtml(counterpartyEmail)}</small>` : ""}</div>
+          <div><strong>${escapeHtml(counterparty)}</strong><small>Verified BRX trader</small></div>
           <a href="#/p2p-chat?id=${encodeURIComponent(trade.id)}">Chat</a>
         </section>
 
@@ -1406,6 +1457,22 @@
     bindAppealCountdown(trade);
     if (trade.paymentProofName) void loadPaymentProof(trade);
     document.querySelector("#evidenceForm")?.addEventListener("submit", (event) => handleEvidenceSubmit(event, trade));
+    const disputeBackdrop = document.querySelector("[data-dispute-backdrop]");
+    const closeDispute = () => {
+      document.body.classList.remove("dispute-flow-open");
+      location.hash = `#/trades?id=${encodeURIComponent(trade.id)}`;
+    };
+    if (disputeBackdrop) document.body.classList.add("dispute-flow-open");
+    document.querySelectorAll("[data-close-dispute]").forEach((button) => button.addEventListener("click", closeDispute));
+    disputeBackdrop?.addEventListener("click", (event) => {
+      if (event.target === disputeBackdrop) closeDispute();
+    });
+    document.querySelector("#evidenceFile")?.addEventListener("change", (event) => {
+      const selected = event.currentTarget.files?.[0];
+      const label = document.querySelector("#evidenceFileLabel");
+      if (label) label.textContent = selected?.name || "Add evidence";
+      event.currentTarget.closest(".dispute-upload")?.classList.toggle("selected", Boolean(selected));
+    });
     const chatForm = document.querySelector("#tradeChatForm");
     const chatInput = document.querySelector("#tradeChatInput");
     chatForm?.addEventListener("submit", (event) => handleTradeChatSubmit(event, trade));
@@ -1487,6 +1554,7 @@
       const file = await filePayload("paymentProofFile", 8 * 1024 * 1024);
       await marketplace.markPaymentSent(trade.id, { reference, file });
       showToast("Payment proof submitted. The seller has been notified.");
+      document.body.classList.remove("payment-proof-open");
       await loadTradeDetail(trade.id);
     } catch (error) {
       errorNode.textContent = error.message || "Could not submit payment proof.";
@@ -1550,25 +1618,48 @@
   }
 
   function counterpartyName(trade) {
-    return trade.counterpartyName || trade.counterpartyEmail || "BRX user";
+    const name = String(trade.counterpartyName || "").trim();
+    return name && !name.includes("@") ? name : "BRX trader";
   }
 
   async function handleEvidenceSubmit(event, trade) {
     event.preventDefault();
     const errorBox = document.querySelector("#evidenceError");
     if (errorBox) errorBox.textContent = "";
+    const isOpen = trade.status === "disputed";
+    const category = document.querySelector("#evidenceCategory")?.value.trim() || "";
     const note = document.querySelector("#evidenceNote").value.trim();
     const reference = document.querySelector("#evidenceReference").value.trim();
-    const file = await filePayload("evidenceFile");
-    const combinedNote = [note, reference ? `Payment reference: ${reference}` : ""].filter(Boolean).join("\n\n");
+    let file = null;
+    try {
+      file = await filePayload("evidenceFile", 8 * 1024 * 1024);
+    } catch (error) {
+      if (errorBox) errorBox.textContent = error.message || "Could not read the evidence file.";
+      return;
+    }
+    const combinedNote = [category ? `Issue: ${category}` : "", note, reference ? `Payment reference: ${reference}` : ""].filter(Boolean).join("\n\n");
 
-    if (!combinedNote && !file) {
-      if (errorBox) errorBox.textContent = "Add a note, payment reference, or screenshot.";
+    if (!isOpen && !category) {
+      if (errorBox) errorBox.textContent = "Select the issue that best matches this dispute.";
+      return;
+    }
+    if (!isOpen && !document.querySelector("#disputeConfirm")?.checked) {
+      if (errorBox) errorBox.textContent = "Confirm that the dispute information is accurate.";
+      return;
+    }
+    if (isOpen && !combinedNote && !file) {
+      if (errorBox) errorBox.textContent = "Add a note, reference, or evidence file.";
       return;
     }
 
+    const submit = event.currentTarget.querySelector('button[type="submit"]');
+    const originalText = submit?.textContent;
+    if (submit) {
+      submit.disabled = true;
+      submit.textContent = isOpen ? "Adding to case..." : "Submitting dispute...";
+    }
     try {
-      if (trade.status === "disputed") {
+      if (isOpen) {
         await marketplace.addTradeEvidence(trade.id, { note: combinedNote, file });
         showToast("Evidence added.");
       } else {
@@ -1579,16 +1670,26 @@
     } catch (error) {
       if (errorBox) errorBox.textContent = error.message || "Could not submit evidence.";
       else showToast(error.message || "Could not submit evidence.");
+      if (submit) {
+        submit.disabled = false;
+        submit.textContent = originalText;
+      }
     }
   }
 
   function startTradeCountdown(trade) {
-    if (trade.status !== "opened" || !trade.expiresAt) return;
+    if (tradeCountdownTimer) {
+      clearInterval(tradeCountdownTimer);
+      tradeCountdownTimer = null;
+    }
+    if (!["opened", "payment_sent"].includes(trade.status)) return;
+    const deadline = trade.status === "payment_sent" ? disputeUnlockAt(trade) : trade.expiresAt;
+    if (!deadline) return;
     const target = document.querySelector("#tradeCountdown");
     if (!target) return;
     const tick = () => {
-      target.textContent = timeLeft(trade.expiresAt);
-      if (new Date(trade.expiresAt).getTime() <= Date.now()) {
+      target.textContent = timeLeft(deadline);
+      if (new Date(deadline).getTime() <= Date.now()) {
         clearInterval(tradeCountdownTimer);
         tradeCountdownTimer = null;
       }
@@ -1633,11 +1734,12 @@
     const pendingDeposit = Number(balance.pendingDeposit) || 0;
     const pendingWithdrawal = Number(balance.pendingWithdrawal) || 0;
     const total = available + locked + pendingDeposit + pendingWithdrawal;
+    const activityCount = walletActivityItems().length;
 
     refs.app.innerHTML = `
-      <section class="exchange-app app-page-narrow professional-wallet-page">
+      <section class="exchange-app app-page-narrow professional-wallet-page wallet-v3">
 
-        <section class="professional-wallet-summary">
+        <section class="professional-wallet-summary wallet-original-summary">
           <div class="wallet-total-block">
             <span class="wallet-summary-icon">${icon("wallet")}</span>
             <div><p>Total balance</p><h2>$${format(total)}</h2><small>Available and escrow-held BRX funds</small></div>
@@ -1651,15 +1753,15 @@
         </section>
 
         <nav class="professional-wallet-tabs" aria-label="Wallet action">
-          <button class="${activeWalletMode === "deposit" ? "active" : ""}" type="button" data-wallet-mode="deposit">${icon("download")}<span><strong>Deposit</strong><small>Receive USDT</small></span></button>
-          <button class="${activeWalletMode === "withdraw" ? "active" : ""}" type="button" data-wallet-mode="withdraw">${icon("upload")}<span><strong>Withdraw</strong><small>Send on-chain</small></span></button>
-          <button class="${activeWalletMode === "transfer" ? "active" : ""}" type="button" data-wallet-mode="transfer">${icon("send")}<span><strong>Transfer</strong><small>BRX user transfer</small></span></button>
+          <button class="${activeWalletMode === "deposit" ? "active" : ""}" type="button" data-wallet-mode="deposit">${icon("download")}<span><strong>Deposit</strong><small>Receive on-chain</small></span></button>
+          <button class="${activeWalletMode === "withdraw" ? "active" : ""}" type="button" data-wallet-mode="withdraw">${icon("upload")}<span><strong>Withdraw</strong><small>Send to wallet</small></span></button>
+          <button class="${activeWalletMode === "transfer" ? "active" : ""}" type="button" data-wallet-mode="transfer">${icon("send")}<span><strong>Transfer</strong><small>Instant BRX transfer</small></span></button>
         </nav>
 
         <div class="professional-wallet-workspace">
           <div class="wallet-operation-panel">${walletModePanel(activeWalletMode, depositAddress, user)}</div>
           <aside class="wallet-activity-panel">
-            <div class="wallet-activity-head"><div><p class="app-label">Recent activity</p><h3>Transactions</h3></div><span>${icon("activity")}</span></div>
+            <div class="wallet-activity-head"><div><p class="app-label">Wallet history</p><h3>Recent transactions</h3></div><span class="wallet-activity-count">${activityCount}</span></div>
             ${walletActivityPanel()}
             <a href="#/trades">View P2P trade activity ${icon("external")}</a>
           </aside>
@@ -1692,7 +1794,7 @@
         const fee = Number(currentUser()?.platformSettings?.withdrawalFeeUsdt || 0);
         const receive = Math.max(0, Number(amountInput?.value || 0) - fee);
         const output = document.querySelector("[data-withdraw-receive]");
-        if (output) output.textContent = "$" + format(receive);
+        if (output) output.textContent = format(receive) + " USDT";
       };
       document.querySelector("#withdrawForm")?.addEventListener("submit", handleWithdrawalSubmit);
       amountInput?.addEventListener("input", updateReceive);
@@ -1726,30 +1828,33 @@
     const addressLabel = depositAddress || "Address assigned by wallet service";
     const depositAddressMarkup = selectedNetwork === "BEP20" ? `
       <section class="deposit-address-card deposit-address-detail ${depositAddress ? "" : "pending"}">
+        <div class="wallet-address-label"><b>2</b><span><strong>Your deposit address</strong><small>Only send USDT using BEP20</small></span></div>
         <div class="deposit-qr-card" aria-label="BEP20 deposit address QR code">
           ${depositAddress ? qrCodeSvg(depositAddress) : `<span class="qr-placeholder">QR</span>`}
         </div>
         <div class="deposit-address-main">
-          <span>BNB Smart Chain deposit address</span>
+          <span>USDT deposit address</span>
           <strong>${escapeHtml(addressLabel)}</strong>
-          <small>Network: USDT BEP20. Do not send TRC20, ERC20, or any other network to this address.</small>
+          <small>Deposits are credited after 15 block confirmations. Sending another asset or network may result in permanent loss.</small>
         </div>
-        <button class="app-button small" id="copyDepositAddress" type="button" ${depositAddress ? "" : "disabled"}>${depositAddress ? "Copy" : "Pending"}</button>
+        <button class="wallet-copy-address" id="copyDepositAddress" type="button" ${depositAddress ? "" : "disabled"}>${depositAddress ? "Copy address" : "Generating..."}</button>
       </section>
     ` : "";
     return `
       <section class="wallet-panel deposit-network-sheet">
           <div class="sheet-head">
             <div>
-              <p class="app-label blue">Deposit network</p>
-              <h2>Choose Network</h2>
+              <p class="app-label blue">On-chain deposit</p>
+              <h2>Deposit USDT</h2>
+              <small>Choose the network that matches the sending wallet.</small>
             </div>
             <span class="sheet-badge">USDT</span>
           </div>
 
+          <div class="wallet-flow-label"><b>1</b><span>Select network</span></div>
           ${networkSelector("deposit", selectedNetwork, "BEP20", depositAddressMarkup)}
           ${selected && selected.status !== "available" ? `<p class="deposit-note">${escapeHtml(selected.name)} deposits are not enabled yet. Choose BNB Smart Chain for live deposits.</p>` : ""}
-          ${selectedNetwork === "BEP20" ? `<p class="deposit-note">Send USDT on BNB Smart Chain BEP20 to your assigned address. Deposits are credited to your internal BRX balance after confirmations.</p>` : ""}
+          ${selectedNetwork === "BEP20" ? `<div class="wallet-risk-note">${icon("info")}<span>Confirm both the asset and network before sending. Blockchain deposits cannot be reversed.</span></div>` : ""}
       </section>
     `;
   }
@@ -1763,8 +1868,9 @@
       <section class="wallet-panel wallet-form-panel">
         <div class="sheet-head">
           <div>
-            <p class="app-label blue">BRX wallet</p>
-            <h2>Send USDT</h2>
+            <p class="app-label blue">On-chain withdrawal</p>
+            <h2>Withdraw USDT</h2>
+            <small>Send USDT to an external BEP20 wallet.</small>
           </div>
           <span class="sheet-badge">USDT</span>
         </div>
@@ -1775,12 +1881,9 @@
               <span class="network-mark bsc">BNB</span>
               <span class="withdraw-network-copy">
                 <small class="withdraw-network-name">BNB Smart Chain (BEP20)</small>
-                <small>15 block confirmations</small>
-                <small>Min. deposit &gt; 1 USDT</small>
-                <small>Withdrawal fee ${format(fee)} USDT</small>
-                <small>Est. arrival ~1-3 min</small>
+                <small>Fee ${format(fee)} USDT · Arrival ~1-3 min</small>
               </span>
-              <b>Selected</b>
+              <b>Active</b>
             </div>
           </div>
         `}
@@ -1788,11 +1891,12 @@
         ${selected && selected.status !== "available" ? `<p class="deposit-note">${escapeHtml(selected.name)} withdrawals are not enabled yet. Choose BNB Smart Chain for live withdrawals.</p>` : ""}
         ${selectedNetwork === "BEP20" ? twoFactorGate || `
           <form class="wallet-action-form" id="withdrawForm">
-            <label class='form-field withdraw-address-field'><span>Address</span><input id='withdrawAddress' autocomplete='off' spellcheck='false' placeholder='Paste BEP20 address (0x...)' required /></label>
-            <label class="form-field withdraw-amount-field"><span>Withdrawal amount</span><div><input id="withdrawAmount" inputmode="decimal" placeholder="0.00" required /><b>USDT</b><button type="button" data-withdraw-max>Max</button></div></label>
-            <div class="withdraw-available"><span>Available</span><strong>$${format(available)}</strong></div>
-            <div class="withdraw-summary"><span>Receive amount <strong data-withdraw-receive>$0</strong></span><span>Withdrawal fee <strong>$${format(fee)}</strong></span></div>
-            <button class="withdrawal-flow-primary" type="submit">Withdraw</button>
+            <label class='form-field withdraw-address-field'><span>Destination address</span><input id='withdrawAddress' autocomplete='off' spellcheck='false' placeholder='Paste BEP20 address (0x...)' required /></label>
+            <label class="form-field withdraw-amount-field"><span>Amount</span><div><input id="withdrawAmount" inputmode="decimal" placeholder="0.00" required /><b>USDT</b><button type="button" data-withdraw-max>Max</button></div></label>
+            <div class="withdraw-available"><span>Available balance</span><strong>${format(available)} USDT</strong></div>
+            <div class="withdraw-summary"><span>You receive <strong data-withdraw-receive>0.00 USDT</strong></span><span>Network fee <strong>${format(fee)} USDT</strong></span></div>
+            <div class="wallet-risk-note">${icon("info")}<span>Verify the destination and network carefully. On-chain withdrawals cannot be cancelled.</span></div>
+            <button class="withdrawal-flow-primary" type="submit">Review withdrawal</button>
           </form>
         ` : ""}
       </section>
@@ -1947,19 +2051,19 @@
     return `
       <section class="wallet-panel wallet-form-panel internal-transfer-panel">
         <div class="sheet-head">
-          <div><p class="app-label blue">Internal transfer</p><h2>Send BRX to BRX</h2></div>
+          <div><p class="app-label blue">Internal transfer</p><h2>Transfer USDT</h2><small>Move funds instantly between BRX accounts.</small></div>
           <span class="sheet-badge">USDT</span>
         </div>
         <div class="wallet-feature-preview">
           <span>${icon("send")}</span>
-          <div><h3>Move USDT through the BRX ledger</h3><p>Send available USDT to another BRX user by email or username. Internal transfers are instant and do not use the blockchain network.</p></div>
+          <div><h3>Instant and fee-free</h3><p>Internal transfers settle immediately and do not use the blockchain network.</p></div>
         </div>
         <form class="wallet-action-form" id="internalTransferForm">
           <label class="form-field"><span>Recipient email or username</span><input id="transferRecipient" autocomplete="off" placeholder="trader@example.com" required /></label>
           <label class="form-field"><span>Amount</span><input id="transferAmount" inputmode="decimal" placeholder="0.00" required /></label>
           <label class="form-field"><span>Note optional</span><input id="transferNote" maxlength="180" placeholder="Payment note" /></label>
           <p class="deposit-note">Only available USDT can be transferred. Escrow, pending deposits, and pending withdrawals are not spendable.</p>
-          <button class="app-button" type="submit">Send internal transfer</button>
+          <button class="withdrawal-flow-primary" type="submit">Review transfer</button>
         </form>
       </section>
     `;
@@ -1972,15 +2076,15 @@
         ${NETWORKS.filter((network) => mode !== 'withdraw' || network.id === 'BEP20').map((network) => `
           <button class="deposit-network-card wallet-network-card ${selectedNetwork === network.id ? "active" : ""} ${network.status === "available" ? "" : "muted"}" type="button" data-network-select="${network.id}">
             <span class="network-mark ${network.id === "BEP20" ? "bsc" : "tron"}">${network.mark}</span>
-            <div>
-              <strong>${network.name}</strong>
-              <small>${network.token}</small>
-              <small>${network.confirmations}</small>
-              <small>${network.minDeposit}</small>
-              ${mode === "withdraw" ? `<small>Withdrawal fee ${format(withdrawalFee)} USDT</small>` : ""}
-              <small>${network.arrival}</small>
+            <div class="wallet-network-copy">
+              <strong>${network.name}<small>${network.id}</small></strong>
+              <div class="wallet-network-meta">
+                <span>${network.confirmations}</span>
+                <span>${network.arrival}</span>
+                ${mode === "withdraw" ? `<span>Fee ${format(withdrawalFee)} USDT</span>` : `<span>${network.minDeposit}</span>`}
+              </div>
             </div>
-            <span class="network-status ${network.status === "available" ? "live" : "soon"}">${selectedNetwork === network.id ? "Selected" : network.status === "available" ? "Choose BNB" : "Coming soon"}</span>
+            <span class="network-status ${network.status === "available" ? "live" : "soon"}">${selectedNetwork === network.id ? "Selected" : network.status === "available" ? "Available" : "Coming soon"}</span>
           </button>
           ${insertMarkup && insertAfterNetworkId === network.id ? `<div class="wallet-network-inset">${insertMarkup}</div>` : ""}
         `).join("")}
@@ -2014,7 +2118,7 @@
         amount: document.querySelector("#transferAmount").value,
         note: document.querySelector("#transferNote").value,
       });
-      showToast(`Sent ${format(Number(result.transfer?.amount || 0))} USDT to ${result.transfer?.recipientEmail || "BRX user"}.`);
+      showToast(`Sent ${format(Number(result.transfer?.amount || 0))} USDT to ${result.transfer?.recipientUsername || "BRX trader"}.`);
       renderWallet();
     } catch (error) {
       showToast(error.message || "Could not send internal transfer.");
@@ -2138,7 +2242,7 @@
     }
     const fee = Number(currentUser()?.platformSettings?.withdrawalFeeUsdt || 0);
     const available = Number(currentUser()?.balance?.available || 0);
-    if (amount > available) return showToast(`Insufficient available balance. You need $${format(amount)}.`);
+    if (amount > available) return showToast(`Insufficient available balance. You need ${format(amount)} USDT.`);
     if (amount <= fee) return showToast(`Withdrawal amount must be greater than the $${format(fee)} fee.`);
     showWithdrawalConfirmation({ address, amount, fee });
   }
@@ -2755,10 +2859,12 @@
   async function handleSettingsProfileSubmit(event) {
     event.preventDefault();
     try {
+      const user = currentUser();
+      const enteredTraderName = document.querySelector("#settingsUsername").value.trim();
       await accountService.saveProfile({
         fullName: document.querySelector("#settingsFullName").value,
         phone: document.querySelector("#settingsPhone").value,
-        username: document.querySelector("#settingsUsername").value,
+        username: user && enteredTraderName === brxId(user) ? "" : enteredTraderName,
         avatarUrl: document.querySelector("#settingsAvatarUrl")?.value || "",
       });
       showTraderNameEditor = false;
@@ -3260,7 +3366,7 @@
   }
 
   function traderDisplayName(user) {
-    return user.username || displayName(user);
+    return user.username || brxId(user);
   }
 
 
