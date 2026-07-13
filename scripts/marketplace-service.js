@@ -53,11 +53,14 @@
     return requestJson(`/trades/${encodeURIComponent(tradeId)}/messages`);
   }
 
-  function sendTradeMessage(tradeId, body) {
+  function sendTradeMessage(tradeId, input) {
     return requestJson(`/trades/${encodeURIComponent(tradeId)}/messages`, {
       method: "POST",
-      body: JSON.stringify({ body }),
+      body: JSON.stringify(typeof input === "string" ? { body: input } : input),
     });
+  }
+  function messageAttachment(tradeId, messageId) {
+    return requestJson(`/trades/${encodeURIComponent(tradeId)}/messages/${encodeURIComponent(messageId)}/attachment`);
   }
   function markPaymentSent(tradeId, input = {}) {
     return requestJson(`/trades/${tradeId}/payment-sent`, {
@@ -101,6 +104,7 @@
     paymentProof,
     tradeMessages,
     sendTradeMessage,
+    messageAttachment,
     markPaymentSent,
     releaseTrade,
     cancelTrade,

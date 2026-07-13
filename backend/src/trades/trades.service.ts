@@ -68,7 +68,10 @@ interface TradeMessageRow {
   id: string;
   trade_id: string;
   sender_id: string;
-  body: string;
+  body: string | null;
+  attachment_url: string | null;
+  attachment_name: string | null;
+  attachment_mime_type: string | null;
   read_at: Date | null;
   created_at: Date;
 }
@@ -309,9 +312,9 @@ export class TradesService {
       [userId, tradeId],
     );
     const result = await this.db.query<TradeMessageRow>(
-      `SELECT id, trade_id, sender_id, body, read_at, created_at
+      `SELECT id, trade_id, sender_id, body, attachment_url, attachment_name, attachment_mime_type, read_at, created_at
        FROM (
-         SELECT id, trade_id, sender_id, body, read_at, created_at
+         SELECT id, trade_id, sender_id, body, attachment_url, attachment_name, attachment_mime_type, read_at, created_at
          FROM trade_messages
          WHERE trade_id = $1
          ORDER BY created_at DESC
@@ -323,9 +326,9 @@ export class TradesService {
     return { messages: result.rows.map((row) => this.toMessage(row, userId)) };
   }
 
-  async sendMessage(userId: string, tradeId: string, rawBody?: string) {
-    const body = String(rawBody ?? "").trim();
-    if (!body) throw new BadRequestException("Enter a message.");
+  async sendMessage(userId: string, tradeId: string, input: { body?: string; file?: PaymentProofInput["file"] } = {}) {
+    const body = String(input.body ?? "").trim();
+    if (!body && !input.file?.dataBase64) throw new BadRequestException("Enter a message or attach an image.");
     if (body.length > 1000) throw new BadRequestException("Messages must be 1,000 characters or less.");
 
     return this.db.transaction(async (client) => {
@@ -336,16 +339,17 @@ export class TradesService {
         throw new BadRequestException("Chat is read-only after a trade closes.");
       }
 
+      const attachment = await this.saveChatAttachment(trade.id, input.file);
       const inserted = await client.query<TradeMessageRow>(
-        `INSERT INTO trade_messages (trade_id, sender_id, body)
-         VALUES ($1, $2, $3)
-         RETURNING id, trade_id, sender_id, body, read_at, created_at`,
-        [trade.id, userId, body],
+        `INSERT INTO trade_messages (trade_id, sender_id, body, attachment_url, attachment_name, attachment_mime_type)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id, trade_id, sender_id, body, attachment_url, attachment_name, attachment_mime_type, read_at, created_at`,
+        [trade.id, userId, body || null, attachment.fileUrl, attachment.fileName, attachment.mimeType],
       );
       const message = inserted.rows[0];
       const recipientId = trade.buyer_id === userId ? trade.seller_id : trade.buyer_id;
       const senderRole = trade.buyer_id === userId ? "buyer" : "seller";
-      const preview = body.replace(/\s+/g, " ").slice(0, 140);
+      const preview = (body || (attachment.fileName ? "Sent an image" : "New message")).replace(/\s+/g, " ").slice(0, 140);
       await this.notifications.create(recipientId, {
         type: "trade.message",
         title: `New message from ${senderRole}`,
@@ -357,6 +361,25 @@ export class TradesService {
       }, client);
       return { message: this.toMessage(message, userId) };
     });
+  }
+  async messageAttachment(userId: string, tradeId: string, messageId: string) {
+    await this.assertTradeParticipant(userId, tradeId);
+    const result = await this.db.query<Pick<TradeMessageRow, "attachment_url" | "attachment_name" | "attachment_mime_type">>(
+      `SELECT attachment_url, attachment_name, attachment_mime_type FROM trade_messages WHERE id = $1 AND trade_id = $2 LIMIT 1`,
+      [messageId, tradeId],
+    );
+    const message = result.rows[0];
+    if (!message?.attachment_url || !message.attachment_name || !message.attachment_mime_type) throw new NotFoundException("Message attachment was not found.");
+    const storedPath = message.attachment_url.replace(/^backend[\\/]/, "");
+    const uploadsRoot = resolve(process.cwd(), "uploads", "trades");
+    const absolutePath = resolve(process.cwd(), storedPath);
+    if (!absolutePath.startsWith(`${uploadsRoot}${sep}`)) throw new BadRequestException("Invalid message attachment path.");
+    try {
+      const data = await readFile(absolutePath);
+      return { attachment: { fileName: message.attachment_name, mimeType: message.attachment_mime_type, dataUrl: `data:${message.attachment_mime_type};base64,${data.toString("base64")}` } };
+    } catch {
+      throw new NotFoundException("Message attachment file was not found.");
+    }
   }
   async markPaymentSent(userId: string, tradeId: string, input: PaymentProofInput = {}) {
     const reference = String(input.reference ?? "").trim().slice(0, 160);
@@ -387,6 +410,13 @@ export class TradesService {
          RETURNING *`,
         [trade.id, reference || null, proof.fileUrl, proof.fileName, proof.mimeType],
       );
+      if (proof.fileUrl) {
+        await client.query(
+          `INSERT INTO trade_messages (trade_id, sender_id, body, attachment_url, attachment_name, attachment_mime_type)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [trade.id, userId, reference ? `Payment sent - reference ${reference}` : "Payment proof uploaded", proof.fileUrl, proof.fileName, proof.mimeType],
+        );
+      }
       await this.audit(client, userId, "trade.payment_sent", "trade", trade.id, { reference: reference || null, proof: proof.fileName });
       await this.createTradeNotifications(client, "payment_sent", updated.rows[0]);
       return { trade: this.toTrade(updated.rows[0], userId) };
@@ -439,8 +469,8 @@ export class TradesService {
       const trade = await this.lockTrade(client, tradeId);
       if (!trade) throw new NotFoundException("Trade was not found.");
       if (trade.buyer_id !== userId && trade.seller_id !== userId) throw new ForbiddenException("Trade access denied.");
-      if (!["opened", "payment_sent"].includes(trade.status)) {
-        throw new BadRequestException("Only active trades can be disputed.");
+      if (trade.status !== "payment_sent") {
+        throw new BadRequestException("An appeal can be opened only after payment has been submitted.");
       }
 
       const openDispute = await client.query<{ id: string }>("SELECT id FROM disputes WHERE trade_id = $1 AND status = 'open' LIMIT 1", [trade.id]);
@@ -635,6 +665,22 @@ export class TradesService {
     return { fileUrl, fileName, mimeType };
   }
 
+  private async saveChatAttachment(tradeId: string, file?: PaymentProofInput["file"]) {
+    if (!file?.dataBase64) return { fileUrl: null, fileName: null, mimeType: null };
+    const mimeType = String(file.mimeType ?? "").trim().toLowerCase();
+    if (!["image/jpeg", "image/png", "image/webp"].includes(mimeType)) throw new BadRequestException("Chat attachments must be a JPG, PNG, or WEBP image.");
+    const data = this.decodeUploadBase64(file.dataBase64, "Chat image");
+    if (data.length > 8 * 1024 * 1024) throw new BadRequestException("Chat image must be under 8 MB.");
+    this.assertUploadSignature(data, mimeType, "Chat image");
+    const original = String(file.fileName ?? "image").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
+    const extension = extname(original) || ".png";
+    const fileName = `${randomUUID()}${extension}`;
+    const directory = join(process.cwd(), "uploads", "trades", tradeId, "chat");
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, fileName), data);
+    return { fileUrl: `backend/uploads/trades/${tradeId}/chat/${fileName}`, fileName, mimeType };
+  }
+
   private decodeUploadBase64(value: string, label: string) {
     const normalized = String(value ?? "").replace(/^data:[^,]+,/, "").replace(/\s/g, "");
     if (!/^[A-Za-z0-9+/]*={0,2}$/.test(normalized)) throw new BadRequestException(`${label} file data is invalid.`);
@@ -666,6 +712,9 @@ export class TradesService {
       tradeId: row.trade_id,
       senderId: row.sender_id,
       body: row.body,
+      attachmentName: row.attachment_name,
+      attachmentMimeType: row.attachment_mime_type,
+      hasAttachment: Boolean(row.attachment_url),
       isMine: row.sender_id === viewerId,
       isRead: Boolean(row.read_at),
       readAt: row.read_at,

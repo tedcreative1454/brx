@@ -25,10 +25,19 @@ export class TradesController {
   async sendMessage(
     @Headers("authorization") authorization: string | undefined,
     @Param("id") tradeId: string,
-    @Body() body: { body?: string },
+    @Body() body: { body?: string; file?: { fileName?: string; mimeType?: string; dataBase64?: string } },
   ) {
     const user = await this.auth.authenticate(authorization);
-    return this.trades.sendMessage(user.id, tradeId, body.body);
+    return this.trades.sendMessage(user.id, tradeId, body);
+  }
+  @Get(":id/messages/:messageId/attachment")
+  async messageAttachment(
+    @Headers("authorization") authorization: string | undefined,
+    @Param("id") tradeId: string,
+    @Param("messageId") messageId: string,
+  ) {
+    const user = await this.auth.authenticate(authorization);
+    return this.trades.messageAttachment(user.id, tradeId, messageId);
   }
   @Get(":id/payment-proof")
   async paymentProof(@Headers("authorization") authorization: string | undefined, @Param("id") tradeId: string) {

@@ -470,6 +470,96 @@
   }
 }
 
+/* P2P v2 mobile is a single, full-width exchange flow. */
+@media (max-width: 760px) {
+  body[data-route="order"] .mobile-bottom-nav { display: none !important; }
+  body[data-route="order"] .site-header { display: none !important; }
+  body[data-route="order"],
+  body[data-route="order"] #app,
+  body[data-route="order"] .p2p-order-page { min-height: 100dvh; overflow-x: hidden; background: #071321 !important; }
+  body[data-route="order"] #app { padding: 0 !important; }
+  body:has(.p2p-settlement-page) .site-header,
+  body:has(.p2p-settlement-page) .mobile-bottom-nav { display: none !important; }
+  body:has(.p2p-settlement-page) #app { padding: 0 !important; }
+  .binance-order-page { width: min(100%, 520px); min-height: 100dvh; padding: calc(10px + env(safe-area-inset-top)) 14px calc(76px + env(safe-area-inset-bottom)); background: radial-gradient(circle at 100% 0, rgba(17, 143, 255, .13), transparent 32%), #071321; }
+  .binance-order-head { min-height: 40px; }
+  .binance-order-head > a { width: 40px; height: 40px; margin-left: -3px; font-size: 21px; }
+  .binance-order-head > div { gap: 8px; }
+  .binance-order-head h1 { font-size: 20px; }
+  .binance-order-head .usdt-mark { width: 27px; height: 27px; font-size: 12px; }
+  .binance-order-price { gap: 6px; margin: 3px 0 14px; color: #8092a8; font-size: 11px; }
+  .binance-order-price strong { font-size: 14px; }
+  .binance-order-price span { margin-left: 2px; padding: 3px 7px; border-radius: 999px; color: #52b7ff; background: rgba(22, 143, 255, .1); font-size: 10px; }
+
+  .binance-amount-card { padding: 14px 14px 12px; border: 1px solid rgba(74, 139, 203, .18); border-radius: 12px; background: rgba(13, 29, 47, .92); }
+  .binance-amount-tabs { gap: 20px; }
+  .binance-amount-tabs button { padding: 0 0 10px; font-size: 15px; }
+  .binance-amount-tabs button.active::after { bottom: 2px; height: 2px; }
+  .binance-amount-input { min-height: 64px; gap: 8px; border-bottom-color: rgba(108, 157, 204, .16); }
+  .binance-amount-input:focus-within { border-bottom-color: rgba(31, 164, 255, .65); }
+  .binance-amount-input input { min-width: 0; padding: 0 !important; border: 0 !important; outline: 0 !important; box-shadow: none !important; font-size: clamp(34px, 10vw, 42px); line-height: 1; }
+  .binance-amount-input strong { font-size: 14px; }
+  .binance-amount-input button { padding: 0; font-size: 14px; }
+  .binance-order-limit { padding: 10px 0 8px; font-size: 11px; }
+  .binance-order-receive { padding: 6px 0 3px; font-size: 13px; }
+  .binance-order-receive strong { font-size: 15px; }
+  .binance-order-fee { padding-top: 5px; font-size: 10px; }
+  .binance-amount-card .form-error:empty { display: none; }
+  .binance-amount-card .form-error:not(:empty) { min-height: 0; margin: 7px 0 0; font-size: 10px; }
+
+  .binance-payment-card, .binance-advertiser-card { margin-top: 10px; padding: 10px 12px; border: 1px solid rgba(73, 137, 201, .15); border-radius: 10px; background: rgba(13, 29, 47, .88); }
+  .binance-payment-card { min-height: 52px; flex-wrap: wrap; gap: 8px; }
+  .binance-payment-card > span { width: 3px; height: 18px; }
+  .binance-payment-card > strong { font-size: 15px; }
+  .binance-payment-card > strong b { color: #f4f8fc; font-weight: 700; }
+  .binance-payment-card .order-methods { min-width: 0; margin-left: auto; gap: 5px; }
+  .binance-payment-card .order-methods.selectable button { min-height: 30px !important; padding: 0 9px !important; border-radius: 7px !important; font-size: 11px !important; }
+  .binance-advertiser-card { min-height: 56px; grid-template-columns: 34px minmax(0, 1fr); gap: 9px; }
+  .binance-advertiser-card .trader-avatar { width: 34px !important; height: 34px !important; flex-basis: 34px !important; font-size: 11px; }
+  .binance-advertiser-card div { gap: 1px; }
+  .binance-advertiser-card div > strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+  .binance-advertiser-card small, .binance-advertiser-card em { font-size: 10px; }
+  .binance-advertiser-card em { grid-column: 2; }
+
+  .binance-order-footer { width: min(100%, 520px); padding: 10px 14px calc(12px + env(safe-area-inset-bottom)); background: linear-gradient(180deg, rgba(7, 19, 33, 0), #071321 27%); }
+  .binance-order-footer .app-button { min-height: 50px; border-radius: 9px; font-size: 15px; }
+  .binance-order-footer .app-button:disabled { background: #26384e; color: #71849b; }
+
+  .professional-trades-page:has(.p2p-settlement-page) { width: 100% !important; min-height: 100dvh !important; padding: calc(12px + env(safe-area-inset-top)) 12px calc(24px + env(safe-area-inset-bottom)) !important; }
+  .p2p-settlement-page { width: 100%; }
+  .settlement-head { min-height: 68px; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 10px; padding: 0 0 12px; }
+  .settlement-head h1 { font-size: 21px; }
+  .settlement-head small { font-size: 9px; }
+  .settlement-timer { min-width: 72px; }
+  .settlement-timer span { font-size: 9px; }
+  .settlement-timer strong { font-size: 20px; }
+  .settlement-layout { display: flex; flex-direction: column; width: 100%; gap: 12px; }
+  .settlement-main, .settlement-chat { width: 100%; max-width: 100%; }
+  .settlement-summary { padding: 17px 15px; }
+  .settlement-summary > div:first-child strong { font-size: 28px; }
+  .settlement-summary dl { margin-top: 15px; }
+  .settlement-summary dl > div { min-width: 0; padding: 10px 8px; }
+  .settlement-summary dd { font-size: 11px; overflow-wrap: anywhere; }
+  .settlement-person { grid-template-columns: 38px minmax(0, 1fr) auto; padding: 11px 13px; }
+  .settlement-transfer { width: 100%; }
+  .settlement-transfer > header { padding: 17px 15px 12px; }
+  .settlement-transfer > header h2 { font-size: 17px; }
+  .settlement-hint { padding: 0 15px 15px; line-height: 1.5; }
+  .settlement-transfer .payment-method-list { padding: 0 15px 15px; }
+  .settlement-transfer .payment-method-card.highlighted { width: 100%; padding: 3px 14px 7px; }
+  .settlement-transfer .payment-detail-row { display: grid; width: 100%; grid-template-columns: minmax(0, 1fr) 55px; padding: 11px 0; }
+  .payment-proof-inline { width: 100%; padding: 17px 15px; }
+  .payment-proof-heading { align-items: flex-start; }
+  .payment-proof-heading > div { min-width: 0; }
+  .payment-proof-inline .receipt-drop { min-height: 108px; }
+  .settlement-actions { width: 100%; }
+  .settlement-chat { display: block; }
+  .settlement-chat .side-section { margin-bottom: 12px; }
+  .settlement-chat .trade-chat-panel { width: 100% !important; max-width: none !important; }
+  .settlement-chat .trade-chat-messages { width: 100%; min-height: 300px; max-height: 50dvh; }
+  .settlement-chat .trade-chat-form { width: 100%; grid-template-columns: 40px minmax(0, 1fr) 42px; }
+}
+
 @media (max-width: 420px) {
   :root { --mobile-gutter: 11px; }
   .dashboard-balance-card,
@@ -3571,4 +3661,183 @@
 
   .push-notification-card { grid-template-columns: 38px minmax(0, 1fr); }
   .push-notification-card > button { grid-column: 2; justify-self: start; }
+}
+
+/* Focused P2P order and payment flow on phones. */
+@media (max-width: 760px) {
+  body[data-route="order"] .site-header { display: none !important; }
+  body[data-route="order"] #app { padding-top: 0 !important; }
+  .p2p-order-page { min-height: 100dvh; padding: 0 0 calc(24px + env(safe-area-inset-bottom)); }
+  .p2p-order-page .order-page-card { width: 100%; min-height: 100dvh; border: 0; border-radius: 0; box-shadow: none; }
+  .p2p-order-page .order-modal-head { min-height: 104px; padding: calc(14px + env(safe-area-inset-top)) 18px 18px; gap: 13px; }
+  .p2p-order-page .order-modal-head > div { flex: 1; }
+  .p2p-order-page .order-modal-head h3 { font-size: 28px; }
+  .p2p-order-page .order-modal-head p strong { font-size: 25px; }
+  .order-page-back { width: 40px; height: 40px; }
+  .p2p-order-page .order-ticket-summary { padding: 16px 18px; gap: 12px; }
+  .p2p-order-page .order-ticket-summary strong { font-size: 14px; }
+  .p2p-order-page .order-modal-body { padding: 18px 18px 4px; }
+  .p2p-order-page .order-trader { padding: 14px; }
+  .p2p-order-page .trader-avatar { width: 46px; height: 46px; }
+  .p2p-order-page .order-input-row { min-height: 72px; }
+  .p2p-order-page .order-input-row input { min-width: 0; font-size: 28px; }
+  .p2p-order-page .order-input-row > span { padding: 0 7px; }
+  .p2p-order-page .order-input-row button { padding: 0 11px; }
+  .p2p-order-page .order-quote { grid-template-columns: 1fr 1fr; }
+  .p2p-order-page .order-quote > div { min-width: 0; padding: 13px 12px; }
+  .p2p-order-page .order-quote strong { font-size: 13px; overflow-wrap: anywhere; }
+  .p2p-order-page .order-modal-footer { padding: 16px 18px calc(18px + env(safe-area-inset-bottom)); }
+
+  .professional-trades-page:has(.escrow-workspace) { padding: 14px 12px calc(var(--mobile-nav-h) + 26px + env(safe-area-inset-bottom)) !important; }
+  .trade-room-header { align-items: center; padding: 0 2px 14px; }
+  .trade-room-heading h2 { font-size: 23px; }
+  .escrow-grid { display: flex !important; flex-direction: column; gap: 12px; }
+  .escrow-main { border-radius: 16px; }
+  .trade-amount-summary { padding: 18px 16px; }
+  .trade-asset-total h3 { font-size: 38px; }
+  .trade-summary-metrics { grid-template-columns: 1fr 1fr; gap: 7px; }
+  .trade-summary-metrics > div { min-height: 70px; padding: 11px; }
+  .trade-summary-metrics strong { font-size: 13px; overflow-wrap: anywhere; }
+  .escrow-stepper { margin: 0 16px; padding: 18px 0; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .escrow-step strong { font-size: 10px; }
+  .payment-instructions { padding: 20px 16px; }
+  .payment-instructions > div:first-child h4 { font-size: 29px; }
+  .instruction-list { margin: 18px 0; }
+  .payment-method-card.highlighted { padding: 15px; }
+  .payment-detail-row { padding: 11px 0; }
+  .payment-proof-inline { padding: 16px; }
+  .receipt-drop { min-height: 92px; }
+  .trade-countdown-card { margin: 0 16px 16px; padding: 14px; }
+  .trade-countdown-card strong { font-size: 24px; }
+  .trade-actions-panel { margin: 0 16px 18px; }
+  .deposit-note { margin: 0 16px 18px; }
+  .escrow-side { display: contents; }
+  .counterparty-card { order: -1; border-radius: 14px !important; }
+  .trade-chat-panel { border-radius: 16px !important; }
+  .trade-chat-messages { min-height: 280px; max-height: 52dvh; }
+  .trade-chat-form .app-button { width: 44px; min-width: 44px; padding: 0; border-radius: 50%; }
+  .trade-chat-form .app-button span { display: none; }
+  .chat-image-placeholder { width: min(100%, 220px); }
+  .p2p-chat-compose .trade-chat-attach { width: 40px; height: 40px; }
+}
+
+/* Final mobile payment room: match the uploaded Binance flow, no BRX cards. */
+@media (max-width: 760px) {
+  body:has(.p2p-settlement-page),
+  body:has(.p2p-settlement-page) #app,
+  .professional-trades-page:has(.p2p-settlement-page),
+  .p2p-settlement-page { background: #071321 !important; }
+  body:has(.p2p-settlement-page) { overflow-x: hidden; }
+  body:has(.p2p-settlement-page) .site-header,
+  body:has(.p2p-settlement-page) .mobile-bottom-nav { display: none !important; }
+  body:has(.p2p-settlement-page) #app { padding: 0 !important; }
+  .professional-trades-page:has(.p2p-settlement-page) { min-height: 100dvh !important; padding: calc(12px + env(safe-area-inset-top)) 18px calc(82px + env(safe-area-inset-bottom)) !important; }
+  .p2p-settlement-page { width: 100%; color: #f5f8fc; background-image: radial-gradient(circle at 100% 0, rgba(14, 142, 255, .12), transparent 34%) !important; }
+
+  .binance-payment-head { display: block; padding: 0 0 12px; }
+  .binance-payment-nav { min-height: 32px; margin-bottom: 12px; }
+  .binance-payment-nav .trade-back-button { width: 32px; height: 32px; padding: 0; border: 0; color: #cbd7e6; background: transparent; font-size: 22px; }
+  .binance-cancel-order { padding: 5px 0; color: #7f91a7; font-size: 12px; }
+  .binance-payment-head h1 { max-width: 430px; margin: 0; font-size: clamp(24px, 7vw, 30px); line-height: 1.15; letter-spacing: -.025em; }
+  .binance-payment-head .settlement-deadline { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 7px 0 0; color: #8ea0b7; font-size: 12px; }
+  .binance-payment-head .settlement-deadline strong { flex: 0 0 auto; color: #159fff; font-size: 14px; font-weight: 800; }
+
+  .binance-counterparty { width: 100%; min-height: 56px; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 9px; margin: 0 0 16px; padding: 9px 10px; border: 1px solid rgba(73, 143, 210, .22); border-radius: 10px; background: rgba(13, 30, 49, .72) !important; }
+  .binance-counterparty .avatar { width: 34px; height: 34px; color: #fff; background: linear-gradient(145deg, #087df0, #16b5ee); font-size: 13px; }
+  .binance-counterparty strong { overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+  .binance-counterparty small { font-size: 10px; }
+  .binance-counterparty a { min-height: 34px; display: inline-flex; align-items: center; padding: 0 12px; border-radius: 7px; color: #fff; background: #168fff; font-size: 12px; }
+
+  .settlement-layout, .settlement-main { display: block; width: 100%; }
+  .settlement-transfer { position: relative; width: 100%; overflow: visible; border: 0 !important; border-radius: 0 !important; background: transparent !important; box-shadow: none !important; }
+  .settlement-transfer::before { content: ""; position: absolute; top: 23px; bottom: 25px; left: 12px; width: 2px; background: rgba(21, 159, 255, .32); }
+  .binance-step-one { position: relative; z-index: 1; padding: 0; }
+  .binance-step-one, .binance-step-two { gap: 12px; }
+  .binance-step-one > span, .binance-step-two > span { width: 25px; height: 25px; flex: 0 0 25px; transform: none; border-radius: 50%; color: #fff; background: #168fff; box-shadow: 0 0 0 4px #071321; font-size: 11px; }
+  .binance-step-one > span b, .binance-step-two > span b { transform: none; }
+  .binance-step-one > div, .binance-step-two > div { display: grid; gap: 2px; }
+  .binance-step-one small, .binance-step-two small { color: #5baee8; font-size: 9px; font-weight: 800; letter-spacing: .12em; }
+  .binance-step-one h2 { margin: 0; font-size: 17px; font-weight: 650; }
+  .binance-pay-amount { width: auto; margin: 14px 0 0 38px; padding: 11px 12px; border: 1px solid rgba(65, 139, 211, .16); border-radius: 9px; background: rgba(10, 27, 45, .7); }
+  .binance-pay-amount small { color: #7f91a7; font-size: 11px; }
+  .binance-pay-amount strong { font-size: 20px; font-weight: 650; }
+  .binance-pay-amount .copy-transfer { width: 34px; height: 34px; min-height: 34px; display: grid; place-items: center; padding: 0; color: #39aaff; background: rgba(22, 143, 255, .09); }
+  .binance-pay-amount .copy-transfer svg { width: 18px; height: 18px; }
+
+  .settlement-transfer .payment-method-list { width: auto; margin: 10px 0 0 38px; padding: 0; }
+  .settlement-transfer .payment-method-card.highlighted { width: 100%; padding: 0; border: 0 !important; border-radius: 0 !important; background: transparent !important; }
+  .settlement-transfer .method-head { display: none; }
+  .settlement-transfer .payment-detail-row { width: 100%; min-height: 52px; display: grid; grid-template-columns: minmax(0, 1fr) 36px; gap: 2px 8px; padding: 7px 0; border-bottom: 1px solid rgba(68, 118, 168, .12); }
+  .settlement-transfer .payment-detail-row small { grid-column: 1; color: #75879d; font-size: 11px; }
+  .settlement-transfer .payment-detail-row strong { grid-column: 1; color: #edf5ff; font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+  .settlement-transfer .payment-detail-row .copy-chip { grid-column: 2; grid-row: 1 / 3; width: 34px; min-width: 34px; padding: 0; color: #39aaff; background: transparent; font-size: 0; }
+  .settlement-transfer .payment-detail-row .copy-chip::before { content: none; }
+  .settlement-transfer .payment-detail-row .copy-chip svg { width: 18px; height: 18px; }
+  .binance-order-details { margin: 4px 0 0 38px; }
+  .binance-order-details summary { padding: 8px 0; color: #8092a8; font-size: 12px; }
+  .binance-order-details dl { padding: 12px 0; border-top: 1px solid #36404e; }
+  .binance-order-details dl > div { font-size: 14px; }
+
+  .binance-step-two { position: relative; z-index: 1; align-items: center; margin-top: 18px; padding: 0 0 4px; }
+  .binance-step-two strong { margin: 0; font-size: 15px; font-weight: 550; line-height: 1.35; }
+  .binance-step-two.complete > span svg { width: 14px; height: 14px; }
+  .payment-submitted-note { margin: 16px 0 0 38px; padding: 11px 12px; font-size: 12px; }
+  .settlement-actions, .settlement-main > .deposit-note, .settlement-chat { display: none !important; }
+  .seller-waiting-card, .seller-review-card { padding: 24px 0 0 !important; border: 0 !important; border-radius: 0 !important; background: transparent !important; box-shadow: none !important; }
+  .seller-waiting-card h4, .seller-review-card h4 { font-size: 23px !important; }
+  .seller-mobile-action { position: fixed; z-index: 120; right: 18px; bottom: calc(12px + env(safe-area-inset-bottom)); left: 18px; }
+  .seller-mobile-action .trade-primary-action { width: 100%; min-height: 52px; border: 0; border-radius: 9px; color: #fff; background: linear-gradient(90deg, #087df0, #18aeee); font-size: 14px; }
+
+  .mobile-proof-cta { position: fixed; z-index: 120; right: 18px; bottom: calc(12px + env(safe-area-inset-bottom)); left: 18px; width: calc(100% - 36px); min-height: 52px; display: block; border: 0; border-radius: 9px; color: #fff; background: linear-gradient(90deg, #087df0, #18aeee); box-shadow: 0 10px 24px rgba(0, 112, 238, .2); font-size: 15px; font-weight: 700; }
+  body.payment-proof-open { overflow: hidden !important; }
+  .payment-proof-sheet-backdrop { position: fixed; z-index: 5000; inset: 0; display: none; align-items: flex-end; background: rgba(0, 0, 0, .72); }
+  .payment-proof-sheet-backdrop.open { display: flex; }
+  .payment-proof-sheet { width: 100%; max-height: 82dvh; display: grid; gap: 14px; overflow-y: auto; padding: 8px 18px calc(18px + env(safe-area-inset-bottom)); border-radius: 18px 18px 0 0; background: #0b1828; }
+  .payment-sheet-handle { width: 54px; height: 5px; margin: 0 auto 3px; border-radius: 4px; background: #2b4058; }
+  .payment-proof-sheet > header { display: flex; align-items: center; justify-content: space-between; }
+  .payment-proof-sheet > header h2 { margin: 0; font-size: 22px; }
+  .payment-proof-sheet > header button { width: 32px; height: 32px; border: 0; color: #8293a8; background: transparent; font-size: 24px; }
+  .payment-proof-sheet > div > p { margin: 7px 0 0; color: #8b9db3; font-size: 13px; line-height: 1.4; }
+  .payment-proof-sheet .receipt-drop { min-height: 100px; border: 1px dashed rgba(45, 157, 255, .45); border-radius: 9px; background: rgba(15, 48, 78, .48); }
+  .payment-proof-sheet .receipt-drop input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .payment-proof-sheet .receipt-drop > span { color: #35a8ff; }
+  .payment-proof-sheet .form-field input { min-height: 52px; border: 1px solid #3b4553; border-radius: 8px; color: #fff; background: #18212d; }
+  .payment-proof-sheet .payment-owner-check { font-size: 13px; line-height: 1.4; }
+  .payment-proof-sheet .app-button { min-height: 52px; border: 0; border-radius: 9px; color: #fff; background: linear-gradient(90deg, #087df0, #18aeee); font-size: 15px; }
+
+  .p2p-settlement-page > .appeal-card { margin: 18px 0 0; padding: 12px; border: 1px solid rgba(62, 131, 198, .18); border-radius: 9px; background: rgba(10, 27, 45, .72); }
+  .p2p-settlement-page > .appeal-card .appeal-copy { gap: 9px; }
+  .p2p-settlement-page > .appeal-card .appeal-icon { width: 30px; height: 30px; font-size: 10px; }
+  .p2p-settlement-page > .appeal-card strong { font-size: 12px; }
+  .p2p-settlement-page > .appeal-card small { font-size: 10px; line-height: 1.35; }
+
+  body[data-route="p2p-chat"] .p2p-chat-room { background: #08131f !important; }
+  body[data-route="p2p-chat"] .p2p-chat-room-head { min-height: 64px; align-items: center; padding: 10px 12px !important; background: #0b1724; }
+  body[data-route="p2p-chat"] .p2p-chat-room-head > div { min-width: 0; flex: 1; align-items: center; gap: 8px !important; }
+  body[data-route="p2p-chat"] .p2p-chat-room-head > div > div { min-width: 0; flex: 1; }
+  body[data-route="p2p-chat"] .p2p-chat-room-head > div > span { width: 40px !important; height: 40px !important; flex: 0 0 40px; }
+  body[data-route="p2p-chat"] .p2p-chat-back { width: 40px; height: 40px; flex: 0 0 40px; border-radius: 11px; }
+  body[data-route="p2p-chat"] .p2p-chat-room-head a:not(.p2p-chat-back) { min-height: 40px; justify-content: center; padding: 0 12px; border-radius: 9px; line-height: 1; }
+
+  body[data-route="p2p-chat"] .p2p-chat-room-messages { padding: 14px 14px 18px !important; scrollbar-width: thin; scrollbar-color: rgba(52, 132, 205, .34) transparent; }
+  body[data-route="p2p-chat"] .p2p-chat-message { width: fit-content; max-width: min(82%, 420px) !important; display: flex; align-items: flex-start; flex-direction: column; gap: 3px; margin-bottom: 10px !important; }
+  body[data-route="p2p-chat"] .p2p-chat-message.mine { align-items: flex-end; margin-right: 0; margin-left: auto; }
+  body[data-route="p2p-chat"] .p2p-chat-message p { width: fit-content; max-width: 100%; padding: 8px 11px !important; border-color: rgba(99, 133, 166, .16); border-radius: 14px 14px 14px 5px !important; color: #e8f1fb; background: #142233; box-shadow: 0 4px 14px rgba(0, 0, 0, .08); font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
+  body[data-route="p2p-chat"] .p2p-chat-message.mine p { border-color: rgba(23, 151, 255, .3); border-radius: 14px 14px 5px 14px !important; background: #0f3957; }
+  body[data-route="p2p-chat"] .p2p-chat-message small { padding: 0 3px; color: #71849a; font-size: 9px; line-height: 1.2; }
+
+  body[data-route="p2p-chat"] .p2p-chat-compose { grid-template-columns: 44px minmax(0, 1fr) 44px !important; align-items: center; gap: 8px !important; padding: 9px 10px !important; border-top: 1px solid rgba(70, 121, 170, .16); background: #0b1724 !important; }
+  body[data-route="p2p-chat"] .p2p-chat-compose .trade-chat-attach { width: 44px !important; height: 44px !important; display: grid; place-items: center; border-color: rgba(49, 151, 238, .25); color: #44b4ff; background: rgba(20, 112, 192, .13); font-size: 23px; line-height: 1; }
+  body[data-route="p2p-chat"] .p2p-chat-compose textarea { width: 100%; height: 44px !important; min-height: 44px !important; max-height: 44px !important; box-sizing: border-box; padding: 10px 14px; border-color: rgba(78, 121, 163, .24); border-radius: 22px; background: #0e1b2a; font-size: 14px; line-height: 22px; overflow-y: auto; }
+  body[data-route="p2p-chat"] .p2p-chat-compose textarea:focus { border-color: rgba(36, 166, 255, .58); box-shadow: 0 0 0 3px rgba(22, 143, 255, .08); }
+  body[data-route="p2p-chat"] .p2p-chat-compose .app-button { width: 44px !important; min-width: 44px !important; height: 44px !important; min-height: 44px !important; align-self: center; display: grid; place-items: center; padding: 0 !important; border-radius: 50%; background: linear-gradient(145deg, #087df0, #16b4ee); box-shadow: 0 7px 18px rgba(0, 119, 238, .2); }
+  body[data-route="p2p-chat"] .p2p-chat-compose .app-button svg { width: 18px; height: 18px; }
+  body[data-route="p2p-chat"] .p2p-chat-compose > small,
+  body[data-route="p2p-chat"] .p2p-chat-compose > div { grid-column: 2 / -1; margin: 0 4px; font-size: 10px; }
+  body[data-route="p2p-chat"] #p2pChatFileName:empty,
+  body[data-route="p2p-chat"] #p2pChatError:empty { display: none; }
+  body[data-route="p2p-chat"] #p2pChatFileName { color: #6ebeff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  body[data-route="p2p-chat"] .chat-image-placeholder { width: min(48vw, 156px) !important; aspect-ratio: 4 / 3; max-height: 176px; display: grid; place-items: center; margin: 0 0 3px; border: 1px solid rgba(66, 143, 214, .18); border-radius: 12px; background: #091524; }
+  body[data-route="p2p-chat"] .chat-image-placeholder > span { padding: 10px; font-size: 10px; }
+  body[data-route="p2p-chat"] .chat-image-placeholder img { width: 100%; height: 100%; max-height: none; object-fit: contain; }
 }

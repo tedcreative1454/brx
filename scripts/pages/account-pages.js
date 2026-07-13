@@ -639,6 +639,7 @@
       return `<p class="deposit-note">This trade is ${statusLabel(trade.status)}. No payment action is required.</p>`;
     }
 
+    const price = Number(trade.offerPrice || Number(trade.fiatAmount) / Number(trade.assetAmount));
     return `
       <section class="payment-instructions">
         <div>
@@ -875,13 +876,13 @@
   }
 
   function canDispute(trade) {
-    return ["opened", "payment_sent"].includes(trade.status) && ["buyer", "seller"].includes(trade.role);
+    return trade.status === "payment_sent" && ["buyer", "seller"].includes(trade.role);
   }
 
   function disputeUnlockAt(trade) {
-    const openedAt = trade.createdAt || trade.openedAt || trade.created_at;
-    const openedMs = new Date(openedAt).getTime();
-    const baseMs = Number.isFinite(openedMs) ? openedMs : Date.now();
+    const paymentSentAt = trade.paymentSentAt || trade.updatedAt || trade.createdAt;
+    const paymentSentMs = new Date(paymentSentAt).getTime();
+    const baseMs = Number.isFinite(paymentSentMs) ? paymentSentMs : Date.now();
     return new Date(baseMs + 15 * 60 * 1000).toISOString();
   }
 
@@ -916,8 +917,8 @@
         <div class="appeal-copy">
           <span class="appeal-icon">ID</span>
           <div>
-            <strong>Appeal unlocks in <span id="appealCountdown">${timeLeft(disputeUnlockAt(trade))}</span></strong>
-            <small>The dispute button appears after the payment window has had time to resolve normally.</small>
+            <strong>Appeal available in <span id="appealCountdown">${timeLeft(disputeUnlockAt(trade))}</span></strong>
+            <small>Appeals become available only after payment proof has been submitted.</small>
           </div>
         </div>
       </section>
@@ -974,50 +975,46 @@
     const counterpartyEmail = String(trade.counterpartyEmail || "");
     const showCounterpartyEmail = counterpartyEmail && counterpartyEmail.toLowerCase() !== String(counterparty).toLowerCase();
     return `
-      <section class="escrow-workspace">
-        <header class="trade-room-header">
-          <div class="trade-room-heading">
-            <button class="trade-back-button" type="button" data-back-to-trades aria-label="Back to trades">&larr;</button>
-            <div><span>Trade #${shortTradeId(trade.id)}</span><h2>${isBuyer ? "Buy" : "Sell"} USDT</h2></div>
+      <section class="p2p-settlement-page">
+        <header class="binance-payment-head">
+          <div class="binance-payment-nav">
+            <button class="trade-back-button" type="button" data-back-to-trades aria-label="Back to orders">&larr;</button>
+            ${trade.status === "opened" ? `<button class="binance-cancel-order" type="button" data-trade-id="${escapeAttr(trade.id)}" data-trade-action="cancel">Cancel the Order</button>` : `<span class="status-pill trade-status ${trade.status === "disputed" ? "warning" : trade.status === "released" ? "success" : ""}">${statusLabel(trade.status)}</span>`}
           </div>
-          <span class="status-pill trade-status ${trade.status === "disputed" ? "warning" : trade.status === "released" ? "success" : ""}">${statusLabel(trade.status)}</span>
+          <h1>${settlementTitle(trade, isBuyer)}</h1>
+          ${["opened", "payment_sent"].includes(trade.status) ? `<p class="settlement-deadline"><span>${trade.status === "opened" ? `Pay with ${escapeHtml(trade.paymentMethod || "seller method")}` : "Seller confirmation in progress"}</span><strong id="tradeCountdown">${timeLeft(trade.expiresAt)}</strong></p>` : ""}
         </header>
 
-        <section class="escrow-grid">
-          <article class="escrow-main">
-            <section class="trade-amount-summary">
-              <div class="trade-asset-total">
-                <p class="app-label blue">${isBuyer ? "You are buying" : "You are selling"}</p>
-                <h3>${format(Number(trade.assetAmount))} <span>USDT</span></h3>
-              </div>
-              <div class="trade-summary-metrics">
-                <div><span>ETB total</span><strong>${format(Number(trade.fiatAmount))} ETB</strong></div>
-                <div><span>Price</span><strong>${format(price)} ETB/USDT</strong></div>
-                <div><span>${trade.isTaker ? `Taker fee (${format(Number(trade.feeRate || 0))}%)` : "Maker fee"}</span><strong>${format(trade.isTaker ? Number(trade.feeAmount || 0) : 0, 4)} USDT</strong></div>
-                <div><span>${isBuyer ? "You receive" : "Escrow deducted"}</span><strong>${format(Number(isBuyer ? trade.buyerReceiveAmount || trade.assetAmount : trade.escrowAmount || trade.assetAmount), 4)} USDT</strong></div>
-              </div>
-            </section>
+        <section class="binance-counterparty">
+          <span class="avatar small">${displayInitial(counterparty)}</span>
+          <div><strong>${escapeHtml(counterparty)}</strong>${showCounterpartyEmail ? `<small>${escapeHtml(counterpartyEmail)}</small>` : ""}</div>
+          <a href="#/p2p-chat?id=${encodeURIComponent(trade.id)}">Chat</a>
+        </section>
 
-            ${escrowStepper(trade)}
+        <section class="settlement-layout">
+          <main class="settlement-main">
             ${isBuyer ? buyerPaymentBlock(trade, sellerMethods) : sellerPaymentBlock(trade)}
-            ${countdownBlock(trade)}
-            <div class="trade-actions-panel">${tradeActions(trade)}</div>
+            <div class="settlement-actions">${tradeActions(trade)}</div>
             ${tradeSafetyNote(trade)}
-          </article>
+          </main>
 
-          <aside class="escrow-side">
-            <div class="counterparty-card">
-              <div class="avatar small">${displayInitial(counterparty)}</div>
-              <div><small>${isBuyer ? "Seller" : "Buyer"}</small><strong>${escapeHtml(counterparty)}</strong>${showCounterpartyEmail ? `<span>${escapeHtml(counterpartyEmail)}</span>` : ""}</div>
-            </div>
+          <aside class="settlement-chat" id="tradeChatPanel">
             ${isBuyer ? "" : buyerPaymentSummary(trade)}
             ${tradeChatPanel(trade)}
           </aside>
         </section>
+        ${isBuyer && trade.status === "opened" ? `<button class="mobile-proof-cta" type="button" data-show-payment-proof>Upload Payment Proof</button>` : ""}
+        ${!isBuyer && trade.status === "payment_sent" ? `<div class="seller-mobile-action">${tradeActions(trade)}</div>` : ""}
+        ${disputeAccessPanel(trade)}
       </section>
-
-      ${disputeAccessPanel(trade)}
     `;
+  }
+  function settlementTitle(trade, isBuyer) {
+    if (trade.status === "payment_sent") return isBuyer ? "Payment submitted" : `Confirm ${format(Number(trade.fiatAmount))} ETB`;
+    if (trade.status === "released") return "Order completed";
+    if (trade.status === "disputed") return "Order under review";
+    if (["cancelled", "expired"].includes(trade.status)) return "Order closed";
+    return isBuyer ? `Pay ${format(Number(trade.fiatAmount))} ETB` : "Waiting for buyer payment";
   }
   function escrowStepper(trade) {
     const stage = tradeStage(trade);
@@ -1061,22 +1058,33 @@
       return `<p class="deposit-note">This trade is ${statusLabel(trade.status)}. No payment action is required.</p>`;
     }
 
+    const price = Number(trade.offerPrice || Number(trade.fiatAmount) / Number(trade.assetAmount));
+
     return `
-      <section class="payment-instructions">
-        <div>
-          <p class="app-label">Pay seller outside BRX</p>
-          <h4>${format(Number(trade.fiatAmount))} ETB</h4>
-          <p class="app-muted">Use only the payment details shown here. BRX holds the seller USDT in escrow, but does not handle the ETB payment.</p>
-        </div>
-        <ol class="instruction-list">
-          <li>Transfer exactly <strong>${format(Number(trade.fiatAmount))} ETB</strong> to the seller account below.</li>
-          <li>Save a screenshot or receipt from your bank or mobile money app.</li>
-          <li>Click <strong>Payment sent</strong> and upload the receipt or payment reference.</li>
-          <li>Wait for the seller to confirm and release your USDT.</li>
-        </ol>
+      <section class="settlement-transfer">
+        <div class="binance-step-one"><span><b>1</b></span><div><small>PAYMENT</small><h2>Send with ${escapeHtml(trade.paymentMethod || "seller payment method")}</h2></div></div>
+        <div class="binance-pay-amount"><small>Exact amount</small><strong>${format(Number(trade.fiatAmount))} ETB</strong><button class="copy-transfer" type="button" data-copy-value="${escapeAttr(String(trade.fiatAmount))}" aria-label="Copy payment amount" title="Copy amount">${icon("copy")}</button></div>
         <div class="payment-method-list compact">
           ${sellerMethods.length ? sellerMethods.map(paymentMethodCard).join("") : `<div class="payment-method-card"><strong>Payment method pending</strong><small>Ask the seller to add a payment method before paying.</small></div>`}
         </div>
+        <details class="binance-order-details">
+          <summary>Order details</summary>
+          <dl><div><dt>Price</dt><dd>${format(price)} ETB/USDT</dd></div><div><dt>You receive</dt><dd>${format(Number(trade.buyerReceiveAmount || trade.assetAmount), 4)} USDT</dd></div><div><dt>Fee</dt><dd>${format(Number(trade.feeAmount || 0), 4)} USDT</dd></div></dl>
+        </details>
+        ${trade.status === "opened" ? `
+          <div class="binance-step-two"><span><b>2</b></span><div><small>RECEIPT</small><strong>Upload proof and notify the seller</strong></div></div>
+          <div class="payment-proof-sheet-backdrop" data-close-payment-proof>
+            <form class="payment-proof-sheet" id="paymentSentForm">
+              <div class="payment-sheet-handle"></div>
+              <header><h2>Payment Confirmation</h2><button type="button" data-close-payment-proof aria-label="Close">&times;</button></header>
+              <div><strong>Upload Payment Proof</strong><p>Save an image of the payment receipt and upload at least one proof for the seller.</p></div>
+              <label class="receipt-drop"><input id="paymentProofFile" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" /><span>${icon("external")}</span><strong>Upload receipt</strong><small>JPG, PNG, WEBP, or PDF &middot; max 8 MB</small></label>
+              <label class="payment-owner-check"><input id="paymentOwnerConfirm" type="checkbox" /><span>I made the transfer from my own verified payment account.</span></label>
+              <div class="form-error" id="paymentSentError"></div>
+              <button class="app-button" type="submit">Transferred, Notify Seller</button>
+            </form>
+          </div>
+        ` : `<div class="binance-step-two complete"><span>${icon("check")}</span><div><small>RECEIPT SENT</small><strong>Waiting for seller confirmation</strong></div></div><div class="payment-submitted-note">Your receipt is in trade chat and the seller has been notified.</div>`}
       </section>
     `;
   }
@@ -1122,7 +1130,7 @@
       <div class="payment-detail-row">
         <small>${escapeHtml(label)}</small>
         <strong>${escapeHtml(value)}</strong>
-        <button class="copy-chip" type="button" data-copy-value="${escapeAttr(value)}">Copy</button>
+        <button class="copy-chip" type="button" data-copy-value="${escapeAttr(value)}" aria-label="Copy ${escapeAttr(label)}" title="Copy ${escapeAttr(label)}">${icon("copy")}</button>
       </div>
     `;
   }
@@ -1140,8 +1148,10 @@
         </div>
         ${canSend ? `
           <form class="trade-chat-form" id="tradeChatForm">
-            <textarea id="tradeChatInput" rows="2" maxlength="1000" placeholder="Message the ${trade.role === "buyer" ? "seller" : "buyer"}..." required></textarea>
+            <label class="trade-chat-attach" for="tradeChatFile" aria-label="Attach image">+<input id="tradeChatFile" type="file" accept="image/png,image/jpeg,image/webp" /></label>
+            <textarea id="tradeChatInput" rows="2" maxlength="1000" placeholder="Message the ${trade.role === "buyer" ? "seller" : "buyer"}..."></textarea>
             <button class="app-button" id="tradeChatSend" type="submit" aria-label="Send message">${icon("send")}<span>Send</span></button>
+            <small class="trade-chat-file-name" id="tradeChatFileName"></small>
             <div class="trade-chat-error" id="tradeChatError"></div>
           </form>
         ` : `<p class="trade-chat-closed">This trade is closed. Chat history remains available.</p>`}
@@ -1174,12 +1184,13 @@
     try {
       const result = await marketplace.tradeMessages(trade.id);
       const messages = result.messages || [];
-      const signature = messages.map((message) => `${message.id}:${message.isRead ? 1 : 0}`).join("|");
+      const signature = messages.map((message) => `${message.id}:${message.isRead ? 1 : 0}:${message.hasAttachment ? 1 : 0}`).join("|");
       if (signature !== tradeChatSignature) {
         tradeChatSignature = signature;
         container.innerHTML = messages.length
           ? messages.map(tradeChatMessage).join("")
           : `<div class="trade-chat-empty"><span>${icon("mail")}</span><strong>No messages yet</strong><small>Use this chat to coordinate payment safely.</small></div>`;
+        void loadChatAttachments(trade.id);
         if (forceScroll || nearBottom) container.scrollTop = container.scrollHeight;
       }
     } catch (error) {
@@ -1192,13 +1203,30 @@
   }
 
   function tradeChatMessage(message) {
-    const body = escapeHtml(message.body).replace(/\n/g, "<br>");
+    const body = escapeHtml(message.body || "").replace(/\n/g, "<br>");
     return `
       <div class="trade-chat-message ${message.isMine ? "mine" : "theirs"}">
-        <div class="trade-chat-bubble"><p>${body}</p></div>
+        <div class="trade-chat-bubble">${message.hasAttachment ? `<button class="chat-image-placeholder" type="button" data-chat-attachment="${escapeAttr(message.id)}"><span>Loading image...</span></button>` : ""}${body ? `<p>${body}</p>` : ""}</div>
         <small>${chatTime(message.createdAt)}${message.isMine && message.isRead ? " - Read" : ""}</small>
       </div>
     `;
+  }
+
+  async function loadChatAttachments(tradeId) {
+    document.querySelectorAll("[data-chat-attachment]").forEach(async (target) => {
+      if (target.dataset.loaded) return;
+      target.dataset.loaded = "1";
+      try {
+        const result = await marketplace.messageAttachment(tradeId, target.dataset.chatAttachment);
+        const attachment = result.attachment;
+        target.innerHTML = String(attachment.mimeType || "").startsWith("image/")
+          ? `<img src="${attachment.dataUrl}" alt="Chat attachment" />`
+          : `<span>${icon("external")} Open payment receipt</span>`;
+        target.addEventListener("click", () => openPaymentProofViewer(attachment));
+      } catch (error) {
+        target.innerHTML = `<span>${escapeHtml(error.message || "Image unavailable")}</span>`;
+      }
+    });
   }
 
   async function handleTradeChatSubmit(event, trade) {
@@ -1207,13 +1235,19 @@
     const button = document.querySelector("#tradeChatSend");
     const errorNode = document.querySelector("#tradeChatError");
     const body = input?.value.trim() || "";
-    if (!body) return;
+    const selectedFile = document.querySelector("#tradeChatFile")?.files?.[0];
+    if (!body && !selectedFile) return;
 
     if (errorNode) errorNode.textContent = "";
     if (button) button.disabled = true;
     try {
-      await marketplace.sendTradeMessage(trade.id, body);
+      const file = await filePayload("tradeChatFile", 8 * 1024 * 1024);
+      await marketplace.sendTradeMessage(trade.id, { body, file });
       input.value = "";
+      const fileInput = document.querySelector("#tradeChatFile");
+      if (fileInput) fileInput.value = "";
+      const fileName = document.querySelector("#tradeChatFileName");
+      if (fileName) fileName.textContent = "";
       await loadTradeMessages(trade, true);
       input.focus();
     } catch (error) {
@@ -1312,7 +1346,7 @@
       : "";
 
     if (trade.status === "opened" && trade.role === "buyer") {
-      return `<button class="app-button trade-primary-action" type="button" data-trade-id="${trade.id}" data-trade-action="payment-sent">I have paid ${format(Number(trade.fiatAmount))} ETB</button><button class="app-ghost-button trade-secondary-action" type="button" data-trade-id="${trade.id}" data-trade-action="cancel">Cancel trade</button>`;
+      return "";
     }
     if (trade.status === "payment_sent" && trade.role === "seller") {
       return `<button class="app-button trade-primary-action release" type="button" data-trade-id="${trade.id}" data-trade-action="release">Payment received &mdash; Release ${format(Number(trade.assetAmount))} USDT</button>${disputeButton}`;
@@ -1321,7 +1355,7 @@
       return `<span class="trade-waiting-status">Payment submitted. Waiting for seller confirmation.</span>${disputeButton}`;
     }
     if (trade.status === "opened") {
-      return `<button class="app-ghost-button trade-secondary-action" type="button" data-trade-id="${trade.id}" data-trade-action="cancel">Cancel trade</button>${disputeButton}`;
+      return disputeButton;
     }
     if (trade.status === "disputed") return `<span class="status-pill warning">Admin review in progress</span>`;
     if (trade.status === "released") return `<span class="trade-complete-status">${icon("check")} Trade completed successfully</span>`;
@@ -1375,6 +1409,28 @@
     const chatForm = document.querySelector("#tradeChatForm");
     const chatInput = document.querySelector("#tradeChatInput");
     chatForm?.addEventListener("submit", (event) => handleTradeChatSubmit(event, trade));
+    document.querySelector("#tradeChatFile")?.addEventListener("change", (event) => {
+      const name = event.currentTarget.files?.[0]?.name || "";
+      const target = document.querySelector("#tradeChatFileName");
+      if (target) target.textContent = name ? `Attached: ${name}` : "";
+    });
+    document.querySelector("#paymentSentForm")?.addEventListener("submit", (event) => handlePaymentSentSubmit(event, trade));
+    const proofSheet = document.querySelector(".payment-proof-sheet-backdrop");
+    document.querySelectorAll("[data-show-payment-proof]").forEach((button) => button.addEventListener("click", () => {
+      proofSheet?.classList.add("open");
+      document.body.classList.add("payment-proof-open");
+    }));
+    document.querySelectorAll("[data-close-payment-proof]").forEach((element) => element.addEventListener("click", (event) => {
+      if (event.currentTarget !== event.target && !event.currentTarget.matches("button")) return;
+      proofSheet?.classList.remove("open");
+      document.body.classList.remove("payment-proof-open");
+    }));
+    document.querySelector("#paymentProofFile")?.addEventListener("change", (event) => {
+      const selected = event.currentTarget.files?.[0];
+      const label = event.currentTarget.closest(".receipt-drop");
+      const title = label?.querySelector("strong");
+      if (title) title.textContent = selected?.name || "Choose payment receipt";
+    });
     chatInput?.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
@@ -1391,9 +1447,9 @@
         <button class="modal-x" type="button" data-close-modal aria-label="Close">x</button>
         <p class="app-label blue">Confirm payment sent</p>
         <h3>${format(Number(trade.fiatAmount))} ETB</h3>
-        <p class="app-muted">Submit your payment reference or receipt. False confirmations can lead to account suspension.</p>
-        <label class="form-field"><span>Payment reference</span><input id="paymentReference" placeholder="Bank ref, mobile money code, or note" /></label>
+        <p class="app-muted">Upload the payment receipt. False confirmations can lead to account suspension.</p>
         <label class="receipt-drop"><input id="paymentProofFile" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" /><strong>Upload receipt</strong><small>PNG, JPG, WEBP, or PDF up to 8 MB</small></label>
+        <label class="payment-owner-check"><input id="paymentOwnerConfirm" type="checkbox" /><span>I paid from my own verified payment account.</span></label>
         <div class="form-error" id="paymentSentError"></div>
         <button class="app-button" type="submit">Yes, I paid the seller</button>
       </form>
@@ -1411,11 +1467,15 @@
     const form = event.currentTarget;
     const errorNode = form.querySelector("#paymentSentError");
     const submit = form.querySelector('button[type="submit"]');
-    const reference = form.querySelector("#paymentReference").value.trim();
+    const reference = form.querySelector("#paymentReference")?.value.trim() || "";
     const selectedFile = form.querySelector("#paymentProofFile")?.files?.[0];
     errorNode.textContent = "";
-    if (!reference && !selectedFile) {
-      errorNode.textContent = "Add a payment reference or upload a receipt.";
+    if (!selectedFile) {
+      errorNode.textContent = "Upload a payment receipt before notifying the seller.";
+      return;
+    }
+    if (!form.querySelector("#paymentOwnerConfirm")?.checked) {
+      errorNode.textContent = "Confirm that you paid from your own verified account.";
       return;
     }
     const originalText = submit?.textContent;
@@ -1426,7 +1486,6 @@
     try {
       const file = await filePayload("paymentProofFile", 8 * 1024 * 1024);
       await marketplace.markPaymentSent(trade.id, { reference, file });
-      closeTradeModal();
       showToast("Payment proof submitted. The seller has been notified.");
       await loadTradeDetail(trade.id);
     } catch (error) {

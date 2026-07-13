@@ -17,7 +17,7 @@
     API_BASES: [...new Set(isLocalHost ? [...localDirectApi, ...sameOriginApi] : [...sameOriginApi])],
     // Use Cloudflare test keys locally; use the real widget on brxp2p.com.
     TURNSTILE_SITE_KEY: isLocalHost ? localTurnstileSiteKey : productionTurnstileSiteKey,
-    APP_ROUTES: ["dashboard", "market", "p2p-chat", "ads", "trades", "wallet", "kyc", "profile", "settings", "notifications", "referrals", "admin"],
+    APP_ROUTES: ["dashboard", "market", "order", "p2p-chat", "ads", "trades", "wallet", "kyc", "profile", "settings", "notifications", "referrals", "admin"],
     NETWORKS: Object.freeze([
       Object.freeze({
         id: "BEP20",
