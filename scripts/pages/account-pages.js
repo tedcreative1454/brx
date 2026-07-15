@@ -270,7 +270,7 @@
       lastMyOffers = result.offers || [];
       renderAdsManager(content);
     } catch (error) {
-      content.innerHTML = `<section class="warning-card"><h3>Could not load ads</h3><p>${escapeHtml(error.message || "Start the BRX backend and reload.")}</p></section>`;
+      content.innerHTML = `<section class="warning-card"><h3>Could not load ads</h3><p>${escapeHtml(error.message || "Check your internet connection and try again.")}</p></section>`;
     }
   }
 
@@ -501,7 +501,7 @@
       lastMyTrades = result.trades || [];
       renderTradeCollection();
     } catch (error) {
-      content.innerHTML = `<section class="professional-error-card">${icon("info")}<div><h3>Could not load trades</h3><p>${escapeHtml(error.message || "Check the BRX backend connection and try again.")}</p></div><button class="app-ghost-button small" id="retryTrades" type="button">Try again</button></section>`;
+      content.innerHTML = `<section class="professional-error-card">${icon("info")}<div><h3>Could not load trades</h3><p>${escapeHtml(error.message || "Check your internet connection and try again.")}</p></div><button class="app-ghost-button small" id="retryTrades" type="button">Try again</button></section>`;
       document.querySelector("#retryTrades")?.addEventListener("click", () => void loadMyTrades());
     }
   }
@@ -566,7 +566,7 @@
       startTradeCountdown(trade);
       startTradeChat(trade);
     } catch (error) {
-      content.innerHTML = `<section class="warning-card"><h3>Could not load trade</h3><p>${escapeHtml(error.message || "Start the BRX backend and reload.")}</p></section>`;
+      content.innerHTML = `<section class="warning-card"><h3>Could not load trade</h3><p>${escapeHtml(error.message || "Check your internet connection and try again.")}</p></section>`;
     }
   }
 
@@ -1811,7 +1811,7 @@
     if (activeWalletMode === "deposit" && selectedNetwork === "BEP20" && !depositAddress) {
       void syncBackendWallet(user).then(() => renderWallet()).catch((error) => {
         console.error(error);
-        showToast("Could not load your deposit address. Check the backend connection.");
+        showToast("Could not load your deposit address. Check your connection and try again.");
       });
     }
   }
@@ -2330,7 +2330,7 @@
         });
       });
     } catch (error) {
-      content.innerHTML = `<section class="warning-card"><h3>Could not load notifications</h3><p>${escapeHtml(error.message || "Start the BRX backend and run migrations.")}</p></section>`;
+      content.innerHTML = `<section class="warning-card"><h3>Could not load notifications</h3><p>${escapeHtml(error.message || "Check your internet connection and try again.")}</p></section>`;
     }
   }
 
@@ -2434,7 +2434,7 @@
         if (window.BRX.router.routeName() === "settings") renderSettings();
       }).catch((error) => {
         console.error(error);
-        showToast("Could not load security settings. Check the BRX backend connection.");
+        showToast("Could not load security settings. Check your connection and try again.");
       });
     }
     if (!user.accountSettingsLoaded && accountService) {
@@ -2442,7 +2442,7 @@
         if (window.BRX.router.routeName() === "settings") renderSettings();
       }).catch((error) => {
         console.error(error);
-        showToast("Could not load account settings. Check the BRX backend connection.");
+        showToast("Could not load account settings. Check your connection and try again.");
       });
     }
   }
@@ -2553,7 +2553,7 @@
           <div><h3>${icon("activity")} Active Sessions</h3><p>Devices currently signed in to this account.</p></div>
           <button class="settings-action warning" type="button" id="revokeOtherSessions">Revoke others</button>
         </div>
-        ${sessions.length ? sessions.map(sessionRow).join("") : settingsEmpty("activity", "No sessions loaded", "Start the backend, run migrations, and refresh this page.")}
+        ${sessions.length ? sessions.map(sessionRow).join("") : settingsEmpty("activity", "No sessions found", "Your active sign-ins will appear here.")}
       </section>
     `;
   }

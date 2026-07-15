@@ -233,7 +233,7 @@ export class AuthService {
   googleStartUrl(returnTo?: string, clientKey = "unknown") {
     this.assertRateLimit(`auth:google-start:ip:${clientKey}`, 60, 15 * 60 * 1000);
     if (!env.googleClientId || !env.googleClientSecret) {
-      throw new BadRequestException("Google sign-in is not configured yet.");
+      throw new BadRequestException("Google sign-in is temporarily unavailable. Please use email and password.");
     }
 
     const state = this.signGoogleState({
@@ -293,7 +293,7 @@ export class AuthService {
     }
 
     const redirect = new URL(returnTo);
-    redirect.hash = `/login?googleError=${encodeURIComponent(this.googleErrorMessage(error))}`;
+    redirect.hash = `/login?googleError=${encodeURIComponent(this.googlePublicErrorMessage(error))}`;
     return redirect.toString();
   }
 
@@ -990,6 +990,14 @@ export class AuthService {
       return String((error as { message?: unknown }).message ?? "Google sign-in failed.");
     }
     return "Google sign-in failed.";
+  }
+
+  private googlePublicErrorMessage(error: unknown) {
+    const message = this.googleErrorMessage(error);
+    if (/email must be verified/i.test(message)) return "Your Google account email must be verified.";
+    if (/session expired/i.test(message)) return "Google sign-in expired. Please try again.";
+    if (/temporarily unavailable|not configured/i.test(message)) return "Google sign-in is temporarily unavailable. Please use email and password.";
+    return "Google sign-in could not be completed. Please try again.";
   }
 }
 

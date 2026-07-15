@@ -28,7 +28,7 @@
   async function enable() {
     if (!supported()) throw new Error("Push notifications are not supported on this device.");
     const config = await requestJson("/notifications/push/config");
-    if (!config.enabled || !config.publicKey) throw new Error("BRX push notifications are not configured yet.");
+    if (!config.enabled || !config.publicKey) throw new Error("Push notifications are temporarily unavailable.");
     const permission = await Notification.requestPermission();
     if (permission !== "granted") throw new Error("Notification permission was not allowed.");
     const serviceWorker = await registration();

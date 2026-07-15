@@ -81,7 +81,7 @@
       content.innerHTML = `
         <section class="market-api-state">
           <span>!</span>
-          <div><h3>Could not load the P2P market</h3><p>${escapeHtml(error.message || "Check the BRX backend connection and try again.")}</p></div>
+          <div><h3>Could not load the P2P market</h3><p>${escapeHtml(error.message || "Check your internet connection and try again.")}</p></div>
           <button class="app-button small" id="retryMarket" type="button">Try again</button>
         </section>
       `;

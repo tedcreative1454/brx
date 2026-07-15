@@ -581,7 +581,7 @@
     const editor = document.querySelector("#limitEditor");
     editor.innerHTML = adminState.limits.length
       ? `<form id="limitsForm" class="limit-editor">${adminState.limits.map(limitRow).join("")}<button class="app-button" type="submit">Save limits</button></form>`
-      : emptyBlock("No limits loaded", "Run migrations to create account_limits.");
+      : emptyBlock("No limits configured", "Account limits have not been configured yet.");
     document.querySelector("#limitsForm")?.addEventListener("submit", handleLimitSave);
   }
 

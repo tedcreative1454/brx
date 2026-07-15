@@ -48,7 +48,7 @@ export class NotificationsService {
   }
 
   async subscribePush(userId: string, input: { endpoint?: string; keys?: { p256dh?: string; auth?: string }; userAgent?: string }) {
-    if (!this.pushEnabled) throw new BadRequestException("Push notifications are not configured.");
+    if (!this.pushEnabled) throw new BadRequestException("Push notifications are temporarily unavailable.");
     const endpoint = String(input.endpoint || "").trim();
     const p256dh = String(input.keys?.p256dh || "").trim();
     const auth = String(input.keys?.auth || "").trim();
