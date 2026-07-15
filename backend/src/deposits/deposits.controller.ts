@@ -1,4 +1,4 @@
-import { Controller, Get, Headers, Post } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Post } from "@nestjs/common";
 import { AuthService } from "../auth/auth.service";
 import { DepositsService } from "./deposits.service";
 
@@ -21,8 +21,8 @@ export class DepositsController {
   }
 
   @Post("sweep")
-  async sweep(@Headers("authorization") authorization?: string) {
-    await this.auth.requireAdmin(authorization);
-    return this.deposits.sweepFundedWallets();
+  async sweep(@Headers("authorization") authorization: string | undefined, @Body() body: { note?: string }) {
+    const admin = await this.auth.requireAdmin(authorization);
+    return this.deposits.sweepFundedWallets(50, { adminId: admin.id, note: body.note });
   }
 }

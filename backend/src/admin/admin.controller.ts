@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Param, Patch, Post, Query } from "@nestjs/common";
 import { AuthService } from "../auth/auth.service";
 import { TradesService } from "../trades/trades.service";
 import { WithdrawalsService } from "../withdrawals/withdrawals.service";
@@ -43,15 +43,25 @@ export class AdminController {
       bscSweepEnabled?: boolean;
       bscSweepMinUsdt?: string | number;
       enabledPaymentMethodTypes?: string[];
+      changeReason?: string;
     },
   ) {
     const admin = await this.auth.requireAdmin(authorization);
     return this.admin.updatePlatformSettings(admin.id, body);
   }
   @Get("users")
-  async users(@Headers("authorization") authorization?: string) {
+  async users(
+    @Headers("authorization") authorization: string | undefined,
+    @Query() query: { page?: string; pageSize?: string; search?: string; status?: string; kyc?: string },
+  ) {
     await this.auth.requireAdmin(authorization);
-    return this.admin.users();
+    return this.admin.users(query);
+  }
+
+  @Get("users/:userId")
+  async userDetail(@Headers("authorization") authorization: string | undefined, @Param("userId") userId: string) {
+    await this.auth.requireAdmin(authorization);
+    return this.admin.userDetail(userId);
   }
 
   @Patch("users/:userId/label")
@@ -74,15 +84,21 @@ export class AdminController {
   }
 
   @Get("deposits")
-  async deposits(@Headers("authorization") authorization?: string) {
+  async deposits(
+    @Headers("authorization") authorization: string | undefined,
+    @Query() query: { page?: string; pageSize?: string; search?: string; status?: string },
+  ) {
     await this.auth.requireAdmin(authorization);
-    return this.admin.deposits();
+    return this.admin.deposits(query);
   }
 
   @Get("withdrawals")
-  async withdrawals(@Headers("authorization") authorization?: string) {
+  async withdrawals(
+    @Headers("authorization") authorization: string | undefined,
+    @Query() query: { page?: string; pageSize?: string; search?: string; status?: string },
+  ) {
     await this.auth.requireAdmin(authorization);
-    return this.admin.withdrawals();
+    return this.admin.withdrawals(query);
   }
 
   @Post("withdrawals/:withdrawalId/approve")
@@ -105,15 +121,21 @@ export class AdminController {
     return this.withdrawalsService.rejectWithdrawal(admin.id, withdrawalId, body);
   }
   @Get("trades")
-  async tradesList(@Headers("authorization") authorization?: string) {
+  async tradesList(
+    @Headers("authorization") authorization: string | undefined,
+    @Query() query: { page?: string; pageSize?: string; search?: string; status?: string },
+  ) {
     await this.auth.requireAdmin(authorization);
-    return this.admin.trades();
+    return this.admin.trades(query);
   }
 
   @Get("audit-logs")
-  async auditLogs(@Headers("authorization") authorization?: string) {
+  async auditLogs(
+    @Headers("authorization") authorization: string | undefined,
+    @Query() query: { page?: string; pageSize?: string; search?: string; action?: string },
+  ) {
     await this.auth.requireAdmin(authorization);
-    return this.admin.auditLogs();
+    return this.admin.auditLogs(query);
   }
 
   @Get("account-limits")
@@ -122,20 +144,61 @@ export class AdminController {
     return this.admin.limits();
   }
 
+  @Patch("account-limits")
+  async updateLimits(
+    @Headers("authorization") authorization: string | undefined,
+    @Body() body: {
+      updates?: Array<{ tier?: string; dailyTradeLimitUsd?: string | number; withdrawalLimitUsd?: string | number }>;
+      reason?: string;
+    },
+  ) {
+    const admin = await this.auth.requireAdmin(authorization);
+    return this.admin.updateLimits(admin.id, body);
+  }
+
   @Patch("account-limits/:tier")
   async updateLimit(
     @Headers("authorization") authorization: string | undefined,
     @Param("tier") tier: string,
-    @Body() body: { dailyTradeLimitUsd?: string | number; withdrawalLimitUsd?: string | number },
+    @Body() body: { dailyTradeLimitUsd?: string | number; withdrawalLimitUsd?: string | number; reason?: string },
   ) {
-    await this.auth.requireAdmin(authorization);
-    return this.admin.updateLimit(tier, body);
+    const admin = await this.auth.requireAdmin(authorization);
+    return this.admin.updateLimit(admin.id, tier, body);
   }
 
   @Get("disputes")
-  async disputes(@Headers("authorization") authorization?: string) {
+  async disputes(
+    @Headers("authorization") authorization: string | undefined,
+    @Query() query: { page?: string; pageSize?: string },
+  ) {
     await this.auth.requireAdmin(authorization);
-    return this.trades.adminDisputes();
+    return this.trades.adminDisputes(query);
+  }
+
+  @Get("disputes/:tradeId/payment-proof")
+  async disputePaymentProof(@Headers("authorization") authorization: string | undefined, @Param("tradeId") tradeId: string) {
+    await this.auth.requireAdmin(authorization);
+    return this.trades.adminPaymentProof(tradeId);
+  }
+
+  @Get("disputes/:tradeId/evidence/:evidenceId")
+  async disputeEvidence(
+    @Headers("authorization") authorization: string | undefined,
+    @Param("tradeId") tradeId: string,
+    @Param("evidenceId") evidenceId: string,
+  ) {
+    await this.auth.requireAdmin(authorization);
+    return this.trades.adminDisputeEvidence(tradeId, evidenceId);
+  }
+
+  @Get("disputes/:tradeId/messages/:messageId/attachment")
+  async disputeMessageAttachment(
+    @Headers("authorization") authorization: string | undefined,
+    @Param("tradeId") tradeId: string,
+    @Param("messageId") messageId: string,
+  ) {
+    await this.auth.requireAdmin(authorization);
+    return this.trades.adminMessageAttachment(tradeId, messageId);
   }
 
   @Post("disputes/:tradeId/resolve")

@@ -326,8 +326,12 @@
         </div>
         <div class="market-price-cell"><strong class="${action === "Sell" ? "sell-price" : ""}">${format(price)}</strong></div>
         <div class="market-liquidity-cell"><strong>${format(available)} USDT</strong><small>${format(minFiat)} ETB - ${format(maxFiat)} ETB</small></div>
-        <div class="market-payment-cell p2p-payment-list">${methods.length ? methods.slice(0, 3).map((method, index) => `<span><i style="--dot:${paymentColor(index)}"></i>${escapeHtml(method)}</span>`).join("") : `<small>No payment method</small>`}</div>
-        <div class="market-action-cell"><button class="app-button market-trade-button ${sideClass}-button" type="button" data-select-offer="${escapeHtml(offer.id)}">${action} USDT</button></div>
+        <div class="market-payment-cell p2p-payment-list">${methods.length ? methods.slice(0, 3).map((method, index) => `<span><i style="--dot:${paymentColor(method, index)}"></i>${escapeHtml(method)}</span>`).join("") : `<small>No payment method</small>`}</div>
+        <div class="market-action-cell">
+          <div class="market-action-methods">${methods.length ? methods.slice(0, 3).map((method, index) => `<span title="${escapeHtml(method)}"><b>${escapeHtml(method)}</b><i style="--dot:${paymentColor(method, index)}"></i></span>`).join("") : `<span><b>No payment method</b></span>`}</div>
+          <small class="p2p-action-payment-time" aria-label="15 minute payment window">${icon("time")}<span>15 min</span></small>
+          <button class="app-button market-trade-button ${sideClass}-button" type="button" data-select-offer="${escapeHtml(offer.id)}">${action} USDT</button>
+        </div>
       </div>
     `;
   }
@@ -360,7 +364,18 @@
     if (hours <= 3) return { tone: "away", label: "Recently active" };
     return { tone: "offline", label: "Offline" };
   }
-  function paymentColor(index) {
+  function paymentColor(method, index = 0) {
+    const name = String(method || "").trim().toLowerCase();
+    if (name.includes("telebirr")) return "#f4c430";
+    if (name.includes("m-pesa") || name.includes("mpesa")) return "#00a651";
+    if (name.includes("cbe birr")) return "#00a89c";
+    if (name === "cbe" || name.includes("commercial bank")) return "#7c3aad";
+    if (name.includes("abyssinia")) return "#e11d48";
+    if (name.includes("awash")) return "#1e88e5";
+    if (name.includes("dashen")) return "#f97316";
+    if (name.includes("coop") || name.includes("cooperative")) return "#16a34a";
+    if (name.includes("bank")) return "#3b82f6";
+    if (name.includes("cash")) return "#22c55e";
     return ["#f0b90b", "#f6465d", "#1e9bff", "#00c087"][index % 4];
   }
   function orderModal(offer, action) {
@@ -410,7 +425,8 @@
         </section>
 
         <footer class="binance-order-footer">
-          <button class="app-button" id="orderSubmit" type="submit" form="orderForm" disabled>Place Order</button>
+          <div class="order-payment-window">${icon("time")}<span><small>Payment time limit</small><strong>15 min</strong></span><em>Order cancels automatically if payment is not marked sent.</em></div>
+          <button class="app-button" id="orderSubmit" type="submit" form="orderForm" disabled>${action} USDT</button>
         </footer>
       </section>
     `;
@@ -535,6 +551,7 @@
     const user = requireUser();
     if (!user) return;
     const selectedId = window.BRX.router.routeParams().get("id") || "";
+    const selectedUserId = window.BRX.router.routeParams().get("user") || "";
     refs.app.innerHTML = `
       <section class="exchange-app app-page-wide p2p-chat-page">
         <div class="p2p-chat-shell ${selectedId ? "has-selected" : ""}">
@@ -556,53 +573,78 @@
     try {
       const result = await marketplace.myTrades();
       const trades = result.trades || [];
-      renderP2pChatContacts(trades, selectedId);
-      const selected = trades.find((trade) => trade.id === selectedId);
+      const conversations = groupP2pConversations(trades);
+      const selected = conversations.find((conversation) => conversation.id === selectedUserId || conversation.trades.some((trade) => trade.id === selectedId));
+      renderP2pChatContacts(conversations, selected?.id || "");
       if (selected) await renderP2pChatRoom(selected);
       else document.querySelector(".p2p-chat-shell")?.classList.remove("has-selected");
-      bindP2pChatSearch(trades, selectedId);
+      bindP2pChatSearch(conversations, selected?.id || "");
     } catch (error) {
       document.querySelector(".p2p-chat-shell")?.classList.remove("has-selected");
       document.querySelector("#p2pChatContacts").innerHTML = `<div class="p2p-chat-loading error">${escapeHtml(error.message || "Could not load chats.")}</div>`;
     }
   }
 
-  function renderP2pChatContacts(trades, selectedId, query = "") {
+  function groupP2pConversations(trades) {
+    const grouped = new Map();
+    trades.forEach((trade) => {
+      const counterpartyId = String((trade.role === "buyer" ? trade.sellerId : trade.buyerId) || "");
+      const key = counterpartyId || p2pCounterparty(trade);
+      if (!grouped.has(key)) grouped.set(key, { id: key, name: p2pCounterparty(trade), trades: [], counterpartyLastSeenAt: trade.counterpartyLastSeenAt });
+      grouped.get(key).trades.push(trade);
+    });
+    return [...grouped.values()].map((conversation) => {
+      conversation.trades.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      conversation.latestTrade = conversation.trades[0];
+      conversation.activeTrade = conversation.trades.find((trade) => ["opened", "payment_sent", "disputed"].includes(trade.status)) || null;
+      return conversation;
+    }).sort((a, b) => new Date(b.latestTrade?.createdAt || 0).getTime() - new Date(a.latestTrade?.createdAt || 0).getTime());
+  }
+
+  function renderP2pChatContacts(conversations, selectedUserId, query = "") {
     const list = document.querySelector("#p2pChatContacts");
     if (!list) return;
     const normalized = query.trim().toLowerCase();
-    const filtered = trades.filter((trade) => !normalized || p2pCounterparty(trade).toLowerCase().includes(normalized) || shortId(trade.id).toLowerCase().includes(normalized));
-    list.innerHTML = filtered.length ? filtered.map((trade) => {
-      const name = p2pCounterparty(trade);
-      const active = trade.id === selectedId;
-      const presence = presenceMeta(trade.counterpartyLastSeenAt);
-      return `<a class="p2p-chat-contact ${active ? "active" : ""}" href="#/p2p-chat?id=${encodeURIComponent(trade.id)}"><span class="presence-avatar ${presence.tone}">${displayInitial(name)}<i></i></span><div><strong>${escapeHtml(name)}</strong><small><span class="presence-inline ${presence.tone}"><i></i>${presence.label}</span> &middot; ${escapeHtml(chatPreview(trade))}</small></div><em>${chatDate(trade.updatedAt || trade.createdAt)}</em></a>`;
+    const filtered = conversations.filter((conversation) => !normalized || conversation.name.toLowerCase().includes(normalized) || conversation.trades.some((trade) => shortId(trade.id).toLowerCase().includes(normalized)));
+    list.innerHTML = filtered.length ? filtered.map((conversation) => {
+      const trade = conversation.latestTrade;
+      const active = conversation.id === selectedUserId;
+      const presence = presenceMeta(conversation.counterpartyLastSeenAt);
+      return `<a class="p2p-chat-contact ${active ? "active" : ""}" href="#/p2p-chat?user=${encodeURIComponent(conversation.id)}&id=${encodeURIComponent(trade.id)}"><span class="presence-avatar ${presence.tone}">${displayInitial(conversation.name)}<i></i></span><div><strong>${escapeHtml(conversation.name)}</strong><small><span class="presence-inline ${presence.tone}"><i></i>${presence.label}</span> &middot; ${escapeHtml(chatPreview(trade))}</small><small class="conversation-order-count">${conversation.trades.length} ${conversation.trades.length === 1 ? "order" : "orders"} in this conversation</small></div><em>${chatDate(trade.updatedAt || trade.createdAt)}</em></a>`;
     }).join("") : `<div class="p2p-chat-loading">No chats yet.</div>`;
   }
 
-  async function renderP2pChatRoom(trade, focusComposer = false) {
+  async function renderP2pChatRoom(conversation, focusComposer = false) {
     const room = document.querySelector("#p2pChatRoom");
     if (!room) return;
     room.innerHTML = `<div class="p2p-chat-room-loading">Loading conversation...</div>`;
-    const canSend = ["opened", "payment_sent", "disputed"].includes(trade.status);
+    const activeTrade = conversation.activeTrade;
+    const displayTrade = activeTrade || conversation.latestTrade;
+    const canSend = Boolean(activeTrade);
     let messages = [];
     try {
-      const result = await marketplace.tradeMessages(trade.id);
-      messages = result.messages || [];
+      const results = await Promise.allSettled(conversation.trades.map(async (trade) => {
+        const result = await marketplace.tradeMessages(trade.id);
+        return (result.messages || []).map((message) => ({ ...message, tradeId: message.tradeId || trade.id }));
+      }));
+      const successful = results.filter((result) => result.status === "fulfilled");
+      if (!successful.length && results.length) throw results[0].reason;
+      messages = successful.flatMap((result) => result.value).sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
     } catch (error) {
       room.innerHTML = `<div class="p2p-chat-welcome"><strong>Chat unavailable</strong><span>${escapeHtml(error.message || "Could not load messages.")}</span></div>`;
       return;
     }
-    const presence = presenceMeta(trade.counterpartyLastSeenAt);
+    const presence = presenceMeta(conversation.counterpartyLastSeenAt);
     room.innerHTML = `
-      <header class="p2p-chat-room-head"><div><a class="p2p-chat-back" href="#/p2p-chat" aria-label="Back to chats">${icon("back")}</a><span class="presence-avatar ${presence.tone}">${displayInitial(p2pCounterparty(trade))}<i></i></span><div><strong>${escapeHtml(p2pCounterparty(trade))}</strong><small>#${shortId(trade.id)} &middot; ${escapeHtml(statusText(trade.status))} &middot; ${presence.label}</small></div></div><a href="#/trades?id=${encodeURIComponent(trade.id)}">Open order</a></header>
+      <header class="p2p-chat-room-head"><div><a class="p2p-chat-back" href="#/p2p-chat" aria-label="Back to chats">${icon("back")}</a><span class="presence-avatar ${presence.tone}">${displayInitial(conversation.name)}<i></i></span><div><strong>${escapeHtml(conversation.name)}</strong><small>${conversation.trades.length} ${conversation.trades.length === 1 ? "order" : "orders"} &middot; ${presence.label}</small></div></div><a href="#/trades?id=${encodeURIComponent(displayTrade.id)}">Open order</a></header>
+      <div class="p2p-conversation-orders">${conversation.trades.slice(0, 5).map((trade) => `<a class="${trade.id === displayTrade.id ? "active" : ""}" href="#/trades?id=${encodeURIComponent(trade.id)}"><strong>#${shortId(trade.id)}</strong><span>${format(Number(trade.assetAmount))} USDT</span><em>${escapeHtml(statusText(trade.status))}</em></a>`).join("")}</div>
       <div class="p2p-chat-room-messages" id="p2pChatRoomMessages" role="log" aria-live="polite">${messages.length ? messages.map(p2pChatMessage).join("") : `<div class="p2p-chat-welcome compact">${icon("mail")}<strong>No messages yet</strong><span>Use this chat to coordinate payment safely.</span></div>`}</div>
-      ${canSend ? `<form class="p2p-chat-compose" id="p2pChatCompose"><label class="trade-chat-attach" for="p2pChatFile" aria-label="Attach image">+<input id="p2pChatFile" type="file" accept="image/png,image/jpeg,image/webp" /></label><textarea id="p2pChatInput" rows="1" maxlength="1000" placeholder="Type a message..."></textarea><button class="app-button" type="submit" aria-label="Send message">${icon("send")}</button><small id="p2pChatFileName"></small><div id="p2pChatError"></div></form>` : `<p class="p2p-chat-closed">This order is closed. Chat history remains available.</p>`}
+      ${canSend ? `<form class="p2p-chat-compose" id="p2pChatCompose"><label class="trade-chat-attach" for="p2pChatFile" aria-label="Attach image">+<input id="p2pChatFile" type="file" accept="image/png,image/jpeg,image/webp" /></label><textarea id="p2pChatInput" rows="1" maxlength="1000" placeholder="Type a message..."></textarea><button class="app-button" type="submit" aria-label="Send message">${icon("send")}</button><small id="p2pChatFileName"></small><div id="p2pChatError"></div></form>` : `<p class="p2p-chat-closed">This conversation has no active order. Chat history remains available.</p>`}
     `;
     const messagesNode = document.querySelector("#p2pChatRoomMessages");
     if (messagesNode) messagesNode.scrollTop = messagesNode.scrollHeight;
-    void loadP2pChatAttachments(trade.id);
-    document.querySelector("#p2pChatCompose")?.addEventListener("submit", (event) => handleP2pChatSubmit(event, trade));
+    void loadP2pChatAttachments();
+    document.querySelector("#p2pChatCompose")?.addEventListener("submit", (event) => handleP2pChatSubmit(event, conversation));
     document.querySelector("#p2pChatFile")?.addEventListener("change", (event) => {
       const target = document.querySelector("#p2pChatFileName");
       const fileName = event.currentTarget.files?.[0]?.name || "";
@@ -618,7 +660,7 @@
     if (focusComposer) chatInput?.focus();
   }
 
-  async function handleP2pChatSubmit(event, trade) {
+  async function handleP2pChatSubmit(event, conversation) {
     event.preventDefault();
     const input = document.querySelector("#p2pChatInput");
     const error = document.querySelector("#p2pChatError");
@@ -630,9 +672,10 @@
     if (button) button.disabled = true;
     try {
       const file = selectedFile ? await chatFilePayload(selectedFile) : undefined;
-      await marketplace.sendTradeMessage(trade.id, { body, file });
+      if (!conversation.activeTrade) throw new Error("Open an active order with this trader before sending a message.");
+      await marketplace.sendTradeMessage(conversation.activeTrade.id, { body, file });
       input.value = "";
-      await renderP2pChatRoom(trade, true);
+      await renderP2pChatRoom(conversation, true);
     } catch (err) {
       if (error) error.textContent = err.message || "Could not send message.";
     } finally {
@@ -640,19 +683,19 @@
     }
   }
 
-  function bindP2pChatSearch(trades, selectedId) {
-    document.querySelector("#p2pChatSearch")?.addEventListener("input", (event) => renderP2pChatContacts(trades, selectedId, event.currentTarget.value));
+  function bindP2pChatSearch(conversations, selectedUserId) {
+    document.querySelector("#p2pChatSearch")?.addEventListener("input", (event) => renderP2pChatContacts(conversations, selectedUserId, event.currentTarget.value));
   }
 
   function p2pChatMessage(message) {
     const body = escapeHtml(message.body || "").replace(/\n/g, "<br>");
-    return `<div class="p2p-chat-message ${message.isMine ? "mine" : "theirs"} ${message.hasAttachment ? "has-attachment" : ""}">${message.hasAttachment ? `<button class="chat-image-placeholder" type="button" data-p2p-chat-attachment="${escapeAttr(message.id)}"><span>Loading image...</span></button>` : ""}${body ? `<p>${body}</p>` : ""}<small>${chatDate(message.createdAt, true)}${message.isMine && message.isRead ? " &middot; Read" : ""}</small></div>`;
+    return `<div class="p2p-chat-message ${message.isMine ? "mine" : "theirs"} ${message.hasAttachment ? "has-attachment" : ""}"><em class="p2p-message-order">Order #${shortId(message.tradeId)}</em>${message.hasAttachment ? `<button class="chat-image-placeholder" type="button" data-p2p-chat-trade="${escapeAttr(message.tradeId)}" data-p2p-chat-attachment="${escapeAttr(message.id)}"><span>Loading image...</span></button>` : ""}${body ? `<p>${body}</p>` : ""}<small>${chatDate(message.createdAt, true)}${message.isMine && message.isRead ? " &middot; Read" : ""}</small></div>`;
   }
 
-  async function loadP2pChatAttachments(tradeId) {
+  async function loadP2pChatAttachments() {
     document.querySelectorAll("[data-p2p-chat-attachment]").forEach(async (target) => {
       try {
-        const result = await marketplace.messageAttachment(tradeId, target.dataset.p2pChatAttachment);
+        const result = await marketplace.messageAttachment(target.dataset.p2pChatTrade, target.dataset.p2pChatAttachment);
         target.innerHTML = String(result.attachment.mimeType || "").startsWith("image/")
           ? `<img src="${result.attachment.dataUrl}" alt="Chat attachment" loading="lazy" decoding="async" />`
           : `<span>Open payment receipt</span>`;
@@ -698,7 +741,7 @@
   }
 
   function chatPreview(trade) {
-    if (trade.paymentMethod) return `${trade.paymentMethod} &middot; ${statusText(trade.status)}`;
+    if (trade.paymentMethod) return `${trade.paymentMethod} · ${statusText(trade.status)}`;
     return statusText(trade.status);
   }
 

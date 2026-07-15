@@ -59,16 +59,18 @@
   }
   function adminNav() {
     const items = [
-      ["adminOverview", "Overview", "grid"],
-      ["adminUsers", "Users", "user"],
-      ["adminKyc", "KYC", "shield"],
-      ["adminDisputes", "Disputes", "trades"],
-      ["adminOps", "Operations", "activity"],
-      ["adminLimits", "Limits", "lock"],
-      ["adminSettings", "Settings", "settings"],
+      ["overview", "Command", "grid"],
+      ["users", "Users", "user"],
+      ["kyc", "KYC", "shield"],
+      ["p2p", "P2P Cases", "trades"],
+      ["finance", "Funds", "wallet"],
+      ["risk", "Risk", "lock"],
+      ["audit", "Audit", "activity"],
+      ["settings", "Settings", "settings"],
     ];
+    const activeView = new URLSearchParams(String(location.hash).split("?")[1] || "").get("view") || "overview";
 
-    return items.map(([target, label, iconName], index) => `<button class="${index === 0 ? "active" : ""}" type="button" data-admin-scroll="${target}">${icon(iconName)}${label}</button>`).join("");
+    return items.map(([view, label, iconName]) => `<button class="${view === activeView ? "active" : ""}" type="button" data-admin-view="${view}">${icon(iconName)}${label}</button>`).join("");
   }
 
   function currentTheme() {
@@ -88,13 +90,11 @@
   }
 
   function bindAdminNav() {
-    document.querySelectorAll("[data-admin-scroll]").forEach((button) => {
+    document.querySelectorAll("[data-admin-view]").forEach((button) => {
       button.addEventListener("click", () => {
-        const target = document.querySelector(`#${button.dataset.adminScroll}`);
-        if (!target) return;
-        document.querySelectorAll("[data-admin-scroll]").forEach((item) => item.classList.remove("active"));
-        button.classList.add("active");
-        target.scrollIntoView({ behavior: "smooth", block: "start" });
+        const view = button.dataset.adminView;
+        if (!view) return;
+        location.hash = `#/admin?view=${encodeURIComponent(view)}`;
       });
     });
   }
@@ -115,7 +115,8 @@
 
     if (inApp) {
       const theme = currentTheme();
-      refs.nav.innerHTML = adminMode ? adminNav() : appNav(route);
+      refs.nav.hidden = adminMode;
+      refs.nav.innerHTML = adminMode ? "" : appNav(route);
       refs.headerActions.innerHTML = `
         <button class="header-icon" id="themeToggle" type="button" aria-label="Toggle ${theme === "dark" ? "light" : "dark"} mode">${icon(theme === "dark" ? "sun" : "moon")}</button>
         <button class="header-icon notification-button" id="notificationButton" type="button" aria-label="Notifications">${icon("bell")}<span class="notification-dot" id="notificationDot" ${notificationUnreadCount > 0 ? "" : "hidden"}>${notificationUnreadCount > 99 ? "99+" : notificationUnreadCount || ""}</span></button>
@@ -157,7 +158,6 @@
       startNotificationPolling();
       void refreshNotificationMenu();
       document.addEventListener("click", closeFloatingMenusOnOutsideClick);
-      if (adminMode) bindAdminNav();
       return;
     }
 
@@ -165,6 +165,7 @@
     if (notificationPollTimer) clearInterval(notificationPollTimer);
     notificationPollTimer = null;
     refs.siteHeader.classList.remove("admin-header");
+    refs.nav.hidden = false;
     refs.nav.innerHTML = `
       <a href="#/features">Security</a>
       <a href="#/how-it-works">Trading guide</a>

@@ -45,7 +45,4 @@ INSERT INTO account_limits (tier, daily_trade_limit_usd, withdrawal_limit_usd) V
   ('unverified', 1000.00, 1000.00),
   ('verified', 5000.00, 5000.00),
   ('merchant', 100000.00, 100000.00)
-ON CONFLICT (tier) DO UPDATE SET
-  daily_trade_limit_usd = EXCLUDED.daily_trade_limit_usd,
-  withdrawal_limit_usd = EXCLUDED.withdrawal_limit_usd,
-  updated_at = now();
+ON CONFLICT (tier) DO NOTHING;

@@ -6,6 +6,7 @@ import { DatabaseService } from "../database/database.service";
 
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+type AdminKycFileKind = "documentFront" | "documentBack" | "selfie" | "paymentProof";
 
 export interface KycFileBody {
   fileName?: string;
@@ -90,18 +91,43 @@ export class KycService {
     return { submission: result.rows[0] ? this.toApi(result.rows[0]) : null };
   }
 
-  async listForAdmin() {
-    const result = await this.db.query<KycSubmissionRow>(
+  async listForAdmin(query: { page?: string; pageSize?: string; search?: string; status?: string } = {}) {
+    const rawPage = Number(query.page);
+    const rawPageSize = Number(query.pageSize);
+    const page = Number.isFinite(rawPage) ? Math.max(1, Math.floor(rawPage)) : 1;
+    const pageSize = Number.isFinite(rawPageSize) ? Math.min(100, Math.max(10, Math.floor(rawPageSize))) : 25;
+    const search = String(query.search || "").trim().slice(0, 100);
+    const status = String(query.status || "").trim().toLowerCase();
+    if (status && status !== "all" && !["pending", "approved", "rejected"].includes(status)) throw new BadRequestException("Unknown KYC status.");
+    const params: unknown[] = [];
+    const where: string[] = [];
+    if (search) {
+      params.push(`%${search}%`);
+      where.push(`(u.email ILIKE $${params.length} OR k.full_name ILIKE $${params.length} OR k.id_number ILIKE $${params.length} OR k.id::text ILIKE $${params.length})`);
+    }
+    if (status && status !== "all") {
+      params.push(status);
+      where.push(`k.status::text = $${params.length}`);
+    }
+    params.push(pageSize, (page - 1) * pageSize);
+    const result = await this.db.query<KycSubmissionRow & { total_count: number }>(
       `SELECT k.id, k.user_id, u.email, k.full_name, k.phone, k.id_type, k.id_number,
               k.document_front_url, k.document_back_url, k.selfie_url, k.payment_proof_url,
-              k.status, k.rejection_reason, k.created_at, k.updated_at
+              k.status, k.rejection_reason, k.created_at, k.updated_at, COUNT(*) OVER()::int AS total_count
        FROM kyc_submissions k
        JOIN users u ON u.id = k.user_id
+       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
        ORDER BY CASE k.status WHEN 'pending' THEN 0 WHEN 'rejected' THEN 1 WHEN 'approved' THEN 2 ELSE 3 END,
-                k.created_at DESC
-       LIMIT 100`,
+                CASE WHEN k.status = 'pending' THEN k.created_at END ASC,
+                CASE WHEN k.status <> 'pending' THEN k.created_at END DESC
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params,
     );
-    return { submissions: result.rows.map((row) => this.toApi(row)) };
+    const total = Number(result.rows[0]?.total_count || 0);
+    return {
+      submissions: result.rows.map((row) => this.toApi(row)),
+      pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) },
+    };
   }
 
   async getForAdmin(submissionId: string) {
@@ -121,15 +147,37 @@ export class KycService {
     return {
       submission: this.toApi(row),
       files: {
-        documentFront: await this.fileToDataUrl(row.document_front_url),
-        documentBack: await this.fileToDataUrl(row.document_back_url),
-        selfie: await this.fileToDataUrl(row.selfie_url),
-        paymentProof: row.payment_proof_url ? await this.fileToDataUrl(row.payment_proof_url) : null,
+        documentFront: { available: Boolean(row.document_front_url), kind: "documentFront" },
+        documentBack: { available: Boolean(row.document_back_url), kind: "documentBack" },
+        selfie: { available: Boolean(row.selfie_url), kind: "selfie" },
+        paymentProof: { available: Boolean(row.payment_proof_url), kind: "paymentProof" },
       },
     };
   }
 
-  async approve(submissionId: string, adminId: string) {
+  async fileForAdmin(submissionId: string, kind: string) {
+    const columns: Record<AdminKycFileKind, keyof KycSubmissionRow> = {
+      documentFront: "document_front_url",
+      documentBack: "document_back_url",
+      selfie: "selfie_url",
+      paymentProof: "payment_proof_url",
+    };
+    if (!(kind in columns)) throw new BadRequestException("Unknown KYC document type.");
+    const column = columns[kind as AdminKycFileKind];
+    const result = await this.db.query<KycSubmissionRow>(
+      `SELECT document_front_url, document_back_url, selfie_url, payment_proof_url
+       FROM kyc_submissions WHERE id = $1 LIMIT 1`,
+      [submissionId],
+    );
+    const row = result.rows[0];
+    if (!row) throw new NotFoundException("KYC submission not found.");
+    const path = row[column];
+    if (typeof path !== "string" || !path) throw new NotFoundException("KYC document is unavailable.");
+    return { attachment: { ...(await this.fileToDataUrl(path)), fileName: `${kind}${extname(path)}` } };
+  }
+
+  async approve(submissionId: string, adminId: string, body: { note?: string } = {}) {
+    const note = this.requiredText(body.note, "Approval note").slice(0, 500);
     const result = await this.db.transaction(async (client) => {
       const submission = await client.query<KycSubmissionRow>(
         `UPDATE kyc_submissions
@@ -138,13 +186,18 @@ export class KycService {
              reviewed_at = now(),
              rejection_reason = NULL,
              updated_at = now()
-         WHERE id = $2
+         WHERE id = $2 AND status = 'pending'
          RETURNING id, user_id, full_name, phone, id_type, id_number, document_front_url, document_back_url, selfie_url, payment_proof_url, status, rejection_reason, created_at, updated_at`,
         [adminId, submissionId],
       );
       if (submission.rowCount === 0) throw new NotFoundException("KYC submission not found.");
 
       await client.query("UPDATE users SET kyc_status = 'approved' WHERE id = $1", [submission.rows[0].user_id]);
+      await client.query(
+        `INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, metadata)
+         VALUES ($1, 'admin.kyc_approved', 'kyc_submission', $2, $3::jsonb)`,
+        [adminId, submissionId, JSON.stringify({ userId: submission.rows[0].user_id, note })],
+      );
       return submission.rows[0];
     });
     return { submission: this.toApi(result), user: { id: result.user_id, kycStatus: "approved" } };
@@ -160,13 +213,18 @@ export class KycService {
              reviewed_at = now(),
              rejection_reason = $2,
              updated_at = now()
-         WHERE id = $3
+         WHERE id = $3 AND status = 'pending'
          RETURNING id, user_id, full_name, phone, id_type, id_number, document_front_url, document_back_url, selfie_url, payment_proof_url, status, rejection_reason, created_at, updated_at`,
         [adminId, reason, submissionId],
       );
       if (submission.rowCount === 0) throw new NotFoundException("KYC submission not found.");
 
       await client.query("UPDATE users SET kyc_status = 'rejected' WHERE id = $1", [submission.rows[0].user_id]);
+      await client.query(
+        `INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, metadata)
+         VALUES ($1, 'admin.kyc_rejected', 'kyc_submission', $2, $3::jsonb)`,
+        [adminId, submissionId, JSON.stringify({ userId: submission.rows[0].user_id, reason })],
+      );
       return submission.rows[0];
     });
     return { submission: this.toApi(result), user: { id: result.user_id, kycStatus: "rejected" } };

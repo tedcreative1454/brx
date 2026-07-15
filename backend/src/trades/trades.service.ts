@@ -558,8 +558,12 @@ export class TradesService {
     });
   }
 
-  async adminDisputes() {
-    const result = await this.db.query<TradeRow & { opened_by_username?: string | null; opened_by_trader_label?: string | null; opened_by_id?: string; dispute_created_at?: Date }>(
+  async adminDisputes(query: { page?: string; pageSize?: string } = {}) {
+    const rawPage = Number(query.page);
+    const rawPageSize = Number(query.pageSize);
+    const page = Number.isFinite(rawPage) ? Math.max(1, Math.floor(rawPage)) : 1;
+    const pageSize = Number.isFinite(rawPageSize) ? Math.min(50, Math.max(5, Math.floor(rawPageSize))) : 20;
+    const result = await this.db.query<TradeRow & { opened_by_username?: string | null; opened_by_trader_label?: string | null; opened_by_id?: string; dispute_created_at?: Date; messages?: unknown; total_count?: number }>(
       `SELECT t.*, o.side AS offer_side, o.price AS offer_price,
               buyer.email AS buyer_email, seller.email AS seller_email,
               buyer.username AS buyer_username, seller.username AS seller_username,
@@ -567,6 +571,7 @@ export class TradesService {
               (SELECT MAX(last_seen_at) FROM user_sessions WHERE user_id = buyer.id AND revoked_at IS NULL AND expires_at > now()) AS buyer_last_seen_at,
               (SELECT MAX(last_seen_at) FROM user_sessions WHERE user_id = seller.id AND revoked_at IS NULL AND expires_at > now()) AS seller_last_seen_at,
               d.id AS dispute_id, d.status AS dispute_status, d.created_at AS dispute_created_at,
+              COUNT(*) OVER()::int AS total_count,
               opened.id AS opened_by_id, opened.username AS opened_by_username, opened.trader_label AS opened_by_trader_label,
               COALESCE((
                 SELECT json_agg(json_build_object(
@@ -580,7 +585,21 @@ export class TradesService {
                 ) ORDER BY e.created_at DESC)
                 FROM dispute_evidence e
                 WHERE e.dispute_id = d.id
-              ), '[]'::json) AS evidence
+              ), '[]'::json) AS evidence,
+              COALESCE((
+                SELECT json_agg(json_build_object(
+                  'id', m.id,
+                  'tradeId', m.trade_id,
+                  'senderId', m.sender_id,
+                  'body', m.body,
+                  'attachmentName', m.attachment_name,
+                  'attachmentMimeType', m.attachment_mime_type,
+                  'hasAttachment', (m.attachment_url IS NOT NULL),
+                  'createdAt', m.created_at
+                ) ORDER BY m.created_at ASC)
+                FROM trade_messages m
+                WHERE m.trade_id = t.id
+              ), '[]'::json) AS messages
        FROM disputes d
        JOIN trades t ON t.id = d.trade_id
        JOIN offers o ON o.id = t.offer_id
@@ -588,16 +607,51 @@ export class TradesService {
        JOIN users seller ON seller.id = t.seller_id
        JOIN users opened ON opened.id = d.opened_by
        WHERE d.status = 'open'
-       ORDER BY d.created_at ASC`,
+       ORDER BY d.created_at ASC
+       LIMIT $1 OFFSET $2`,
+      [pageSize, (page - 1) * pageSize],
     );
 
+    const total = Number(result.rows[0]?.total_count || 0);
     return {
       disputes: result.rows.map((row) => ({
         ...this.toTrade(row, "admin"),
         openedByName: this.publicTraderName(row.opened_by_username, row.opened_by_id || ""),
         disputeCreatedAt: row.dispute_created_at,
+        messages: row.messages || [],
       })),
+      pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) },
     };
+  }
+
+  async adminPaymentProof(tradeId: string) {
+    const result = await this.db.query<Pick<TradeRow, "payment_proof_url" | "payment_proof_name" | "payment_proof_mime_type">>(
+      `SELECT payment_proof_url, payment_proof_name, payment_proof_mime_type FROM trades WHERE id = $1 LIMIT 1`,
+      [tradeId],
+    );
+    const item = result.rows[0];
+    if (!item?.payment_proof_url || !item.payment_proof_name || !item.payment_proof_mime_type) throw new NotFoundException("No payment receipt is attached to this trade.");
+    return { attachment: await this.readAdminAttachment(item.payment_proof_url, item.payment_proof_name, item.payment_proof_mime_type, "trades") };
+  }
+
+  async adminDisputeEvidence(tradeId: string, evidenceId: string) {
+    const result = await this.db.query<{ file_url: string | null; file_name: string | null; mime_type: string | null }>(
+      `SELECT file_url, file_name, mime_type FROM dispute_evidence WHERE id = $1 AND trade_id = $2 LIMIT 1`,
+      [evidenceId, tradeId],
+    );
+    const item = result.rows[0];
+    if (!item?.file_url || !item.file_name || !item.mime_type) throw new NotFoundException("No file is attached to this evidence.");
+    return { attachment: await this.readAdminAttachment(item.file_url, item.file_name, item.mime_type, "disputes") };
+  }
+
+  async adminMessageAttachment(tradeId: string, messageId: string) {
+    const result = await this.db.query<Pick<TradeMessageRow, "attachment_url" | "attachment_name" | "attachment_mime_type">>(
+      `SELECT attachment_url, attachment_name, attachment_mime_type FROM trade_messages WHERE id = $1 AND trade_id = $2 LIMIT 1`,
+      [messageId, tradeId],
+    );
+    const item = result.rows[0];
+    if (!item?.attachment_url || !item.attachment_name || !item.attachment_mime_type) throw new NotFoundException("No file is attached to this message.");
+    return { attachment: await this.readAdminAttachment(item.attachment_url, item.attachment_name, item.attachment_mime_type, "trades") };
   }
 
   async resolveDispute(adminId: string, tradeId: string, input: { resolution?: string; note?: string }) {
@@ -606,6 +660,7 @@ export class TradesService {
       throw new BadRequestException("Resolution must be buyer or seller.");
     }
     const note = String(input.note ?? "").trim().slice(0, 1000);
+    if (note.length < 10) throw new BadRequestException("Add a clear resolution note of at least 10 characters.");
 
     const response = await this.db.transaction(async (client) => {
       const trade = await this.lockTrade(client, tradeId);
@@ -641,20 +696,21 @@ export class TradesService {
     let mimeType: string | null = null;
 
     if (input.file?.dataBase64) {
-      mimeType = String(input.file.mimeType ?? "").trim().toLowerCase();
+      const original = String(input.file.fileName ?? "evidence").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
+      mimeType = this.uploadMimeType(original, input.file.mimeType);
       if (!["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(mimeType)) {
         throw new BadRequestException("Dispute evidence must be a JPG, PNG, WEBP, or PDF file.");
       }
       const data = this.decodeUploadBase64(input.file.dataBase64, "Dispute evidence");
       if (data.length > 8 * 1024 * 1024) throw new BadRequestException("Dispute evidence file must be under 8 MB.");
       this.assertUploadSignature(data, mimeType, "Dispute evidence");
-      const original = String(input.file.fileName ?? "evidence").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
       const extension = extname(original) || (mimeType === "application/pdf" ? ".pdf" : ".png");
-      fileName = `${randomUUID()}${extension}`;
+      const storedName = `${randomUUID()}${extension}`;
       const directory = join(process.cwd(), "uploads", "disputes", tradeId);
       await mkdir(directory, { recursive: true });
-      await writeFile(join(directory, fileName), data);
-      fileUrl = `backend/uploads/disputes/${tradeId}/${fileName}`;
+      await writeFile(join(directory, storedName), data);
+      fileUrl = `backend/uploads/disputes/${tradeId}/${storedName}`;
+      fileName = original;
     }
 
     await client.query(
@@ -705,6 +761,19 @@ export class TradesService {
     return { fileUrl: `backend/uploads/trades/${tradeId}/chat/${fileName}`, fileName, mimeType };
   }
 
+  private async readAdminAttachment(storedPath: string, fileName: string, mimeType: string, bucket: "trades" | "disputes") {
+    const normalized = storedPath.replace(/^backend[\\/]/, "");
+    const uploadsRoot = resolve(process.cwd(), "uploads", bucket);
+    const absolutePath = resolve(process.cwd(), normalized);
+    if (!absolutePath.startsWith(`${uploadsRoot}${sep}`)) throw new BadRequestException("Attachment path is invalid.");
+    try {
+      const data = await readFile(absolutePath);
+      return { fileName, mimeType, dataUrl: `data:${mimeType};base64,${data.toString("base64")}` };
+    } catch {
+      throw new NotFoundException("Attachment file was not found.");
+    }
+  }
+
   private decodeUploadBase64(value: string, label: string) {
     const normalized = String(value ?? "").replace(/^data:[^,]+,/, "").replace(/\s/g, "");
     if (!/^[A-Za-z0-9+/]*={0,2}$/.test(normalized)) throw new BadRequestException(`${label} file data is invalid.`);
@@ -728,6 +797,19 @@ export class TradesService {
     const trade = result.rows[0];
     if (!trade) throw new NotFoundException("Trade was not found.");
     if (trade.buyer_id !== userId && trade.seller_id !== userId) throw new ForbiddenException("Trade access denied.");
+  }
+
+  private uploadMimeType(fileName: string, suppliedMimeType?: string) {
+    const supplied = String(suppliedMimeType ?? "").trim().toLowerCase();
+    if (supplied) return supplied;
+    const extension = extname(fileName).toLowerCase();
+    return ({
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".png": "image/png",
+      ".webp": "image/webp",
+      ".pdf": "application/pdf",
+    } as Record<string, string>)[extension] || "";
   }
 
   private toMessage(row: TradeMessageRow, viewerId: string) {

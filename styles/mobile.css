@@ -522,6 +522,9 @@
   .binance-advertiser-card em { grid-column: 2; }
 
   .binance-order-footer { width: min(100%, 520px); padding: 10px 14px calc(12px + env(safe-area-inset-bottom)); background: linear-gradient(180deg, rgba(7, 19, 33, 0), #071321 27%); }
+  .order-payment-window { grid-template-columns: 28px auto minmax(0, 1fr); gap: 8px; margin-bottom: 8px; padding: 8px 10px; }
+  .order-payment-window em { font-size: 7px; }
+  .p2p-action-payment-time { margin-bottom: 5px; font-size: 7px; }
   .binance-order-footer .app-button { min-height: 50px; border-radius: 9px; font-size: 15px; }
   .binance-order-footer .app-button:disabled { background: #26384e; color: #71849b; }
 
@@ -4145,4 +4148,98 @@
   .wallet-v3 .wallet-original-summary .professional-balance-grid > div { min-height: 64px; padding: 10px !important; }
   .wallet-v3 .wallet-original-summary .professional-balance-grid span { min-height: 0; font-size: 8px; }
   .wallet-v3 .wallet-original-summary .professional-balance-grid strong { display: block; overflow: visible; margin-top: 3px; font-size: 11px; text-overflow: clip; }
+}
+
+@media (max-width: 760px) {
+  .binance-order-page { padding-bottom: calc(142px + env(safe-area-inset-bottom)); }
+  body[data-route="market"] .brx-p2p-market .market-offer-row:not(.market-offer-header) { grid-template-columns: minmax(0, 1fr) 116px !important; }
+  body[data-route="market"] .brx-p2p-market .market-payment-cell { display: none !important; }
+  body[data-route="market"] .brx-p2p-market .market-action-cell {
+    display: grid !important;
+    grid-column: 2 !important;
+    grid-row: 1 / span 4 !important;
+    align-content: center !important;
+    justify-items: stretch !important;
+    width: 116px !important;
+    min-width: 116px !important;
+    max-width: 116px !important;
+    gap: 7px !important;
+  }
+  body[data-route="market"] .brx-p2p-market .market-action-methods {
+    display: grid !important;
+    gap: 4px;
+    width: 100%;
+  }
+  body[data-route="market"] .brx-p2p-market .market-action-methods span {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 5px;
+    min-width: 0;
+    color: #91a6ba;
+    font-size: 10px;
+    line-height: 1.25;
+  }
+  body[data-route="market"] .brx-p2p-market .market-action-methods b {
+    min-width: 0;
+    overflow: hidden;
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  body[data-route="market"] .brx-p2p-market .market-action-methods i {
+    width: 4px;
+    height: 9px;
+    flex: 0 0 4px;
+    border-radius: 999px;
+    background: var(--dot, #f0b90b);
+  }
+  body[data-route="market"] .brx-p2p-market .market-action-cell > .p2p-action-payment-time {
+    display: flex !important;
+    visibility: visible !important;
+    justify-self: end;
+    width: max-content;
+    height: auto !important;
+    margin: 0 0 2px !important;
+    padding-bottom: 2px;
+    border-bottom: 1px dotted #526578;
+    color: #91a6ba !important;
+    font-size: 10px !important;
+    line-height: 1.2 !important;
+    text-decoration: none !important;
+    opacity: 1 !important;
+  }
+  body[data-route="market"] .brx-p2p-market .p2p-action-payment-time svg { display: block !important; width: 14px !important; height: 14px !important; flex: 0 0 14px; color: #91a6ba !important; }
+  body[data-route="market"] .brx-p2p-market .market-trade-button { width: 116px !important; min-width: 116px !important; max-width: 116px !important; }
+  body[data-route="p2p-chat"] .p2p-conversation-orders { padding: 7px 10px; }
+  body[data-route="p2p-chat"] .p2p-conversation-orders a { min-width: 116px; padding: 6px 8px; }
+  body[data-route="p2p-chat"] .p2p-message-order { font-size: 6.5px; }
+
+  .admin-dispute-case { border-radius: 11px; }
+  .admin-case-head { align-items: flex-start; padding: 15px 14px; }
+  .admin-case-head h3 { font-size: 17px; }
+  .admin-case-head h3 em { display: block; margin-top: 2px; font-size: 10px; }
+  .admin-case-head > strong { padding: 6px 8px; font-size: 6.5px; white-space: nowrap; }
+  .admin-case-summary { grid-template-columns: 1fr 1fr; margin: 12px 12px 0; }
+  .admin-case-summary > div { padding: 10px; }
+  .admin-case-summary strong { font-size: 9px; }
+  .admin-case-parties { grid-template-columns: 1fr; gap: 7px; margin: 8px 12px 0; }
+  .admin-case-reason { margin: 8px 12px 0; }
+  .admin-case-review-grid { gap: 8px; margin: 12px 12px 0; }
+  .admin-case-chat,
+  .admin-case-evidence { margin: 8px 12px 0; }
+  .admin-case-chat > div { max-height: 270px; padding: 10px; }
+  .admin-case-message { grid-template-columns: 42px minmax(0, 1fr); gap: 8px; }
+  .admin-case-message p { max-width: 100%; }
+  .admin-evidence-item { grid-template-columns: 22px minmax(0, 1fr); }
+  .admin-evidence-item > button { grid-column: 2; width: fit-content; }
+  .admin-case-decision { grid-template-columns: 1fr; gap: 12px; margin: 12px; padding: 13px; }
+  .admin-case-decision footer { grid-template-columns: 1fr; }
+  .admin-case-decision footer button { min-height: 46px; }
+}
+
+@media (max-width: 390px) {
+  body[data-route="market"] .brx-p2p-market .market-offer-row:not(.market-offer-header) { grid-template-columns: minmax(0, 1fr) 106px !important; }
+  body[data-route="market"] .brx-p2p-market .market-action-cell,
+  body[data-route="market"] .brx-p2p-market .market-trade-button { width: 106px !important; min-width: 106px !important; max-width: 106px !important; }
 }

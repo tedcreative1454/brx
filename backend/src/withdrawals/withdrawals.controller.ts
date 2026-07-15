@@ -21,9 +21,9 @@ export class WithdrawalsController {
     return this.withdrawals.myWithdrawals(user.id);
   }
   @Post("process")
-  async processQueue(@Headers("authorization") authorization: string | undefined) {
-    await this.auth.requireAdmin(authorization);
-    return this.withdrawals.processWithdrawalQueue();
+  async processQueue(@Headers("authorization") authorization: string | undefined, @Body() body: { note?: string }) {
+    const admin = await this.auth.requireAdmin(authorization);
+    return this.withdrawals.processWithdrawalQueue({ adminId: admin.id, note: body.note });
   }
 }
 

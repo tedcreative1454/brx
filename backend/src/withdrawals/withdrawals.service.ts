@@ -198,13 +198,13 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
         amount: result.withdrawal.amount,
         fee: result.withdrawal.fee,
         address: result.withdrawal.address,
-      });
+      }).catch((error) => this.logger.warn(`Manual review alert failed: ${error instanceof Error ? error.message : String(error)}`));
     }
     return { withdrawal: this.toApi(result.withdrawal), balance: result.balance };
   }
 
   async approveWithdrawal(adminId: string, withdrawalId: string, body: { note?: string }) {
-    const note = this.reviewNote(body.note, "Approved by admin review.");
+    const note = this.reviewNote(body.note);
     const result = await this.db.transaction(async (client) => {
       const locked = await client.query<WithdrawalRow>(
         `SELECT * FROM withdrawals WHERE id = $1 AND status = 'requested' FOR UPDATE`,
@@ -217,6 +217,7 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
         `UPDATE withdrawals
          SET status = 'approved',
              risk_decision = 'admin_approved',
+             approved_by = $3,
              approved_at = now(),
              review_reason = $2,
              updated_at = now()
@@ -224,7 +225,7 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
          RETURNING id, user_id, withdrawal_address_id, address, network, asset, amount, fee, status, risk_decision,
            review_reason, tx_hash, auto_approved_at, approved_at, broadcast_at, confirmed_at, rejected_at,
            failed_reason, created_at, updated_at`,
-        [withdrawalId, note],
+        [withdrawalId, note, adminId],
       );
 
       await client.query(
@@ -242,12 +243,12 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
       amount: result.amount,
       fee: result.fee,
       address: result.address,
-    });
+    }).catch((error) => this.logger.warn(`Withdrawal approval alert failed: ${error instanceof Error ? error.message : String(error)}`));
     return { withdrawal: this.toApi(result) };
   }
 
   async rejectWithdrawal(adminId: string, withdrawalId: string, body: { reason?: string }) {
-    const reason = this.reviewNote(body.reason, "Rejected by admin review.");
+    const reason = this.reviewNote(body.reason);
     const result = await this.db.transaction(async (client) => {
       const locked = await client.query<WithdrawalRow>(
         `SELECT * FROM withdrawals WHERE id = $1 AND status = 'requested' FOR UPDATE`,
@@ -303,7 +304,7 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
       amount: result.withdrawal.amount,
       fee: result.withdrawal.fee,
       address: result.withdrawal.address,
-    });
+    }).catch((error) => this.logger.warn(`Withdrawal rejection alert failed: ${error instanceof Error ? error.message : String(error)}`));
     return { withdrawal: this.toApi(result.withdrawal), balance: result.balance };
   }
 
@@ -321,13 +322,22 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
     return { withdrawals: result.rows.map((row) => this.toApi(row)) };
   }
 
-  async processWithdrawalQueue() {
+  async processWithdrawalQueue(context?: { adminId: string; note?: string }) {
+    const note = context ? this.reviewNote(context.note) : "";
     if (this.workerRunning) return { skipped: true, reason: "withdrawal worker already running" };
     this.workerRunning = true;
     try {
       const broadcast = await this.broadcastApprovedWithdrawals();
       const confirmations = await this.confirmBroadcastWithdrawals();
-      return { ...broadcast, ...confirmations };
+      const result = { ...broadcast, ...confirmations };
+      if (context) {
+        await this.db.query(
+          `INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, metadata)
+           VALUES ($1, 'withdrawal.worker_run', 'withdrawal_worker', NULL, $2::jsonb)`,
+          [context.adminId, JSON.stringify({ note, result })],
+        );
+      }
+      return result;
     } finally {
       this.workerRunning = false;
     }
@@ -613,8 +623,9 @@ export class WithdrawalsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  private reviewNote(value: string | undefined, fallback: string) {
-    const note = String(value ?? "").trim() || fallback;
+  private reviewNote(value: string | undefined) {
+    const note = String(value ?? "").trim();
+    if (note.length < 5) throw new BadRequestException("Review note must be at least 5 characters.");
     if (note.length > 500) throw new BadRequestException("Review note must be 500 characters or fewer.");
     return note;
   }

@@ -246,7 +246,7 @@
       </div>
       ${users.length ? `
         <div class="admin-user-table" role="table" aria-label="BRX users">
-          <div class="admin-user-row admin-user-head" role="row"><span>User</span><span>Label</span><span>KYC</span><span>Status</span><span>Role</span><span>Joined</span><span></span></div>
+          <div class="admin-user-row admin-user-head" role="row"><span>User</span><span>Label</span><span>Balance</span><span>KYC</span><span>Status</span><span>Role</span><span>Joined</span><span></span></div>
           ${users.map(adminUserRow).join("")}
         </div>
       ` : emptyBlock("No users found", "Adjust search or filters to see more accounts.")}
@@ -287,10 +287,15 @@
     const status = String(user.status || "active");
     const kyc = String(user.kycStatus || "unsubmitted");
     const frozen = status === "suspended";
+    const available = Number(user.availableBalance || 0);
+    const locked = Number(user.lockedBalance || 0);
+    const pending = Number(user.pendingDeposit || 0) + Number(user.pendingWithdrawal || 0);
+    const total = available + locked + pending;
     return `
       <div class="admin-user-row" role="row">
         <span class="admin-user-main"><strong>${escapeHtml(user.email)}</strong><small>${escapeHtml(user.id || "")}</small></span>
         <span><em class="admin-pill trader-label ${user.traderLabel ? "active" : "neutral"}">${escapeHtml(user.traderLabel || "None")}</em></span>
+        <span class="admin-user-balance"><strong>${format(total)} USDT</strong><small><b>Available ${format(available)}</b><b>Escrow ${format(locked)}</b>${pending > 0 ? `<b>Pending ${format(pending)}</b>` : ""}</small></span>
         <span><em class="admin-pill ${escapeAttr(kyc)}">${escapeHtml(kycLabel(kyc))}</em></span>
         <span><em class="admin-pill ${escapeAttr(status)}">${escapeHtml(statusLabel(status))}</em></span>
         <span>${escapeHtml(user.role || "user")}</span>
@@ -384,41 +389,125 @@
   function renderDisputes() {
     const queue = document.querySelector("#disputeQueue");
     queue.innerHTML = adminState.disputes.length
-      ? `<div class="admin-list dispute-list">${adminState.disputes.map(disputeRow).join("")}</div>`
+      ? `<div class="admin-dispute-cases">${adminState.disputes.map(disputeRow).join("")}</div>`
       : emptyBlock("No open disputes", "Disputed trades with locked escrow will appear here.");
 
     document.querySelectorAll("[data-resolve-dispute]").forEach((button) => {
       button.addEventListener("click", () => resolveDispute(button.dataset.resolveDispute, button.dataset.resolution));
     });
+    document.querySelectorAll("[data-dispute-note]").forEach((input) => {
+      input.addEventListener("input", () => {
+        const ready = input.value.trim().length >= 10;
+        document.querySelectorAll(`[data-resolve-dispute="${input.dataset.disputeNote}"]`).forEach((button) => { button.disabled = !ready; });
+        const error = input.closest(".admin-case-decision")?.querySelector(".admin-case-error");
+        if (error) error.textContent = "";
+      });
+    });
+    document.querySelectorAll("[data-admin-payment-proof]").forEach((button) => button.addEventListener("click", () => openAdminCaseAttachment(() => adminService.disputePaymentProof(button.dataset.adminPaymentProof))));
+    document.querySelectorAll("[data-admin-evidence]").forEach((button) => button.addEventListener("click", () => openAdminCaseAttachment(() => adminService.disputeEvidence(button.dataset.tradeId, button.dataset.adminEvidence))));
+    document.querySelectorAll("[data-admin-message-attachment]").forEach((button) => button.addEventListener("click", () => openAdminCaseAttachment(() => adminService.disputeMessageAttachment(button.dataset.tradeId, button.dataset.adminMessageAttachment))));
   }
 
   function disputeRow(trade) {
+    const evidence = Array.isArray(trade.evidence) ? trade.evidence : [];
+    const messages = Array.isArray(trade.messages) ? trade.messages : [];
+    const escrow = Number(trade.escrowAmount || trade.assetAmount || 0);
+    const price = Number(trade.offerPrice || (Number(trade.fiatAmount || 0) / Math.max(Number(trade.assetAmount || 0), .00000001)));
     return `
-      <div class="admin-queue-row admin-dispute-row">
-        <span>
-          <strong>${format(Number(trade.assetAmount))} USDT - ${format(Number(trade.fiatAmount))} ETB</strong>
-          <small>Buyer: ${escapeHtml(trade.buyerName || "BRX trader")}</small>
-          <small>Seller: ${escapeHtml(trade.sellerName || "BRX trader")}</small>
-          <small>Reason: ${escapeHtml(trade.disputeReason || "No reason saved")}</small>
-          ${evidenceLinks(trade.evidence)}
-        </span>
-        <span class="admin-actions inline">
-          <button class="app-button small" type="button" data-resolve-dispute="${escapeAttr(trade.id)}" data-resolution="buyer">Release to buyer</button>
-          <button class="danger-button small" type="button" data-resolve-dispute="${escapeAttr(trade.id)}" data-resolution="seller">Return to seller</button>
-        </span>
-      </div>
+      <article class="admin-dispute-case">
+        <header class="admin-case-head">
+          <div><span>Open case &middot; #${escapeHtml(String(trade.id || "").slice(0, 8).toUpperCase())}</span><h3>${format(Number(trade.assetAmount))} USDT <em>for ${format(Number(trade.fiatAmount))} ETB</em></h3><p>Opened by ${escapeHtml(trade.openedByName || "BRX trader")} &middot; ${adminDateTime(trade.disputeCreatedAt || trade.disputedAt)}</p></div>
+          <strong><i></i> Escrow locked</strong>
+        </header>
+
+        <div class="admin-case-summary">
+          <div><span>Escrow protected</span><strong>${format(escrow)} USDT</strong></div>
+          <div><span>Order price</span><strong>${format(price)} ETB</strong></div>
+          <div><span>Payment method</span><strong>${escapeHtml(trade.paymentMethod || "Not recorded")}</strong></div>
+          <div><span>Current status</span><strong>${escapeHtml(statusLabel(trade.status || "disputed"))}</strong></div>
+        </div>
+
+        <div class="admin-case-parties">
+          <div><span>Buyer</span><strong>${escapeHtml(trade.buyerName || "BRX trader")}</strong><small>${trade.openedByName === trade.buyerName ? "Opened this dispute" : "Responding party"}</small></div>
+          <div><span>Seller</span><strong>${escapeHtml(trade.sellerName || "BRX trader")}</strong><small>${trade.openedByName === trade.sellerName ? "Opened this dispute" : "Responding party"}</small></div>
+        </div>
+
+        <section class="admin-case-reason"><span>Reported issue</span><strong>${escapeHtml(trade.disputeReason || "No dispute reason was provided.")}</strong></section>
+
+        <div class="admin-case-review-grid">
+          <section class="admin-case-panel">
+            <header><div><span>Payment verification</span><h4>Buyer payment claim</h4></div>${trade.paymentProofName ? `<button type="button" data-admin-payment-proof="${escapeAttr(trade.id)}">View receipt</button>` : ""}</header>
+            <dl><div><dt>Payment reference</dt><dd>${escapeHtml(trade.paymentReference || "Not provided")}</dd></div><div><dt>Marked paid</dt><dd>${trade.paymentSentAt ? adminDateTime(trade.paymentSentAt) : "Not marked paid"}</dd></div><div><dt>Receipt</dt><dd>${escapeHtml(trade.paymentProofName || "No receipt uploaded")}</dd></div></dl>
+          </section>
+          <section class="admin-case-panel">
+            <header><div><span>Case timeline</span><h4>Order events</h4></div></header>
+            <ol class="admin-case-timeline"><li class="done"><i></i><span><strong>Order opened</strong><small>${adminDateTime(trade.createdAt)}</small></span></li><li class="${trade.paymentSentAt ? "done" : ""}"><i></i><span><strong>Payment marked sent</strong><small>${trade.paymentSentAt ? adminDateTime(trade.paymentSentAt) : "Not completed"}</small></span></li><li class="done warning"><i></i><span><strong>Dispute opened</strong><small>${adminDateTime(trade.disputeCreatedAt || trade.disputedAt)}</small></span></li></ol>
+          </section>
+        </div>
+
+        <section class="admin-case-panel admin-case-chat">
+          <header><div><span>Trade communication</span><h4>Buyer and seller chat</h4></div><em>${messages.length} messages</em></header>
+          <div>${messages.length ? messages.map((message) => adminDisputeMessage(trade, message)).join("") : `<p class="admin-case-empty">No chat messages were exchanged for this order.</p>`}</div>
+        </section>
+
+        <section class="admin-case-panel admin-case-evidence">
+          <header><div><span>Submitted evidence</span><h4>Notes and files</h4></div><em>${evidence.length} items</em></header>
+          <div>${evidence.length ? evidence.map((item, index) => adminEvidenceItem(trade, item, index)).join("") : `<p class="admin-case-empty">No supporting evidence was submitted.</p>`}</div>
+        </section>
+
+        <section class="admin-case-decision">
+          <div><span>Final decision</span><h4>Resolve escrow</h4><p>Review the payment claim, chat, and evidence. This action is permanent and notifies both traders.</p></div>
+          <label><span>Resolution note <b>Required</b></span><textarea data-dispute-note="${escapeAttr(trade.id)}" maxlength="1000" placeholder="Explain the evidence and reason for this decision (minimum 10 characters)."></textarea></label>
+          <div class="admin-case-error"></div>
+          <footer><button class="app-button" type="button" data-resolve-dispute="${escapeAttr(trade.id)}" data-resolution="buyer" disabled>Release ${format(escrow)} USDT to buyer</button><button class="danger-button" type="button" data-resolve-dispute="${escapeAttr(trade.id)}" data-resolution="seller" disabled>Return ${format(escrow)} USDT to seller</button></footer>
+        </section>
+      </article>
     `;
   }
 
-  function evidenceLinks(evidence) {
-    const items = Array.isArray(evidence) ? evidence : [];
-    if (!items.length) return `<small>No evidence files attached</small>`;
-    return `<small>${items.map((item, index) => item.fileUrl ? `<a href="${escapeAttr(item.fileUrl)}" target="_blank" rel="noreferrer">Evidence ${index + 1}</a>` : `Note ${index + 1}: ${escapeHtml(item.note || "")}`).join(" - ")}</small>`;
+  function adminDisputeMessage(trade, message) {
+    const isBuyer = message.senderId === trade.buyerId;
+    const name = isBuyer ? trade.buyerName : trade.sellerName;
+    return `<div class="admin-case-message ${isBuyer ? "buyer" : "seller"}"><span>${isBuyer ? "Buyer" : "Seller"}</span><div><strong>${escapeHtml(name || "BRX trader")}</strong>${message.body ? `<p>${escapeHtml(message.body).replace(/\n/g, "<br>")}</p>` : ""}${message.hasAttachment ? `<button type="button" data-trade-id="${escapeAttr(trade.id)}" data-admin-message-attachment="${escapeAttr(message.id)}">View ${escapeHtml(message.attachmentName || "attachment")}</button>` : ""}<small>${adminDateTime(message.createdAt)}</small></div></div>`;
   }
-  async function resolveDispute(tradeId, resolution) {
-    const note = prompt(`Resolution note for ${resolution}?`);
+
+  function adminEvidenceItem(trade, item, index) {
+    const isBuyer = item.submittedBy === trade.buyerId;
+    const party = isBuyer ? "Buyer" : item.submittedBy === trade.sellerId ? "Seller" : "Case reviewer";
+    return `<div class="admin-evidence-item"><span>${index + 1}</span><div><strong>${party} evidence</strong><p>${escapeHtml(item.note || "File submitted without a note.").replace(/\n/g, "<br>")}</p><small>${adminDateTime(item.createdAt)}</small></div>${item.fileUrl ? `<button type="button" data-trade-id="${escapeAttr(trade.id)}" data-admin-evidence="${escapeAttr(item.id)}">View file</button>` : ""}</div>`;
+  }
+
+  async function openAdminCaseAttachment(loader) {
     try {
-      await adminService.resolveDispute(tradeId, resolution, note || "Admin resolved dispute.");
+      const result = await loader();
+      const attachment = result.attachment;
+      const viewer = document.createElement("div");
+      viewer.className = "proof-viewer-backdrop";
+      const isImage = String(attachment.mimeType || "").startsWith("image/");
+      viewer.innerHTML = `<section class="proof-viewer"><header><strong>${escapeHtml(attachment.fileName || "Case attachment")}</strong><button type="button" aria-label="Close">&times;</button></header><div class="proof-viewer-content">${isImage ? `<img src="${attachment.dataUrl}" alt="Case attachment" />` : `<iframe src="${attachment.dataUrl}" title="Case attachment"></iframe>`}</div></section>`;
+      viewer.querySelector("button").addEventListener("click", () => viewer.remove());
+      viewer.addEventListener("click", (event) => { if (event.target === viewer) viewer.remove(); });
+      document.body.appendChild(viewer);
+    } catch (error) {
+      showToast(error.message || "Could not open this attachment.");
+    }
+  }
+
+  async function resolveDispute(tradeId, resolution) {
+    const noteInput = [...document.querySelectorAll("[data-dispute-note]")].find((input) => input.dataset.disputeNote === tradeId);
+    const note = noteInput?.value.trim() || "";
+    const errorBox = noteInput?.closest(".admin-case-decision")?.querySelector(".admin-case-error");
+    if (note.length < 10) {
+      if (errorBox) errorBox.textContent = "Add a clear resolution note of at least 10 characters.";
+      noteInput?.focus();
+      return;
+    }
+    const decision = resolution === "buyer" ? "release the locked USDT to the buyer" : "return the locked USDT to the seller";
+    if (!confirm(`Confirm that you want to ${decision}. This cannot be undone.`)) return;
+    const buttons = [...document.querySelectorAll("[data-resolve-dispute]")].filter((button) => button.dataset.resolveDispute === tradeId);
+    buttons.forEach((button) => { button.disabled = true; });
+    try {
+      await adminService.resolveDispute(tradeId, resolution, note);
       showToast("Dispute resolved.");
       const [stats, disputes] = await Promise.all([adminService.stats(), adminService.listDisputes()]);
       adminState.stats = stats.stats || null;
@@ -427,6 +516,7 @@
       renderDisputes();
     } catch (error) {
       showToast(error.message || "Could not resolve dispute.");
+      buttons.forEach((button) => { button.disabled = false; });
     }
   }
 
@@ -639,6 +729,13 @@
   function adminDate(value) {
     if (!value) return "--";
     return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }
+
+  function adminDateTime(value) {
+    if (!value) return "Not recorded";
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return "Not recorded";
+    return date.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
   }
 
 

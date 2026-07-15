@@ -195,7 +195,11 @@ export class OffersService {
     const completedTrades = Number(row.completed_trades ?? 0);
     const totalTrades = Number(row.total_trades ?? 0);
     const completionRate = totalTrades === 0 ? 100 : Number(((completedTrades / totalTrades) * 100).toFixed(1));
-    const anonymousName = `Trader#${row.id.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+    let traderHash = 0;
+    for (const character of String(row.user_id || "000000")) {
+      traderHash = ((traderHash * 31) + character.charCodeAt(0)) >>> 0;
+    }
+    const anonymousName = `Trader #${String(traderHash % 1000000).padStart(6, "0")}`;
     return {
       id: row.id,
       userId: row.user_id,

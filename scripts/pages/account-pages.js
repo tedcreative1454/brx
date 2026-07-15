@@ -2377,7 +2377,6 @@
             <div class="trader-name-line"><h1>${escapeHtml(traderName)}</h1><a class="trader-name-edit" href="#/settings?tab=profile&edit=trader-name" aria-label="Edit trader name">${icon("edit")}</a></div>
             <div class="profile-summary-meta">
               <span>${escapeHtml(user.email)}</span>
-              <span>${brxId(user)}</span>
               <span>${kycLabel(user.kycStatus)}</span>
             </div>
           </div>
@@ -2500,7 +2499,6 @@
             </form>
           ` : ""}
           <small>${escapeHtml(user.email)}</small>
-          <span class="settings-muted">${brxId(user)} <button class="inline-icon-button settings-copy-id" type="button" title="Copy BRX ID">${icon("copy")}</button></span>
           <input id="settingsAvatarUrl" type="hidden" value="${escapeAttr(user.avatarUrl || "")}" />
           <div class="settings-avatar-actions">
             <label class="settings-avatar-upload" for="settingsAvatarInput">${icon("camera")}<span>Upload photo</span><input id="settingsAvatarInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" /></label>
@@ -3514,10 +3512,24 @@
       const reader = new FileReader();
       reader.onload = () => {
         const dataUrl = String(reader.result || "");
+        const extension = file.name.split(".").pop()?.toLowerCase() || "";
+        const inferredType = {
+          jpg: "image/jpeg",
+          jpeg: "image/jpeg",
+          png: "image/png",
+          webp: "image/webp",
+          gif: "image/gif",
+          pdf: "application/pdf",
+        }[extension] || "";
+        const dataBase64 = dataUrl.split(",")[1] || "";
+        if (!dataBase64) {
+          reject(new Error(`Could not read ${file.name}.`));
+          return;
+        }
         resolve({
           fileName: file.name,
-          mimeType: file.type,
-          dataBase64: dataUrl.split(",")[1] || "",
+          mimeType: file.type || inferredType,
+          dataBase64,
         });
       };
       reader.onerror = () => reject(new Error(`Could not read ${file.name}.`));

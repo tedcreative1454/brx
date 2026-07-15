@@ -3,6 +3,15 @@
 
   const { requestJson } = window.BRX.api;
 
+  function queryString(params = {}) {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && String(value).trim() !== "") query.set(key, String(value));
+    });
+    const value = query.toString();
+    return value ? `?${value}` : "";
+  }
+
   function treasury() {
     return requestJson("/admin/treasury");
   }
@@ -18,8 +27,12 @@
     });
   }
 
-  function listUsers() {
-    return requestJson("/admin/users");
+  function listUsers(params) {
+    return requestJson(`/admin/users${queryString(params)}`);
+  }
+
+  function getUser(userId) {
+    return requestJson(`/admin/users/${encodeURIComponent(userId)}`);
   }
 
   function updateUserStatus(userId, status, reason) {
@@ -36,20 +49,20 @@
     });
   }
 
-  function listDeposits() {
-    return requestJson("/admin/deposits");
+  function listDeposits(params) {
+    return requestJson(`/admin/deposits${queryString(params)}`);
   }
 
-  function listWithdrawals() {
-    return requestJson("/admin/withdrawals");
+  function listWithdrawals(params) {
+    return requestJson(`/admin/withdrawals${queryString(params)}`);
   }
 
-  function processWithdrawals() {
-    return requestJson("/withdrawals/process", { method: "POST" });
+  function processWithdrawals(note) {
+    return requestJson("/withdrawals/process", { method: "POST", body: JSON.stringify({ note }) });
   }
 
-  function retryDepositSweeps() {
-    return requestJson("/deposits/sweep", { method: "POST" });
+  function retryDepositSweeps(note) {
+    return requestJson("/deposits/sweep", { method: "POST", body: JSON.stringify({ note }) });
   }
 
   function approveWithdrawal(id, note) {
@@ -66,28 +79,35 @@
     });
   }
 
-  function listTrades() {
-    return requestJson("/admin/trades");
+  function listTrades(params) {
+    return requestJson(`/admin/trades${queryString(params)}`);
   }
 
-  function listAuditLogs() {
-    return requestJson("/admin/audit-logs");
+  function listAuditLogs(params) {
+    return requestJson(`/admin/audit-logs${queryString(params)}`);
   }
 
   function stats() {
     return requestJson("/admin/stats");
   }
 
-  function listKyc() {
-    return requestJson("/admin/kyc/submissions");
+  function listKyc(params) {
+    return requestJson(`/admin/kyc/submissions${queryString(params)}`);
   }
 
   function getKyc(id) {
     return requestJson(`/admin/kyc/submissions/${id}`);
   }
 
-  function approveKyc(id) {
-    return requestJson(`/admin/kyc/submissions/${id}/approve`, { method: "POST" });
+  function kycFile(id, kind) {
+    return requestJson(`/admin/kyc/submissions/${encodeURIComponent(id)}/files/${encodeURIComponent(kind)}`);
+  }
+
+  function approveKyc(id, note) {
+    return requestJson(`/admin/kyc/submissions/${id}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ note }),
+    });
   }
 
   function rejectKyc(id, reason) {
@@ -97,8 +117,20 @@
     });
   }
 
-  function listDisputes() {
-    return requestJson("/admin/disputes");
+  function listDisputes(params) {
+    return requestJson(`/admin/disputes${queryString(params)}`);
+  }
+
+  function disputePaymentProof(tradeId) {
+    return requestJson(`/admin/disputes/${encodeURIComponent(tradeId)}/payment-proof`);
+  }
+
+  function disputeEvidence(tradeId, evidenceId) {
+    return requestJson(`/admin/disputes/${encodeURIComponent(tradeId)}/evidence/${encodeURIComponent(evidenceId)}`);
+  }
+
+  function disputeMessageAttachment(tradeId, messageId) {
+    return requestJson(`/admin/disputes/${encodeURIComponent(tradeId)}/messages/${encodeURIComponent(messageId)}/attachment`);
   }
 
   function resolveDispute(tradeId, resolution, note) {
@@ -119,12 +151,20 @@
     });
   }
 
+  function updateLimits(updates, reason) {
+    return requestJson("/admin/account-limits", {
+      method: "PATCH",
+      body: JSON.stringify({ updates, reason }),
+    });
+  }
+
   window.BRX.adminService = {
     stats,
     treasury,
     platformSettings,
     updatePlatformSettings,
     listUsers,
+    getUser,
     updateUserStatus,
     updateUserLabel,
     listDeposits,
@@ -137,11 +177,16 @@
     listAuditLogs,
     listKyc,
     getKyc,
+    kycFile,
     approveKyc,
     rejectKyc,
     listDisputes,
+    disputePaymentProof,
+    disputeEvidence,
+    disputeMessageAttachment,
     resolveDispute,
     limits,
     updateLimit,
+    updateLimits,
   };
 })();

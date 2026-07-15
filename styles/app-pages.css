@@ -5415,7 +5415,58 @@
 }
 
 .admin-user-row {
-  grid-template-columns: minmax(250px, 1.35fr) 90px 112px 112px 76px 112px 160px;
+  grid-template-columns: minmax(220px, 1.25fr) 90px minmax(170px, .8fr) 112px 105px 70px 100px 150px;
+}
+
+.admin-user-balance {
+  min-width: 0;
+}
+
+.admin-user-balance > strong {
+  display: block;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+.admin-user-balance > small {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 7px;
+  margin-top: 4px;
+}
+
+.admin-user-balance > small b {
+  color: var(--muted-2);
+  font-size: 8px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.admin-user-balance > small b:first-child { color: var(--green); }
+
+@media (max-width: 980px) {
+  .admin-user-balance {
+    padding: 10px 12px;
+    border: 1px solid rgba(166, 190, 226, .12);
+    border-radius: 9px;
+    background: rgba(4, 10, 18, .45);
+  }
+
+  .admin-user-balance::before {
+    content: "USDT balance";
+    display: block;
+    margin-bottom: 4px;
+    color: var(--muted);
+    font-size: 8px;
+    font-weight: 950;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+
+  .admin-user-balance > strong { font-size: 15px; }
+  .admin-user-balance > small b { font-size: 9px; }
 }
 
 .admin-pill.trader-label.neutral {
@@ -8576,6 +8627,15 @@ body[data-route="market"] .brx-p2p-market .market-trader-avatar.has-image img {
 .binance-advertiser-card div { display: grid; gap: 3px; }
 .binance-advertiser-card small, .binance-advertiser-card em { color: #8e9bad; font-size: 12px; font-style: normal; }
 .binance-order-footer { position: fixed; z-index: 20; left: 50%; bottom: 0; width: min(100%, 560px); padding: 14px 24px calc(16px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: linear-gradient(180deg, rgba(21, 29, 41, 0), #151d29 23%); }
+.order-payment-window { display: grid; grid-template-columns: 32px auto minmax(0, 1fr); gap: 10px; align-items: center; margin-bottom: 10px; padding: 10px 12px; border: 1px solid rgba(241, 184, 48, .2); border-radius: 9px; background: rgba(241, 184, 48, .07); }
+.order-payment-window > svg { width: 18px; height: 18px; justify-self: center; color: #f0b90b; }
+.order-payment-window > span { display: grid; }
+.order-payment-window small { color: #8fa1b6; font-size: 8px; }
+.order-payment-window strong { color: #f4f8fc; font-size: 12px; }
+.order-payment-window em { color: #8fa1b6; font-size: 8px; font-style: normal; line-height: 1.4; text-align: right; }
+.brx-p2p-market .market-action-methods { display: none; }
+.brx-p2p-market .market-action-cell > .p2p-action-payment-time { display: flex !important; align-items: center; justify-content: center; gap: 5px; margin-bottom: 7px; color: #7f94a9; font-size: 10px; white-space: nowrap; text-decoration: none; }
+.p2p-action-payment-time svg { width: 14px; height: 14px; color: #7f94a9; }
 .binance-order-footer .app-button { width: 100%; min-height: 56px; border: 0; border-radius: 8px; background: #168fff; color: #fff; font-size: 17px; box-shadow: none; }
 .binance-order-footer .app-button:disabled { background: #39475c; color: #79869a; opacity: 1; }
 
@@ -9293,3 +9353,106 @@ body.dispute-flow-open { overflow: hidden; }
 .wallet-v3 .wallet-original-summary .professional-balance-grid .available strong { color: var(--green); }
 .wallet-v3 .wallet-original-summary .professional-balance-grid .locked strong { color: var(--blue-2); }
 .wallet-v3 .wallet-original-summary .professional-balance-grid .pending strong { color: var(--yellow); }
+
+/* Unified trader conversations */
+.p2p-chat-room { grid-template-rows: auto auto minmax(0, 1fr) auto; }
+.conversation-order-count { margin-top: 3px; color: #647b91 !important; font-size: 8px !important; }
+.p2p-conversation-orders { display: flex; gap: 7px; overflow-x: auto; padding: 9px 14px; border-bottom: 1px solid rgba(112, 153, 193, .12); background: #0d1621; scrollbar-width: thin; }
+.p2p-conversation-orders a { display: grid; grid-template-columns: auto auto; gap: 2px 8px; flex: 0 0 auto; min-width: 132px; padding: 7px 9px; border: 1px solid rgba(117, 155, 194, .12); border-radius: 7px; color: #8ca0b3; background: rgba(5, 14, 23, .6); text-decoration: none; }
+.p2p-conversation-orders a.active { border-color: rgba(31, 169, 246, .4); background: rgba(14, 116, 175, .12); }
+.p2p-conversation-orders strong { color: #dce7f1; font-size: 8px; }
+.p2p-conversation-orders span { color: #6cc8f7; font-size: 8px; }
+.p2p-conversation-orders em { grid-column: 1 / -1; color: #71869a; font-size: 7px; font-style: normal; text-transform: capitalize; }
+.p2p-message-order { width: fit-content; padding: 2px 5px; border-radius: 4px; color: #6f879d; background: rgba(101, 137, 171, .08); font-size: 7px; font-style: normal; }
+.p2p-chat-message.mine .p2p-message-order { justify-self: end; color: #65bde9; }
+
+/* Admin dispute case review center */
+.admin-dispute-cases { display: grid; gap: 18px; }
+.admin-dispute-case { overflow: hidden; border: 1px solid rgba(116, 157, 198, .16); border-radius: 14px; background: #0b1521; box-shadow: 0 16px 44px rgba(0, 0, 0, .14); }
+.admin-case-head { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 20px 22px; border-bottom: 1px solid rgba(116, 157, 198, .12); background: linear-gradient(135deg, rgba(18, 89, 131, .14), rgba(8, 18, 29, .7)); }
+.admin-case-head span,
+.admin-case-panel header span,
+.admin-case-decision > div > span,
+.admin-case-reason > span { color: #5dbce9; font-size: 8px; font-weight: 900; letter-spacing: .09em; text-transform: uppercase; }
+.admin-case-head h3 { margin: 5px 0 3px; color: #f1f6fb; font-size: 20px; }
+.admin-case-head h3 em { color: #8da1b4; font-size: 12px; font-style: normal; font-weight: 700; }
+.admin-case-head p { margin: 0; color: #71879c; font-size: 9px; }
+.admin-case-head > strong { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid rgba(239, 179, 52, .22); border-radius: 999px; color: #e9b746; background: rgba(239, 179, 52, .07); font-size: 8px; text-transform: uppercase; }
+.admin-case-head > strong i { width: 6px; height: 6px; border-radius: 50%; background: #e9b746; box-shadow: 0 0 0 4px rgba(233, 183, 70, .1); }
+
+.admin-case-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; margin: 18px 20px 0; overflow: hidden; border: 1px solid rgba(115, 154, 193, .13); border-radius: 10px; background: rgba(115, 154, 193, .12); }
+.admin-case-summary > div { min-width: 0; padding: 13px; background: #09131e; }
+.admin-case-summary span,
+.admin-case-parties span { display: block; margin-bottom: 5px; color: #71879c; font-size: 8px; }
+.admin-case-summary strong { display: block; overflow: hidden; color: #e4edf5; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.admin-case-summary > div:first-child strong { color: #3fd9a0; }
+
+.admin-case-parties { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 20px 0; }
+.admin-case-parties > div { padding: 12px 14px; border: 1px solid rgba(114, 153, 191, .12); border-radius: 9px; background: rgba(6, 16, 26, .62); }
+.admin-case-parties strong { color: #e3edf5; font-size: 11px; }
+.admin-case-parties small { display: block; margin-top: 3px; color: #6c8195; font-size: 8px; }
+.admin-case-reason { display: grid; gap: 5px; margin: 10px 20px 0; padding: 12px 14px; border-left: 3px solid #e4a932; border-radius: 0 8px 8px 0; background: rgba(228, 169, 50, .055); }
+.admin-case-reason strong { color: #d9e4ee; font-size: 10px; line-height: 1.5; }
+
+.admin-case-review-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 16px 20px 0; }
+.admin-case-panel { overflow: hidden; border: 1px solid rgba(115, 154, 193, .12); border-radius: 10px; background: rgba(6, 16, 26, .58); }
+.admin-case-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-bottom: 1px solid rgba(115, 154, 193, .1); }
+.admin-case-panel h4,
+.admin-case-decision h4 { margin: 3px 0 0; color: #e7eff7; font-size: 12px; }
+.admin-case-panel header button,
+.admin-case-message button,
+.admin-evidence-item > button { min-height: 30px; padding: 0 9px; border: 1px solid rgba(35, 169, 242, .28); border-radius: 6px; color: #61c7fa; background: rgba(17, 124, 181, .1); font-size: 8px; font-weight: 800; cursor: pointer; }
+.admin-case-panel header em { color: #71879c; font-size: 8px; font-style: normal; }
+.admin-case-panel dl { margin: 0; padding: 7px 14px 11px; }
+.admin-case-panel dl > div { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid rgba(115, 154, 193, .075); }
+.admin-case-panel dl > div:last-child { border-bottom: 0; }
+.admin-case-panel dt { color: #71869a; font-size: 8px; }
+.admin-case-panel dd { margin: 0; color: #dbe6ef; font-size: 9px; text-align: right; overflow-wrap: anywhere; }
+
+.admin-case-timeline { display: grid; gap: 0; margin: 0; padding: 11px 14px; list-style: none; }
+.admin-case-timeline li { position: relative; display: grid; grid-template-columns: 13px 1fr; gap: 9px; min-height: 42px; }
+.admin-case-timeline li:not(:last-child)::after { content: ""; position: absolute; top: 13px; bottom: -2px; left: 5px; width: 1px; background: rgba(112, 153, 193, .2); }
+.admin-case-timeline i { position: relative; z-index: 1; width: 11px; height: 11px; margin-top: 2px; border: 2px solid #526b82; border-radius: 50%; background: #09131e; }
+.admin-case-timeline .done i { border-color: #35d198; background: #35d198; }
+.admin-case-timeline .warning i { border-color: #e5aa35; background: #e5aa35; }
+.admin-case-timeline span { display: grid; align-content: start; gap: 2px; }
+.admin-case-timeline strong { color: #cfdbe6; font-size: 9px; }
+.admin-case-timeline small { color: #6d8296; font-size: 8px; }
+
+.admin-case-chat,
+.admin-case-evidence { margin: 10px 20px 0; }
+.admin-case-chat > div { max-height: 310px; overflow-y: auto; padding: 12px 14px; }
+.admin-case-message { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 10px; margin-bottom: 11px; }
+.admin-case-message > span { height: fit-content; padding: 4px 6px; border-radius: 5px; color: #5fc7fa; background: rgba(24, 136, 195, .1); font-size: 7px; font-weight: 900; text-align: center; text-transform: uppercase; }
+.admin-case-message.seller > span { color: #45d6a0; background: rgba(32, 176, 126, .1); }
+.admin-case-message > div { min-width: 0; }
+.admin-case-message strong { color: #dbe6ef; font-size: 9px; }
+.admin-case-message p { width: fit-content; max-width: 85%; margin: 4px 0; padding: 8px 10px; border-radius: 8px 8px 8px 2px; color: #c9d6e2; background: #111f2e; font-size: 9px; line-height: 1.5; overflow-wrap: anywhere; }
+.admin-case-message small { display: block; color: #667d92; font-size: 7px; }
+.admin-case-message button { margin: 5px 0; }
+
+.admin-case-evidence > div { display: grid; gap: 8px; padding: 12px 14px; }
+.admin-evidence-item { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px; border: 1px solid rgba(113, 153, 192, .1); border-radius: 8px; background: #09131e; }
+.admin-evidence-item > span { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 50%; color: #62c9fa; background: rgba(24, 142, 204, .1); font-size: 8px; font-weight: 900; }
+.admin-evidence-item strong { color: #d9e4ed; font-size: 9px; }
+.admin-evidence-item p { margin: 3px 0; color: #93a6b8; font-size: 8px; line-height: 1.45; }
+.admin-evidence-item small { color: #647b90; font-size: 7px; }
+.admin-case-empty { margin: 0; padding: 18px; color: #71869a; font-size: 9px; text-align: center; }
+
+.admin-case-decision { display: grid; grid-template-columns: minmax(180px, .65fr) minmax(280px, 1.35fr); gap: 14px 18px; margin: 16px 20px 20px; padding: 16px; border: 1px solid rgba(226, 169, 52, .18); border-radius: 10px; background: linear-gradient(135deg, rgba(226, 169, 52, .055), rgba(7, 17, 27, .7)); }
+.admin-case-decision > div p { margin: 5px 0 0; color: #788da1; font-size: 8px; line-height: 1.5; }
+.admin-case-decision label { display: grid; gap: 6px; }
+.admin-case-decision label > span { color: #9cafc0; font-size: 8px; font-weight: 800; }
+.admin-case-decision label b { color: #e4a934; font-size: 7px; text-transform: uppercase; }
+.admin-case-decision textarea { width: 100%; min-height: 76px; padding: 10px; border: 1px solid rgba(116, 157, 198, .18); border-radius: 8px; outline: 0; color: #e3edf5; background: #07111c; font: inherit; font-size: 9px; resize: vertical; }
+.admin-case-decision textarea:focus { border-color: rgba(35, 170, 244, .55); box-shadow: 0 0 0 3px rgba(32, 163, 236, .08); }
+.admin-case-error { grid-column: 1 / -1; min-height: 0; color: #ff6a82; font-size: 8px; }
+.admin-case-decision footer { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.admin-case-decision footer button { min-height: 42px; border-radius: 8px; font-size: 9px; font-weight: 900; }
+.admin-case-decision footer button:disabled { opacity: .42; cursor: not-allowed; }
+
+@media (max-width: 900px) {
+  .admin-case-summary { grid-template-columns: repeat(2, 1fr); }
+  .admin-case-review-grid { grid-template-columns: 1fr; }
+  .admin-case-decision { grid-template-columns: 1fr; }
+}

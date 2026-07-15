@@ -70,6 +70,7 @@ export class PlatformSettingsService {
       bscSweepEnabled: boolean;
       bscSweepMinUsdt: string | number;
       enabledPaymentMethodTypes: string[];
+      changeReason: string;
     }>,
   ) {
     const updates: Array<[string, unknown]> = [];
@@ -79,11 +80,17 @@ export class PlatformSettingsService {
     if (input.p2pTakerFeeMerchantPercent !== undefined) updates.push(["p2p_taker_fee_merchant_percent", this.percentValue(input.p2pTakerFeeMerchantPercent, "0.15", "Merchant taker fee")]);
     if (input.withdrawalAutoApproveLimitUsdt !== undefined) updates.push(["withdrawal_auto_approve_limit_usdt", this.positiveNumber(input.withdrawalAutoApproveLimitUsdt, "Auto approve limit")]);
     if (input.withdrawalDailyPlatformLimitUsdt !== undefined) updates.push(["withdrawal_daily_platform_limit_usdt", this.positiveNumber(input.withdrawalDailyPlatformLimitUsdt, "Daily platform withdrawal cap")]);
-    if (input.bscSweepEnabled !== undefined) updates.push(["bsc_sweep_enabled", Boolean(input.bscSweepEnabled)]);
+    if (input.bscSweepEnabled !== undefined) {
+      if (typeof input.bscSweepEnabled !== "boolean") throw new BadRequestException("Automatic sweep setting must be true or false.");
+      updates.push(["bsc_sweep_enabled", input.bscSweepEnabled]);
+    }
     if (input.bscSweepMinUsdt !== undefined) updates.push(["bsc_sweep_min_usdt", this.positiveNumber(input.bscSweepMinUsdt, "Sweep minimum")]);
     if (input.enabledPaymentMethodTypes !== undefined) updates.push(["enabled_payment_method_types", this.paymentTypes(input.enabledPaymentMethodTypes)]);
 
     if (!updates.length) return { settings: await this.getSettings() };
+    const changeReason = String(input.changeReason || "").trim().slice(0, 500);
+    if (changeReason.length < 5) throw new BadRequestException("Change reason must be at least 5 characters.");
+    const before = await this.getSettings();
 
     await this.db.transaction(async (client) => {
       for (const [key, value] of updates) {
@@ -99,8 +106,8 @@ export class PlatformSettingsService {
       }
       await client.query(
         `INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, metadata)
-         VALUES ($1, 'admin.platform_settings_updated', 'platform_settings', 'platform', $2::jsonb)`,
-        [adminId, JSON.stringify(Object.fromEntries(updates))],
+         VALUES ($1, 'admin.platform_settings_updated', 'platform_settings', NULL, $2::jsonb)`,
+        [adminId, JSON.stringify({ reason: changeReason, before, changes: Object.fromEntries(updates) })],
       );
     });
 

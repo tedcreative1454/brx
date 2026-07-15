@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { createDecipheriv, createHash } from "node:crypto";
 import { ethers } from "ethers";
 import { PoolClient } from "pg";
@@ -86,7 +86,8 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
     return { deposits: result.rows.map((row) => this.keysToCamel(row)) };
   }
 
-  async sweepFundedWallets(limit = 50) {
+  async sweepFundedWallets(limit = 50, context?: { adminId: string; note?: string }) {
+    const note = context ? this.adminNote(context.note) : "";
     const cappedLimit = Math.max(1, Math.min(Number(limit) || 50, 200));
     const wallets = await this.db.query<SweepWalletRow & { deposit_id: string | null }>(
       `SELECT wa.id, wa.user_id, wa.deposit_address, wa.encrypted_private_key,
@@ -140,7 +141,15 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
-    return { ...result, sweeps };
+    const response = { ...result, sweeps };
+    if (context) {
+      await this.db.query(
+        `INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, metadata)
+         VALUES ($1, 'deposit.sweep_worker_run', 'deposit_worker', NULL, $2::jsonb)`,
+        [context.adminId, JSON.stringify({ note, result })],
+      );
+    }
+    return response;
   }
   private async scanAssignedWalletsOnce() {
     const latest = await this.bsc.latestBlock();
@@ -483,6 +492,13 @@ export class DepositsService implements OnModuleInit, OnModuleDestroy {
        VALUES (NULL, $1, 'wallet_sweep', $2, $3::jsonb)`,
       [action, entityId, JSON.stringify(metadata)],
     );
+  }
+
+  private adminNote(value: string | undefined) {
+    const note = String(value ?? "").trim();
+    if (note.length < 5) throw new BadRequestException("Run note must be at least 5 characters.");
+    if (note.length > 500) throw new BadRequestException("Run note must be 500 characters or fewer.");
+    return note;
   }
 
   private decrypt(value: string) {

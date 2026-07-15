@@ -1,5 +1,6 @@
 ﻿import { Body, Controller, Get, Headers, Param, Post } from "@nestjs/common";
 import { AuthService } from "../auth/auth.service";
+import { Query } from "@nestjs/common";
 import { KycService, KycSubmissionBody, RejectKycBody } from "./kyc.service";
 
 @Controller()
@@ -22,9 +23,12 @@ export class KycController {
   }
 
   @Get("admin/kyc/submissions")
-  async listForAdmin(@Headers("authorization") authorization: string | undefined) {
+  async listForAdmin(
+    @Headers("authorization") authorization: string | undefined,
+    @Query() query: { page?: string; pageSize?: string; search?: string; status?: string },
+  ) {
     await this.auth.requireAdmin(authorization);
-    return this.kyc.listForAdmin();
+    return this.kyc.listForAdmin(query);
   }
 
   @Get("admin/kyc/submissions/:id")
@@ -33,10 +37,24 @@ export class KycController {
     return this.kyc.getForAdmin(id);
   }
 
+  @Get("admin/kyc/submissions/:id/files/:kind")
+  async fileForAdmin(
+    @Headers("authorization") authorization: string | undefined,
+    @Param("id") id: string,
+    @Param("kind") kind: string,
+  ) {
+    await this.auth.requireAdmin(authorization);
+    return this.kyc.fileForAdmin(id, kind);
+  }
+
   @Post("admin/kyc/submissions/:id/approve")
-  async approve(@Headers("authorization") authorization: string | undefined, @Param("id") id: string) {
+  async approve(
+    @Headers("authorization") authorization: string | undefined,
+    @Param("id") id: string,
+    @Body() body: { note?: string },
+  ) {
     const admin = await this.auth.requireAdmin(authorization);
-    return this.kyc.approve(id, admin.id);
+    return this.kyc.approve(id, admin.id, body);
   }
 
   @Post("admin/kyc/submissions/:id/reject")
