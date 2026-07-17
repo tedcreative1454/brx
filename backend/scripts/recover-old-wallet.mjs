@@ -16,9 +16,22 @@ if (!ethers.isAddress(requestedAddress)) {
   process.exit(1);
 }
 
-const required = ["DATABASE_URL", "ALCHEMY_BNB_RPC_URL", "BSC_HOT_WALLET_ADDRESS"];
+const required = ["DATABASE_URL", "BSC_HOT_WALLET_ADDRESS"];
 for (const name of required) {
   if (!process.env[name]) throw new Error(`${name} is required.`);
+}
+const primaryRpcUrl = process.env.BSC_RPC_URL || process.env.ALCHEMY_BNB_RPC_URL;
+if (!primaryRpcUrl) throw new Error("BSC_RPC_URL is required.");
+const fallbackRpcUrls = String(process.env.BSC_RPC_FALLBACK_URLS || "")
+  .split(",")
+  .map((url) => url.trim())
+  .filter(Boolean);
+const rpcRequestTimeoutMs = Math.max(1000, Number(process.env.BSC_RPC_REQUEST_TIMEOUT_MS) || 8000);
+
+function jsonRpcProvider(url) {
+  const request = new ethers.FetchRequest(url);
+  request.timeout = rpcRequestTimeoutMs;
+  return new ethers.JsonRpcProvider(request, 56, { staticNetwork: true });
 }
 
 function decrypt(encryptedValue, encryptionKey) {
@@ -90,7 +103,16 @@ try {
   }
   console.log(`Wallet decrypted successfully using the ${keySource}.`);
 
-  const provider = new ethers.JsonRpcProvider(process.env.ALCHEMY_BNB_RPC_URL);
+  const provider = new ethers.FallbackProvider(
+    [primaryRpcUrl, ...fallbackRpcUrls].map((url, index) => ({
+      provider: jsonRpcProvider(url),
+      priority: index + 1,
+      stallTimeout: 2_000,
+      weight: 1,
+    })),
+    56,
+    { quorum: 1 },
+  );
   const network = await provider.getNetwork();
   if (network.chainId !== 56n) throw new Error(`Refusing recovery on unexpected chain ID ${network.chainId}.`);
 

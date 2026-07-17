@@ -2,7 +2,7 @@
 
 BRX is a launch-bound ETB/USDT P2P exchange web app for `brxp2p.com`. The product uses custodial USDT wallets, database escrow, manual KYC, email verification, and a BNB Smart Chain BEP20 wallet rail.
 
-This repository currently contains the BRX web interface, PostgreSQL schema, backend planning notes, and legal placeholders. Public customer access must wait until the NestJS backend, PostgreSQL ledger, Redis queues, Resend email delivery, Alchemy BSC monitoring, wallet security, and admin operations are connected.
+This repository currently contains the BRX web interface, PostgreSQL schema, backend planning notes, and legal placeholders. Public customer access must wait until the NestJS backend, PostgreSQL ledger, Redis queues, Resend email delivery, BSC monitoring, wallet security, and admin operations are connected.
 
 ## Run Locally
 
@@ -25,7 +25,7 @@ Target local backend stack:
 - NestJS API on Fastify
 - PostgreSQL database
 - Redis queues
-- Alchemy BNB Smart Chain RPC
+- Ankr BNB Smart Chain RPC with public fallbacks
 - Resend email verification
 
 ## Product Scope
@@ -33,7 +33,7 @@ Target local backend stack:
 - ETB/USDT P2P marketplace.
 - Custodial USDT wallet model.
 - First blockchain network: USDT BEP20 on BNB Smart Chain.
-- BSC monitoring through Alchemy RPC.
+- BSC monitoring through the configured RPC providers.
 - Email verification with the existing Resend plan.
 - Manual KYC review by admin.
 - Internal database ledger for balances, escrow, deposits, withdrawals, and audit logs.
@@ -89,7 +89,7 @@ Before real users or funds are allowed, BRX needs:
 - PostgreSQL ledger with atomic balance updates.
 - Redis queues for email, deposit scanning, and withdrawal processing.
 - Resend domain, sender email, API key, and email templates.
-- Alchemy BNB Smart Chain RPC configured in backend secrets.
+- Ankr BNB Smart Chain RPC and public fallbacks configured in backend secrets.
 - BEP20 USDT deposit address generation and monitoring.
 - Secure key management for withdrawal signing.
 - Admin panel for KYC, users, disputes, deposits, withdrawals, and audit logs.
@@ -100,7 +100,8 @@ Before real users or funds are allowed, BRX needs:
 
 Do not put secrets in frontend code. Use backend environment variables:
 
-- `ALCHEMY_BNB_RPC_URL`
+- `BSC_RPC_URL`
+- `BSC_RPC_FALLBACK_URLS`
 - `BSC_LOG_BLOCK_RANGE`
 - `BSC_SCAN_LOOKBACK_BLOCKS`
 - `RESEND_API_KEY`
@@ -115,7 +116,7 @@ Do not put secrets in frontend code. Use backend environment variables:
 
 See `backend/.env.example`.
 
-For local testing only, `backend/.env` can contain your Alchemy BNB endpoint. That file is ignored by git.
+For local testing only, `backend/.env` can contain your private Ankr BNB endpoint and public fallbacks. That file is ignored by git.
 
 ## Backend Planning Files
 

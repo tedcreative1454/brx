@@ -13,20 +13,21 @@ BRX uses a custodial wallet and an internal ledger. The blockchain is used only 
 - API: NestJS on Fastify.
 - Database: PostgreSQL.
 - Queues/cache: Redis.
-- Blockchain RPC: Alchemy BNB Smart Chain endpoint.
+- Blockchain RPC: private Ankr BNB Smart Chain endpoint with public RPC fallbacks.
 - Email: Resend.
 
 ## BSC / BEP20 Configuration
 
 - Network: BNB Smart Chain Mainnet.
 - Token: USDT BEP20.
-- RPC: `ALCHEMY_BNB_RPC_URL` in backend environment only.
+- Primary RPC: `BSC_RPC_URL` in the backend environment only.
+- Fallback RPCs: comma-separated `BSC_RPC_FALLBACK_URLS` in the backend environment only.
 - USDT contract: `0x55d398326f99059fF775485246999027B3197955`.
 - Required confirmations: 15 blocks.
 - Minimum deposit: 1 USDT.
-- Alchemy Free limits `eth_getLogs` ranges; local config uses `BSC_LOG_BLOCK_RANGE=10`.
+- Free shared RPCs limit `eth_getLogs` ranges; local config uses `BSC_LOG_BLOCK_RANGE=10`.
 
-The Alchemy key must not be committed to frontend code or public docs. Rotate the key before launch if it was shared in screenshots or chat.
+The private RPC token must not be committed to frontend code or public docs. Rotate it before launch if it was shared in screenshots or chat.
 
 ## Balances
 
@@ -48,7 +49,7 @@ Every balance movement must create immutable ledger entries inside the same data
 ## Escrow Flow
 
 1. Seller deposits USDT on BNB Smart Chain BEP20.
-2. Deposit listener detects and confirms the deposit through Alchemy RPC.
+2. Deposit listener detects and confirms the deposit through the configured BSC RPC providers.
 3. Ledger credits the seller after required confirmations.
 4. Seller posts a sell offer.
 5. Buyer opens a trade.
@@ -91,7 +92,7 @@ Every balance movement must create immutable ledger entries inside the same data
 ## Security Rules
 
 - No private keys in the browser.
-- No Alchemy, Resend, database, JWT, or encryption secrets in the browser.
+- No private RPC, Resend, database, JWT, or encryption secrets in the browser.
 - No balance math in the browser.
 - All balance mutations require database transactions and idempotency keys.
 - All admin actions require audit logs.
@@ -107,7 +108,7 @@ BRX should not accept deposits until these are complete:
 - Resend email verified and tested.
 - PostgreSQL migrations and ledger transaction tests complete.
 - Redis queues connected.
-- Alchemy BSC endpoint stored in backend secrets.
+- Private Ankr BSC endpoint and public fallbacks stored in backend configuration.
 - BEP20 deposit address generation connected.
 - Deposit listener tested with idempotency.
 - Ledger reconciliation scripts built.

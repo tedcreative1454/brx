@@ -6,6 +6,12 @@ const TRANSFER_EVENT = "event Transfer(address indexed from, address indexed to,
 const USDT_ABI = [TRANSFER_EVENT, "function transfer(address to, uint256 amount) returns (bool)", "function balanceOf(address account) view returns (uint256)"];
 const USDT_DECIMALS = 18;
 
+function jsonRpcProvider(url: string) {
+  const request = new ethers.FetchRequest(url);
+  request.timeout = Math.max(1000, env.bscRpcRequestTimeoutMs);
+  return new ethers.JsonRpcProvider(request, 56, { staticNetwork: true });
+}
+
 export interface UsdtTransferLog {
   txHash: string;
   logIndex: number;
@@ -32,7 +38,16 @@ export interface TransactionStatus {
 
 @Injectable()
 export class BscService {
-  private readonly provider = new ethers.JsonRpcProvider(env.alchemyBnbRpcUrl);
+  private readonly provider = new ethers.FallbackProvider(
+    [env.bscRpcUrl, ...env.bscRpcFallbackUrls].map((url, index) => ({
+      provider: jsonRpcProvider(url),
+      priority: index + 1,
+      stallTimeout: 2_000,
+      weight: 1,
+    })),
+    56,
+    { quorum: 1 },
+  );
   private readonly iface = new ethers.Interface(USDT_ABI);
   private readonly transferTopic = ethers.id("Transfer(address,address,uint256)");
 

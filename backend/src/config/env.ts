@@ -10,6 +10,14 @@ function optionalList(name: string): string[] {
   return (process.env[name] ?? "").split(",").map((item) => item.trim()).filter(Boolean);
 }
 
+function requiredOneOf(names: string[]): string {
+  for (const name of names) {
+    const value = process.env[name]?.trim();
+    if (value) return value;
+  }
+  throw new Error(`Missing required environment variable (set one of): ${names.join(", ")}`);
+}
+
 function optionalNumber(name: string, fallback: number): number {
   const value = process.env[name];
   if (!value) return fallback;
@@ -35,7 +43,9 @@ export const env = {
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
   googleCallbackUrl: process.env.GOOGLE_CALLBACK_URL ?? `${process.env.APP_URL ?? "http://localhost:3000"}/api/auth/google/callback`,
   turnstileSecretKey: process.env.TURNSTILE_SECRET_KEY ?? "",
-  alchemyBnbRpcUrl: required("ALCHEMY_BNB_RPC_URL"),
+  bscRpcUrl: requiredOneOf(["BSC_RPC_URL", "ALCHEMY_BNB_RPC_URL"]),
+  bscRpcFallbackUrls: optionalList("BSC_RPC_FALLBACK_URLS"),
+  bscRpcRequestTimeoutMs: optionalNumber("BSC_RPC_REQUEST_TIMEOUT_MS", 8000),
   bscUsdtContractAddress: process.env.BSC_USDT_CONTRACT_ADDRESS ?? "0x55d398326f99059fF775485246999027B3197955",
   bscConfirmationsRequired: optionalNumber("BSC_CONFIRMATIONS_REQUIRED", 15),
   bscMinDepositUsdt: optionalNumber("BSC_MIN_DEPOSIT_USDT", 1),

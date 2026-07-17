@@ -1,6 +1,7 @@
 (function () {
   window.BRX = window.BRX || {};
   const { API_BASES } = window.BRX.config;
+  const DEFAULT_REQUEST_TIMEOUT_MS = 15000;
 
   function connectionErrorMessage() {
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
@@ -32,11 +33,19 @@
     let lastError;
 
     for (const base of API_BASES) {
+      let timeoutId;
+      let requestTimedOut = false;
       try {
-        const { headers = {}, ...requestOptions } = options;
+        const { headers = {}, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, ...requestOptions } = options;
+        const controller = new AbortController();
+        timeoutId = window.setTimeout(() => {
+          requestTimedOut = true;
+          controller.abort();
+        }, Math.max(1000, Number(timeoutMs) || DEFAULT_REQUEST_TIMEOUT_MS));
         const authToken = window.BRX.state?.accessToken?.() || "";
         const response = await fetch(`${base}${path}`, {
           ...requestOptions,
+          signal: controller.signal,
           credentials: "include",
           headers: {
             ...(requestOptions.body !== undefined && requestOptions.body !== null
@@ -73,9 +82,16 @@
         }
         return payload;
       } catch (error) {
+        if (requestTimedOut) {
+          lastError = new Error("BRX took too long to respond. Please try again.");
+          lastError.code = "REQUEST_TIMEOUT";
+          continue;
+        }
         const isNetworkError = error instanceof TypeError || error?.message === "Failed to fetch";
         if (!isNetworkError) throw error;
         lastError = error;
+      } finally {
+        if (timeoutId) window.clearTimeout(timeoutId);
       }
     }
 

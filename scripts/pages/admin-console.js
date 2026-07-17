@@ -37,7 +37,7 @@
       trades: { page: 1, pageSize: 25, search: "", status: "all" },
       audit: { page: 1, pageSize: 25, search: "", action: "" },
     },
-    errors: {}, lastUpdated: null, pendingAction: null, returnFocus: null,
+    errors: {}, lastUpdated: null, pendingAction: null, returnFocus: null, overviewSecondaryLoading: false,
   };
 
   function renderAdminConsole() {
@@ -105,22 +105,34 @@
   }
 
   async function loadOverview(epoch) {
-    const [stats, treasury, disputes, kyc, withdrawals, trades, auditLogs] = await Promise.all([
-      settle("stats", admin.stats()), settle("treasury", admin.treasury()),
+    ["stats", "treasury", "disputes", "kyc", "withdrawals", "trades", "audit"].forEach((key) => { state.errors[key] = null; });
+    state.overviewSecondaryLoading = true;
+    const secondary = Promise.all([
+      settle("treasury", admin.treasury()),
       settle("disputes", admin.listDisputes({ page: 1, pageSize: 10 })),
       settle("kyc", admin.listKyc({ page: 1, pageSize: 10, status: "pending" })),
       settle("withdrawals", admin.listWithdrawals({ page: 1, pageSize: 10, status: "requested" })),
       settle("trades", admin.listTrades({ page: 1, pageSize: 10 })),
       settle("audit", admin.listAuditLogs({ page: 1, pageSize: 10 })),
     ]);
+    const stats = await settle("stats", admin.stats());
     if (epoch !== state.epoch || !state.root?.isConnected) return;
     state.stats = stats?.stats || null;
+    renderOverview();
+    if (!state.stats) {
+      state.overviewSecondaryLoading = false;
+      return;
+    }
+
+    const [treasury, disputes, kyc, withdrawals, trades, auditLogs] = await secondary;
+    if (epoch !== state.epoch || !state.root?.isConnected) return;
     state.treasury = treasury?.treasury || null;
     state.disputes = disputes?.disputes || [];
     state.kyc = kyc?.submissions || [];
     state.withdrawals = withdrawals?.withdrawals || [];
     state.trades = trades?.trades || [];
     state.auditLogs = auditLogs?.auditLogs || [];
+    state.overviewSecondaryLoading = false;
     renderOverview();
   }
 
@@ -129,6 +141,7 @@
     const s = state.stats;
     if (!s) return renderFatal(target, state.errors.stats, "Platform metrics are unavailable.");
     const t = state.treasury;
+    const loadingSecondary = state.overviewSecondaryLoading;
     const attention = Number(s.marketplace.openDisputes || 0) + Number(s.users.kycPending || 0) + Number(s.operations.pendingWithdrawals || 0);
     target.innerHTML = `
       ${partialErrors(["treasury", "disputes", "kyc", "withdrawals", "trades", "audit"])}
@@ -149,17 +162,17 @@
         </div></article>
         <article class="ops-panel ops-health-panel">${panelHead("Platform health", "Configuration and custody readiness", "shield")}<div class="ops-health-list">
           ${healthRow("API & database", true, "Metrics responding")}
-          ${healthRow("Hot-wallet signer", Boolean(t?.hotWalletSignerConfigured), t?.hotWalletSignerConfigured ? "Configured" : "Signer missing")}
-          ${healthRow("Gas-wallet signer", Boolean(t?.gasWalletSignerConfigured), t?.gasWalletSignerConfigured ? "Configured" : "Signer missing")}
-          ${healthRow("Deposit sweeps", Boolean(t?.sweepEnabled), t?.sweepEnabled ? `Enabled above ${money(t?.sweepMinUsdt)} USDT` : "Automatic sweeps disabled")}
+          ${healthRow("Hot-wallet signer", t ? Boolean(t.hotWalletSignerConfigured) : null, t ? (t.hotWalletSignerConfigured ? "Configured" : "Signer missing") : "Checking custody status")}
+          ${healthRow("Gas-wallet signer", t ? Boolean(t.gasWalletSignerConfigured) : null, t ? (t.gasWalletSignerConfigured ? "Configured" : "Signer missing") : "Checking custody status")}
+          ${healthRow("Deposit sweeps", t ? Boolean(t.sweepEnabled) : null, t ? (t.sweepEnabled ? `Enabled above ${money(t.sweepMinUsdt)} USDT` : "Automatic sweeps disabled") : "Checking sweep configuration")}
         </div></article>
       </section>
       <section class="ops-panel ops-money-panel">${panelHead("Money flow", "Confirmed volumes and current balance buckets", "wallet")}<div class="ops-money-grid">
         ${moneyMetric("Available", s.balances.availableUsdt, "User funds ready to use")}${moneyMetric("Locked escrow", s.balances.lockedUsdt, "Reserved in active P2P")}${moneyMetric("Pending deposits", s.balances.pendingDepositUsdt, "Detected, not yet available")}${moneyMetric("Pending withdrawals", s.balances.pendingWithdrawalUsdt, "Reserved for payout")}${moneyMetric("Credited deposits", s.volume.creditedDepositUsdt, "Lifetime confirmed deposits")}${moneyMetric("Confirmed withdrawals", s.volume.confirmedWithdrawalUsdt, "Lifetime processed withdrawals")}
       </div></section>
       <section class="ops-overview-grid ops-overview-feed">
-        <article class="ops-panel">${panelHead("Recent P2P orders", "Latest marketplace activity", "trades")}<div class="ops-compact-list">${state.trades.length ? state.trades.slice(0, 6).map(compactTrade).join("") : emptyRow("No recent trades")}</div><button class="ops-text-button" type="button" data-ops-view="p2p">Open P2P workspace ${icon("external")}</button></article>
-        <article class="ops-panel">${panelHead("Recent control activity", "Administrative and system events", "database")}<div class="ops-compact-list">${state.auditLogs.length ? state.auditLogs.slice(0, 6).map(compactAudit).join("") : emptyRow("No audit activity")}</div><button class="ops-text-button" type="button" data-ops-view="audit">Open audit log ${icon("external")}</button></article>
+        <article class="ops-panel">${panelHead("Recent P2P orders", "Latest marketplace activity", "trades")}<div class="ops-compact-list">${state.trades.length ? state.trades.slice(0, 6).map(compactTrade).join("") : emptyRow(loadingSecondary ? "Loading recent orders" : "No recent trades")}</div><button class="ops-text-button" type="button" data-ops-view="p2p">Open P2P workspace ${icon("external")}</button></article>
+        <article class="ops-panel">${panelHead("Recent control activity", "Administrative and system events", "database")}<div class="ops-compact-list">${state.auditLogs.length ? state.auditLogs.slice(0, 6).map(compactAudit).join("") : emptyRow(loadingSecondary ? "Loading recent activity" : "No audit activity")}</div><button class="ops-text-button" type="button" data-ops-view="audit">Open audit log ${icon("external")}</button></article>
       </section>`;
   }
 
@@ -563,7 +576,7 @@
   function kpi(label, value, detail, iconName, tone) { return `<article class="ops-kpi ${tone}"><span>${icon(iconName)}</span><div><small>${escapeHtml(label)}</small><strong>${escapeHtml(String(value ?? "0"))}</strong><p>${escapeHtml(detail)}</p></div></article>`; }
   function panelHead(title, detail, iconName) { return `<header class="ops-panel-head"><div><span>${icon(iconName)}</span><div><h2>${escapeHtml(title)}</h2><p>${escapeHtml(detail)}</p></div></div></header>`; }
   function priorityRow(label, count, detail, view, tone) { return `<button type="button" data-ops-view="${view}"><i class="${tone}"></i><span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(detail)}</small></span><b>${integer(count)}</b>${icon("external")}</button>`; }
-  function healthRow(label, healthy, detail) { return `<div><i class="${healthy ? "healthy" : "warning"}"></i><span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(detail)}</small></span><em>${healthy ? "Operational" : "Attention"}</em></div>`; }
+  function healthRow(label, healthy, detail) { const pending = healthy === null; return `<div><i class="${pending ? "pending" : healthy ? "healthy" : "warning"}"></i><span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(detail)}</small></span><em>${pending ? "Checking" : healthy ? "Operational" : "Attention"}</em></div>`; }
   function healthRowInline(label, healthy) { return `<em class="ops-inline-health ${healthy ? "healthy" : "warning"}"><i></i>${escapeHtml(label)}</em>`; }
   function moneyMetric(label, value, detail) { return `<article><span>${escapeHtml(label)}</span><strong>${money(value)} <small>USDT</small></strong><p>${escapeHtml(detail)}</p></article>`; }
   function summaryChip(label, value, tone) { return `<article class="${tone}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value ?? 0))}</strong></article>`; }

@@ -8,14 +8,14 @@ The backend owns all sensitive work:
 - User balances and immutable ledger entries.
 - P2P offers, trades, escrow locking, release, cancellation, and disputes.
 - Manual KYC review workflow.
-- BNB Smart Chain BEP20 deposit monitoring through Alchemy.
+- BNB Smart Chain BEP20 deposit monitoring through a primary RPC with public fallbacks.
 - Withdrawal request review and signing flow.
 
 ## Local Config
 
-Copy `.env.example` to `.env` when the backend is created. Put the full Alchemy BNB endpoint in `ALCHEMY_BNB_RPC_URL` locally or in production secrets.
+Copy `.env.example` to `.env` when the backend is created. Put the full private Ankr BNB endpoint in `BSC_RPC_URL` locally or in production secrets. `BSC_RPC_FALLBACK_URLS` accepts comma-separated fallback endpoints. The legacy `ALCHEMY_BNB_RPC_URL` remains supported temporarily when `BSC_RPC_URL` is unset.
 
-Do not put Alchemy keys, Resend keys, JWT secrets, or withdrawal private keys in frontend files.
+Do not put RPC API keys, Resend keys, JWT secrets, or withdrawal private keys in frontend files.
 
 ## Run Locally
 
@@ -47,10 +47,10 @@ Useful endpoints:
 
 Useful commands:
 
-- `npm run scan:deposits` scans assigned BEP20 wallets through Alchemy.
+- `npm run scan:deposits` scans assigned BEP20 wallets through the configured BSC RPC providers.
 - New deposits are credited to `pending_deposit`.
 - After `BSC_CONFIRMATIONS_REQUIRED` confirmations, the ledger moves funds from `pending_deposit` to `available_balance`.
-- On Alchemy Free, keep `BSC_LOG_BLOCK_RANGE=10`.
+- With free shared RPC providers, keep `BSC_LOG_BLOCK_RANGE=10`.
 - `npm run user:admin -- user@example.com` promotes a local verified user to admin for KYC review testing.
 - `npm run user:fund -- user@example.com 100` credits fake local USDT through the ledger for escrow testing. This command refuses to run when `NODE_ENV=production`.
 

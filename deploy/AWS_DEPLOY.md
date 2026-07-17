@@ -69,7 +69,8 @@ Change at least:
 - `JWT_ACCESS_SECRET`
 - `JWT_REFRESH_SECRET`
 - `ENCRYPTION_KEY`
-- `ALCHEMY_BNB_RPC_URL`
+- `BSC_RPC_URL` with the private Ankr endpoint
+- `BSC_RPC_FALLBACK_URLS` with comma-separated public fallback endpoints
 - `RESEND_API_KEY`
 - `BSC_HOT_WALLET_ADDRESS` public BEP20 address for the BRX hot wallet
 - `BSC_GAS_WALLET_ADDRESS` public BEP20 address for the gas wallet
